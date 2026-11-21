@@ -41,17 +41,18 @@ through Claude-only APIs. Here, each job maps onto a T3 piece that already serve
 
 ### 2. `packages/issue-tracker-board` (the board as a tracker)
 
-- Implements `StandaloneIssueTrackerApi` (`packages/source-control-core/src/server/IssueTracker.ts`)
-  on top of `board-core`.
-- Registered next to Linear in `STANDALONE_TRACKERS`
-  (`apps/server/src/issue/IssueTrackerRegistry.ts`). It is local, so it needs no credential.
+- Implements a new `LocalIssueTrackerApi` (`packages/source-control-core/src/server/IssueTracker.ts`)
+  on top of `board-core`. A standalone tracker (Linear) needs a credential and a binding in
+  Settings; a local one covers projects by folder with neither.
+- Registered in `LOCAL_TRACKERS` (`apps/server/src/issue/IssueTrackerRegistry.ts`).
 - Mapping:
-  - issue = task
-  - key = task id
-  - states = active / paused / done
-  - labels = level (L1/L2/L3), service tags, 🐞 fix
-  - body = purpose + plan + living handoff
-  - comments = step handoffs and decisions
+  - tracker `board`, host `local`, scope = board id, key = task id
+  - title = the task's path (`Payments › Gateway`)
+  - states = Active / Paused / Done
+  - labels = level (`L2 module`), `backlog`, `bug`, service tags
+  - body = purpose (editable)
+  - comments (read-only) = plan, living handoff, step handoffs
+  - create = a new Level 1 feature
 - Scope: a T3 project maps to a board when the project's root is inside one of that board's roots
   (deepest match wins, as today).
 - This gives us, almost for free:
@@ -119,7 +120,12 @@ board's face. See [RECONCILIATION.md](RECONCILIATION.md) for what changes and wh
 - Put new code in new packages and dirs (`packages/board-core`, `packages/issue-tracker-board`,
   `apps/server/src/board`, `apps/server/src/mcp/toolkits/board`, `apps/web/src/board`).
 - Keep edits to upstream files small, and list them here as they're made:
-  - `apps/server/src/issue/IssueTrackerRegistry.ts`: add the board driver to `STANDALONE_TRACKERS`
+  - `packages/source-control-core/src/server/IssueTracker.ts`: `LocalIssueTrackerApi` (a tracker
+    that covers projects by folder, with no credential) and `isLocalIssueTracker` (done)
+  - `apps/server/src/issue/IssueTrackerRegistry.ts`: `local` trackers, with the board driver in
+    `LOCAL_TRACKERS` (done)
+  - `apps/server/src/issue/IssueService.ts`: `resolveLocalBindings` lists a project's board beside
+    its git host's tracker (done)
   - `apps/server/src/mcp/McpHttpServer.ts`: register `BoardToolkit`
   - `packages/contracts`: `board` RPC + capability
 - Upstream is `upstream` (`https://github.com/pingdotgg/t3code`). Rebase `board/integration` on
