@@ -1,0 +1,70 @@
+/**
+ * Each T3 thread as a chat on the Project Board, whatever its provider: placed on the board whose
+ * root holds the thread's folder (its worktree, else its project's root), with its own record.
+ *
+ * @module board/BoardChats
+ */
+import { BoardChat, BoardStore } from "@t3tools/board-core";
+import { defaultBoardHome, nodeGit, nodeIO } from "@t3tools/board-core/node";
+import { OrchestratorMcpFailure, type ThreadId } from "@t3tools/contracts";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+
+import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
+import * as ProjectService from "../project/ProjectService.ts";
+
+export class BoardChats extends Context.Service<
+  BoardChats,
+  {
+    /** The thread's board chat, opened on first use and reopened when its folder moves. */
+    readonly forThread: (threadId: ThreadId) => Effect.Effect<BoardChat, OrchestratorMcpFailure>;
+  }
+>()("t3/board/BoardChats") {}
+
+const failure = (message: string) =>
+  new OrchestratorMcpFailure({ code: "orchestration_error", message });
+
+export const make = Effect.fn("BoardChats.make")(function* (store: BoardStore) {
+  const threads = yield* ThreadManagementService.ThreadManagementService;
+  const projects = yield* ProjectService.ProjectService;
+  const open = new Map<ThreadId, { readonly cwd: string; readonly chat: BoardChat }>();
+
+  const forThread = Effect.fn("BoardChats.forThread")(function* (threadId: ThreadId) {
+    const shell = yield* threads
+      .getThreadShell(threadId)
+      .pipe(Effect.mapError(() => failure("The thread could not be read.")));
+    if (shell === null) return yield* failure("The thread was not found.");
+    const project = yield* projects
+      .getById(shell.projectId)
+      .pipe(Effect.mapError(() => failure("The thread's project could not be read.")));
+    const cwd = shell.worktreePath ?? Option.getOrUndefined(project)?.workspaceRoot;
+    if (cwd === undefined) return yield* failure("The thread has no folder.");
+    const known = open.get(threadId);
+    if (known !== undefined && known.cwd === cwd) return known.chat;
+    const chat = new BoardChat(store, nodeGit, "t3");
+    yield* Effect.promise(() =>
+      chat.open({
+        sessionId: threadId,
+        cwd,
+        source: {
+          kind: "t3-thread",
+          threadId,
+          projectId: shell.projectId,
+          provider: shell.providerInstanceId,
+          model: shell.modelSelection.model,
+        },
+      }),
+    );
+    open.set(threadId, { cwd, chat });
+    return chat;
+  });
+
+  return BoardChats.of({ forThread });
+});
+
+export const layer = Layer.effect(
+  BoardChats,
+  Effect.suspend(() => make(new BoardStore(defaultBoardHome(), nodeIO))),
+);

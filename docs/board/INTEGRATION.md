@@ -79,9 +79,17 @@ through Claude-only APIs. Here, each job maps onto a T3 piece that already serve
   - `board_link`, `board_read`, `board_update`, `board_plan`, `board_handoff`, `board_checkpoint`
   - `board_create_task`, `board_decision`, `board_master_plan`, `board_doc`, `board_find`
   - `board_link_task`, `board_move`, `board_promote`, `board_release`, `board_setup`
-- Each tool resolves the calling thread through `McpInvocationContext` instead of a Claude session id.
-- Registered in `McpHttpServer.ts` beside `IssuesToolkit`, behind a new `board` capability. Every
-  provider thread already receives T3's MCP session, so every model gets the tools.
+- Each tool runs as the calling thread's own board chat (`apps/server/src/board/BoardChats.ts`).
+  The thread's folder (its worktree, else its project's root) picks the board, and the record
+  carries `source: { kind: "t3-thread", threadId, provider, model }`.
+- Tool inputs stay as JSON Schema in `board-core` (shared with the Claude mod) and are converted to
+  Effect Schema in `tools.ts`.
+- Registered in `McpHttpServer.ts` beside `IssuesToolkit`. Every provider thread already receives
+  T3's MCP session, so every model gets the tools. Outside MCP clients don't see them, since a
+  board chat needs a calling thread.
+- Claude threads that T3 runs get `T3_BOARD_HOST=t3` (`provider/Drivers/ClaudeHome.ts`), and the
+  Claude mod stands down when it sees it, so Claude doesn't get the tools twice.
+- The tool list grows by about 11 KB (`agentContextBudget.json`: 59,052 → 70,365 bytes).
 
 ### 5. Board protocol in the thread's context
 
@@ -126,7 +134,9 @@ board's face. See [RECONCILIATION.md](RECONCILIATION.md) for what changes and wh
     `LOCAL_TRACKERS` (done)
   - `apps/server/src/issue/IssueService.ts`: `resolveLocalBindings` lists a project's board beside
     its git host's tracker (done)
-  - `apps/server/src/mcp/McpHttpServer.ts`: register `BoardToolkit`
+  - `apps/server/src/mcp/McpHttpServer.ts`: register `BoardToolkit` (done)
+  - `apps/server/src/provider/Drivers/ClaudeHome.ts`: `T3_BOARD_HOST` for Claude threads (done)
+  - `apps/server/src/provider/agentContextBudget.json`: the larger tool list (done)
   - `packages/contracts`: `board` RPC + capability
 - Upstream is `upstream` (`https://github.com/pingdotgg/t3code`). Rebase `board/integration` on
   `upstream/main` regularly.
