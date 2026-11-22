@@ -15,6 +15,7 @@ import {
   type ThreadIssueLink,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as DateTime from "effect/DateTime";
 import * as Layer from "effect/Layer";
 
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
@@ -125,8 +126,44 @@ it.effect("records a thread's turns, answers and changed files on its board task
       // The board task shows on the thread as one of its issue links.
       expect(issues.map((link) => link.key)).toEqual(["refunds"]);
 
+      yield* Effect.promise(async () => {
+        await chat.createTask({ title: "Billing" });
+        const billing = (await store.loadTask("nefx", "billing"))!;
+        billing.owner = { root: `${ws}-other`, label: "other", state: "owned", since: 0 };
+        await store.saveTask("nefx", billing);
+      });
+      issues = [...issues, issueLink("billing")];
+      yield* reactor.handle(event("thread.issue-synced", { issues }));
+      expect(issues.map((link) => link.key)).toEqual(["refunds"]);
+      expect((yield* session())?.taskId).toBe("refunds");
+
       yield* reactor.handle(event("checkpoint.captured", { files: [{ path: "api/refunds.ts" }] }));
       expect((yield* task())?.services).toEqual(["api"]);
+
+      const completedAt = DateTime.makeUnsafe("2026-01-01T00:00:00.000Z");
+      const check = event("turn-item.updated", {
+        id: "check:1",
+        type: "command_execution",
+        runId,
+        completedAt,
+        exitCode: 1,
+        input: "vp test run failing.test.ts",
+      });
+      yield* reactor.handle(check);
+      yield* reactor.handle(check);
+      yield* reactor.handle(
+        event("turn-item.updated", {
+          id: "check:2",
+          type: "command_execution",
+          runId,
+          completedAt,
+          exitCode: 0,
+          input: "vp test run failing.test.ts; echo done",
+        }),
+      );
+      expect((yield* task())?.checks).toEqual([
+        { id: "check:1", command: "vp test", exitCode: 1, at: DateTime.toEpochMillis(completedAt) },
+      ]);
 
       yield* reactor.handle(run("completed"));
       expect((yield* session())?.status).toBe("idle");
@@ -140,9 +177,11 @@ it.effect("records a thread's turns, answers and changed files on its board task
       expect((yield* task())?.lastAction?.text).toBe("Reviewed by hand");
 
       // Unlinking the board issue in T3 unlinks the task; linking it again relinks it.
-      yield* reactor.handle(event("thread.issue-synced", { issues: [] }));
+      issues = [];
+      yield* reactor.handle(event("thread.issue-synced", { issues }));
       expect((yield* session())?.taskId).toBeNull();
-      yield* reactor.handle(event("thread.issue-synced", { issues: [issueLink("refunds")] }));
+      issues = [issueLink("refunds")];
+      yield* reactor.handle(event("thread.issue-synced", { issues }));
       expect((yield* session())?.taskId).toBe("refunds");
 
       yield* reactor.handle(event("thread.archived", {}));

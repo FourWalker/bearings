@@ -16,6 +16,7 @@ import type { BoardStore } from "./store.ts";
 import { norm } from "./text.ts";
 import type {
   Decision,
+  CheckResult,
   Item,
   Level,
   Owner,
@@ -61,6 +62,15 @@ export interface BoardViewDecision {
   readonly raisedFrom: { readonly id: string; readonly title: string } | null;
   /** The recommendation's R#, when the decision is one. */
   readonly r: string | null;
+  readonly recommendation?:
+    | {
+        readonly description: string;
+        readonly area: string;
+        readonly verdict: string;
+        readonly register: string | null;
+        readonly implemented: boolean;
+      }
+    | undefined;
 }
 
 export interface BoardViewTask {
@@ -99,6 +109,11 @@ export interface BoardView {
   readonly id: string;
   readonly name: string;
   readonly boardMode: boolean;
+  readonly registers: ReadonlyArray<{
+    readonly id: string;
+    readonly topic: string;
+    readonly url: string;
+  }>;
   readonly services: ReadonlyArray<{
     readonly id: string;
     readonly name: string;
@@ -116,7 +131,7 @@ export const liveOf = (s: Pick<Session, "status" | "heartbeatAt">, now: number):
 
 const chatOf = (s: Session, now: number): BoardViewChat => ({
   sessionId: s.sessionId,
-  title: s.title || s.lastPrompt.split("\n")[0] || "",
+  title: s.title || s.lastPrompt?.split("\n")[0] || "",
   live: liveOf(s, now),
   workspaceLabel: s.workspaceLabel,
   taskId: s.taskId,
@@ -135,6 +150,23 @@ export async function readBoardSummaries(store: BoardStore): Promise<BoardSummar
       taskCount: (await store.listTasks(b.id)).length,
     })),
   );
+}
+
+export async function readUnassignedChats(
+  store: BoardStore,
+  now: number,
+): Promise<BoardViewChat[]> {
+  const cutoff = now - 14 * 86_400_000;
+  return (await store.listSessions(null))
+    .filter(
+      (session) =>
+        !session.movedTo &&
+        !session.supersededBy &&
+        (session.lastPrompt || session.title) &&
+        session.updatedAt >= cutoff,
+    )
+    .toSorted((a, b) => b.updatedAt - a.updatedAt)
+    .map((session) => chatOf(session, now));
 }
 
 export async function readBoardView(
@@ -195,6 +227,17 @@ export async function readBoardView(
           level: d.level || (t.level === 2 || t.level === 3 ? t.level : 1),
           raisedFrom: d.raisedFrom ?? null,
           r: d.rec?.r ?? null,
+          ...(d.rec
+            ? {
+                recommendation: {
+                  description: d.description ?? "",
+                  area: d.rec.area ?? "",
+                  verdict: d.verdict ?? "",
+                  register: d.rec.register ?? null,
+                  implemented: !!d.rec.implemented,
+                },
+              }
+            : {}),
         })),
         links: (t.links ?? []).map((l) => ({ to: l.to, type: l.type, note: l.note })),
         owner: t.owner
@@ -210,6 +253,7 @@ export async function readBoardView(
     id: board.id,
     name: board.name,
     boardMode: !!board.boardMode,
+    registers: board.registers ?? [],
     services: (board.services ?? []).map((s) => ({ id: s.id, name: s.name, match: s.match })),
     workspaces: board.roots.map((r) => ({ label: r.label, root: norm(r.path) })),
     tasks: tasks.toSorted((a, b) => b.updatedAt - a.updatedAt),
@@ -227,11 +271,14 @@ export interface BoardTaskDetail {
   readonly planMarkdown: string;
   /** The living handoff, without its header comment. */
   readonly handoff: string;
+  readonly handoffCheckpoint: string | null;
+  readonly checks: ReadonlyArray<CheckResult & { readonly taskTitle: string }>;
   /** Step notes, newest first. */
   readonly stepNotes: ReadonlyArray<{
     readonly step: string;
     readonly at: number;
     readonly text: string;
+    readonly checkpointRef: string | null;
   }>;
   /** This task's documents (`from` null), then its parents'. */
   readonly docs: ReadonlyArray<
@@ -285,7 +332,32 @@ export interface BoardTaskDetail {
 }
 
 const stripHeader = (md: string) => md.replace(/^<!--[\s\S]*?-->\s*/, "");
+const checkpointOf = (md: string): string | null =>
+  /^<!-- [^\r\n]* · checkpoint (\S+) -->/.exec(md)?.[1] ?? null;
 const levelOf = (t: Task): Level => (t.level === 2 || t.level === 3 ? t.level : 1);
+
+export async function checksForTask(
+  store: BoardStore,
+  boardId: string,
+  task: Task,
+  phases: ReadonlyArray<PlanPhase>,
+) {
+  const children = new Set(
+    phases.flatMap((phase) =>
+      phase.steps.flatMap((step) => (step.done && step.childId ? [step.childId] : [])),
+    ),
+  );
+  const tasks = [
+    task,
+    ...(await Promise.all([...children].map((id) => store.loadTask(boardId, id)))),
+  ];
+  return tasks
+    .flatMap((owner) =>
+      owner ? (owner.checks ?? []).map((check) => ({ ...check, taskTitle: owner.title })) : [],
+    )
+    .toSorted((a, b) => b.at - a.at)
+    .slice(0, 20);
+}
 
 export async function readTaskDetail(
   store: BoardStore,
@@ -344,13 +416,20 @@ export async function readTaskDetail(
       raisedFrom: d.raisedFrom ?? null,
       filedOn: { id: owner.id, title: owner.title },
     });
+  const phases = planPhases(plan);
   return {
     masterPlan,
     masterTaskId: master.id,
-    plan: planPhases(plan),
+    plan: phases,
     planMarkdown: plan,
     handoff: stripHeader(handoff),
-    stepNotes: stepNotes.map((n) => ({ ...n, text: stripHeader(n.text) })),
+    handoffCheckpoint: checkpointOf(handoff),
+    checks: await checksForTask(store, boardId, task, phases),
+    stepNotes: stepNotes.map((n) => ({
+      ...n,
+      text: stripHeader(n.text),
+      checkpointRef: checkpointOf(n.text),
+    })),
     docs: [
       ...(task.docs ?? []).map((d) => ({ ...docOf(d), from: null })),
       ...rootFirst.flatMap((a) =>

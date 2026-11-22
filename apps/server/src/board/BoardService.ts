@@ -31,12 +31,14 @@ import {
   editBoard as editBoardSettings,
   editTask as editBoardTask,
   type BoardGit,
+  type BoardViewChat,
   BoardStore,
   findBoard,
   norm,
   readBoardSummaries,
   readBoardView,
   readTaskDetail,
+  readUnassignedChats,
 } from "@t3tools/board-core";
 import { defaultBoardHome, nodeGit, nodeIO } from "@t3tools/board-core/node";
 import * as Clock from "effect/Clock";
@@ -53,6 +55,7 @@ export class BoardService extends Context.Service<
   BoardService,
   {
     readonly list: Effect.Effect<ReadonlyArray<BoardSummary>, BoardReadError>;
+    readonly unassigned: Effect.Effect<ReadonlyArray<BoardChatRow>, BoardReadError>;
     readonly view: (input: {
       readonly boardId: string;
     }) => Effect.Effect<BoardView, BoardReadError>;
@@ -144,6 +147,26 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
     Effect.withSpan("BoardService.list"),
   );
 
+  const resolve = (chats: ReadonlyArray<BoardViewChat>) =>
+    Effect.forEach(
+      chats,
+      (chat) =>
+        withThread({
+          ...chat,
+          threadId: chat.threadId === null ? null : ThreadId.make(chat.threadId),
+        }),
+      { concurrency: 8 },
+    ).pipe(Effect.map((rows) => rows.filter((row) => row !== null)));
+
+  const unassigned = Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    const chats = yield* Effect.tryPromise({
+      try: () => readUnassignedChats(store, now),
+      catch: failed,
+    });
+    return yield* resolve(chats);
+  }).pipe(Effect.withSpan("BoardService.unassigned"));
+
   const view = Effect.fn("BoardService.view")(function* (input: { readonly boardId: string }) {
     const now = yield* Clock.currentTimeMillis;
     const raw = yield* Effect.tryPromise({
@@ -153,16 +176,6 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
     if (raw === null) {
       return yield* new BoardReadError({ reason: "not-found", detail: "No such board." });
     }
-    const resolve = (chats: ReadonlyArray<(typeof raw.unlinked)[number]>) =>
-      Effect.forEach(
-        chats,
-        (chat) =>
-          withThread({
-            ...chat,
-            threadId: chat.threadId === null ? null : ThreadId.make(chat.threadId),
-          }),
-        { concurrency: 8 },
-      ).pipe(Effect.map((rows) => rows.filter((row) => row !== null)));
     const tasks = yield* Effect.forEach(raw.tasks, (task) =>
       resolve(task.chats).pipe(Effect.map((chats) => ({ ...task, chats }))),
     );
@@ -251,7 +264,7 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
 
   const editBoard = Effect.fn("BoardService.editBoard")(function* (input: BoardEditBoardInput) {
     const result = yield* editLock.withLock(
-      input.boardId,
+      "$registry",
       Effect.tryPromise({
         try: () => editBoardSettings(store, input.boardId, input.edit),
         catch: editFailed,
@@ -288,7 +301,16 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
           cwd,
           source: { kind: "t3-thread", threadId: input.threadId, projectId: input.projectId },
         });
-        const reply = await chat.linkTask({ taskId: input.taskId });
+        const reply = await chat.linkTask({
+          taskId: input.taskId,
+          override: input.override,
+          personSaid:
+            input.override === "once"
+              ? "Continue once in this workspace"
+              : input.override === "takeover"
+                ? "Take over in this workspace"
+                : undefined,
+        });
         const linked = await store.readSession(input.boardId, input.threadId);
         return linked?.taskId === input.taskId
           ? null
@@ -300,6 +322,7 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
 
   return BoardService.of({
     list,
+    unassigned,
     view,
     taskDetail,
     editTask,

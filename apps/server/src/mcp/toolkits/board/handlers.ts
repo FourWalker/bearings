@@ -2,6 +2,7 @@ import { OrchestratorMcpFailure } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
 import * as BoardChats from "../../../board/BoardChats.ts";
+import { ThreadManagementService } from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import { BoardToolkit } from "./tools.ts";
@@ -13,8 +14,15 @@ const run = (name: string) => (params: Record<string, unknown>) =>
     const caller = yield* McpInvocationContext.requireThreadScope(scope, "The board tools");
     const chats = yield* BoardChats.BoardChats;
     const chat = yield* chats.forThread(caller.thread.threadId);
+    const threads = yield* ThreadManagementService;
+    const t3RunId =
+      name === "board_handoff" || name === "board_checkpoint"
+        ? ((yield* threads
+            .getThreadShell(caller.thread.threadId)
+            .pipe(Effect.catchCause(() => Effect.succeed(null))))?.activeRunId ?? undefined)
+        : undefined;
     const reply = yield* Effect.tryPromise({
-      try: () => chat.runTool(name, params) ?? Promise.resolve(null),
+      try: () => chat.runTool(name, params, { t3RunId }) ?? Promise.resolve(null),
       catch: () =>
         new OrchestratorMcpFailure({
           code: "orchestration_error",

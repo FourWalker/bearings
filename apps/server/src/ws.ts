@@ -2006,6 +2006,7 @@ export const layerWsRpc = (
         [WS_METHODS.issueTrackersBindProject]: (input) => issueTrackers.bindProject(input),
         // Project Board fork.
         [WS_METHODS.boardList]: () => boards.list,
+        [WS_METHODS.boardUnassigned]: () => boards.unassigned,
         [WS_METHODS.boardView]: (input) => boards.view(input),
         [WS_METHODS.boardTaskDetail]: (input) => boards.taskDetail(input),
         [WS_METHODS.boardEditTask]: (input) => boards.editTask(input),

@@ -11,6 +11,7 @@ export type BoardHost = "claude-code" | "t3";
 const TOOL_RULES_CLAUDE = `Board rules:
 - Always name plan steps by id AND name ("A2 – Retry handling"), never the id alone, so the person knows what it means.
 - After a meaningful piece of work, call board_update with a one-line lastAction (what was done, in plain words).
+- As soon as work is blocked, record the obstacle and next unblock action with board_update.lastAction. If another task already tracks the obstacle, also link it with board_link_task type "blocked_by".
 - When a plan step is finished, call board_handoff ONCE with that step's id, a short step note (what was done, files touched, how to test) and the whole rewritten living handoff (handoff). It saves both and ticks the step together, so the checklist and the handoff never disagree.
 - Delegate work by creating subtasks with board_create_task (modules under a master task, tasks under a module). If a task is bigger than expected, suggest board_promote.
 - When you create or change the plan, save the whole plan with board_plan (phases as "## Phase A — name" headings, steps as "- [ ] A1 name" checkboxes).

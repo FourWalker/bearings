@@ -156,25 +156,54 @@ describe("BoardChat", () => {
     expect(nextStep(await store.readText(store.planPath("nefx", "retries")))?.id).toBe("A1");
 
     // The subtask finishes: the parent's next step moves past the work it took over.
-    await chat.linkTask({ taskId: "retry-key" });
-    await chat.savePlan({ markdown: "- [ ] B1 Persist the key" });
-    const done = await chat.writeHandoff({
-      step: "B1",
-      markdown: "Key persisted.",
-      handoff: "Objective: retry key\nNext step: none, task done",
+    const worker = new BoardChat(new BoardStore(home, nodeIO, clock()), noGit, "t3");
+    await worker.open({
+      sessionId: "t2",
+      cwd: wsB,
+      source: { kind: "t3-thread", threadId: "t2", provider: "devReplay" },
     });
+    await worker.linkTask({ taskId: "retry-key" });
+    await worker.savePlan({ markdown: "- [ ] B1 Persist the key" });
+    const done = await worker.writeHandoff(
+      {
+        step: "B1",
+        markdown: "Key persisted. Unit check exited 0.",
+        handoff: "Objective: retry key\nVerified: unit check exited 0.\nNext step: none, task done",
+      },
+      undefined,
+      "run:worker",
+    );
     expect(done.text).toContain("Living handoff rewritten");
     expect(await store.readText(store.livingPath("nefx", "retry-key"))).toContain(
       "Next step: none, task done",
     );
     expect(await store.readText(store.planPath("nefx", "retry-key"))).toContain("- [x] B1");
-    const finished = await chat.updateTask({ status: "done" });
+    await worker.recordCheck({
+      id: "check:worker",
+      command: "vp test",
+      exitCode: 0,
+      at: store.clock.now(),
+    });
+    const finished = await worker.updateTask({ status: "done" });
     expect(finished.text).toContain("(A1)");
     const parentPlan = () => store.readText(store.planPath("nefx", "retries"));
     expect(nextStep(await parentPlan())).toEqual({ id: "A2", text: "Run the integration test" });
+    const resumed = await openChat(store, "t3", ws);
+    await resumed.attachCheckpoint("run:unrelated", "refs/t3/unrelated");
+    expect((await readTaskDetail(store, "nefx", "retry-key"))?.handoffCheckpoint).toBeNull();
+    await resumed.attachCheckpoint("run:worker", "refs/t3/worker");
+    const record = await readTaskDetail(store, "nefx", "retry-key");
+    expect(record?.handoffCheckpoint).toBe("refs/t3/worker");
+    expect(record?.stepNotes[0]).toMatchObject({
+      checkpointRef: "refs/t3/worker",
+      text: "Key persisted. Unit check exited 0.",
+    });
+    await resumed.linkTask({ taskId: "retries" });
+    expect(resumed.context).toContain("Next action: A2");
+    expect(resumed.context).toContain("Retry key: vp test exited 0");
 
     // Reopened, it takes its step back.
-    await chat.updateTask({ status: "active" });
+    await worker.updateTask({ status: "active" });
     expect(nextStep(await parentPlan())?.id).toBe("A1");
 
     // Without a handoff the reply says the living handoff is now behind.

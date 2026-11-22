@@ -5,7 +5,7 @@ import * as NodePath from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "@effect/vitest";
 
-import { BoardEditError, createTask, editBoard, editTask } from "./edit.ts";
+import { addDecision, BoardEditError, createTask, editBoard, editTask } from "./edit.ts";
 import { noGit } from "./io.ts";
 import { nodeIO } from "./nodeIO.ts";
 import { nextStep } from "./plan.ts";
@@ -40,6 +40,73 @@ const task = async (id: string) => (await store.loadTask("nefx", id)) as Task;
 const plan = (id: string) => store.readText(store.planPath("nefx", id));
 
 describe("editTask", () => {
+  it("creates a linked bug fix next to a level-three task and keeps its service tags", async () => {
+    await createTask(store, "nefx", { title: "Billing" }, actor);
+    await createTask(store, "nefx", { title: "Refunds", parentId: "billing" }, actor);
+    await createTask(
+      store,
+      "nefx",
+      {
+        title: "Retries",
+        parentId: "refunds",
+        services: ["ledger"],
+        mainService: "api",
+      },
+      actor,
+    );
+    await edit("retries", { op: "update", status: "done" });
+    const { createdId } = await edit("retries", { op: "reportBug", title: "Fix retries" });
+    expect(await task(createdId!)).toMatchObject({
+      parentId: "refunds",
+      level: 3,
+      bug: true,
+      services: ["ledger", "api"],
+      links: [{ type: "fixes", to: "retries" }],
+    });
+    expect((await task("retries")).status).toBe("done");
+  });
+
+  it("allocates distinct board-wide numbers for concurrent recommendations, including one owner", async () => {
+    const billing = await createTask(store, "nefx", { title: "Billing" }, actor);
+    const refunds = await createTask(
+      store,
+      "nefx",
+      { title: "Refunds", parentId: billing.id },
+      actor,
+    );
+    const peer = new BoardStore(store.home, nodeIO, store.clock);
+    const results = await Promise.all([
+      addDecision(
+        store,
+        "nefx",
+        billing,
+        { title: "Existing register", recommendation: { r: "R7" } },
+        actor,
+      ),
+      addDecision(
+        peer,
+        "nefx",
+        refunds,
+        { title: "New check", level: 1, recommendation: {} },
+        actor,
+      ),
+      addDecision(store, "nefx", refunds, { title: "New option", recommendation: {} }, actor),
+    ]);
+    expect(results.map(({ decision }) => decision.rec?.r)).toEqual(["R7", "R8", "R9"]);
+    expect((await task(billing.id)).decisions?.map((decision) => decision.rec?.r)).toEqual([
+      "R7",
+      "R8",
+    ]);
+    await expect(
+      addDecision(
+        peer,
+        "nefx",
+        refunds,
+        { title: "Duplicate", recommendation: { r: "R7" } },
+        actor,
+      ),
+    ).rejects.toThrow("R7 is already");
+  });
   it("edits a task's fields, items, plan, handoff and master plan", async () => {
     await createTask(store, "nefx", { title: "Billing" }, actor);
     const { createdId } = await edit("billing", { op: "createChild", title: "Retries" });

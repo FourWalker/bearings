@@ -58,6 +58,13 @@ it.effect("shows a T3 thread's own status and title, and drops threads this serv
         await chat.open({ sessionId: id, cwd: ws, source: { kind: "t3-thread", threadId: id } });
         await chat.turnStart(prompt);
       }
+      const unattached = new BoardChat(store, noGit, "t3");
+      await unattached.open({
+        sessionId: "thread:no-board",
+        cwd: norm(NodePath.join(tmp, "other")),
+        source: { kind: "t3-thread", threadId: "thread:no-board" },
+      });
+      await unattached.turnStart("Work outside a board");
     });
     const threads = Layer.mock(ThreadManagement.ThreadManagementService)({
       getThreadShell: (threadId) =>
@@ -87,6 +94,9 @@ it.effect("shows a T3 thread's own status and title, and drops threads this serv
       );
       // Not held here: no link, and with a stale heartbeat it isn't an open chat.
       expect(view.unlinked).toHaveLength(2);
+      expect(yield* boards.unassigned).toMatchObject([
+        { threadId: "thread:no-board", live: "idle" },
+      ]);
       const missing = yield* Effect.flip(boards.view({ boardId: "nope" }));
       expect(missing.reason).toBe("not-found");
     }).pipe(Effect.provide(layer));
@@ -149,12 +159,18 @@ it.effect(
 
       yield* Effect.gen(function* () {
         const boards = yield* BoardService.BoardService;
-        const link = (threadId: ThreadId, projectId: string, taskId: string) =>
+        const link = (
+          threadId: ThreadId,
+          projectId: string,
+          taskId: string,
+          override?: "once" | "takeover",
+        ) =>
           boards.linkThread({
             boardId: "nefx",
             taskId,
             threadId,
             projectId: ProjectId.make(projectId),
+            override,
           });
         // An unsent draft on a task isn't a chat there yet.
         yield* link(draft, "project:main", "refunds");
@@ -185,6 +201,16 @@ it.effect(
           (attempt) => Effect.flip(attempt).pipe(Effect.map((error) => error.reason)),
         );
         expect(reasons).toEqual(["started", "not-on-board", "not-found", "blocked"]);
+        yield* link(ThreadId.make("thread:once"), "project:main", "payouts", "once");
+        expect(yield* Effect.promise(() => store.loadTask("nefx", "payouts"))).toMatchObject({
+          owner: { root: copy },
+          overrides: [{ session: "thread:once", workspace: "main" }],
+        });
+        yield* link(ThreadId.make("thread:takeover"), "project:main", "payouts", "takeover");
+        expect(yield* Effect.promise(() => store.loadTask("nefx", "payouts"))).toMatchObject({
+          owner: { root: main },
+          ownerHistory: [{ type: "takeover", from: "copy", to: "main" }],
+        });
       }).pipe(Effect.provide(layer));
     }),
 );

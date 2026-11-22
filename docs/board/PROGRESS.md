@@ -5,11 +5,10 @@ mapping in [RECONCILIATION.md](RECONCILIATION.md).
 
 ## Repos and folders
 
-- **Fork:** `C:\Claude Works\t3code-board`, branch `board/integration` (local commits, not pushed).
+- **Fork:** `C:\Claude Works\t3code-board`. Continuation is on `board/continue-integration`, based on Claude's `board/integration` at `b4fbdfc`.
   - `origin` = github.com/FourWalker/t3code-board (public fork)
   - `upstream` = pingdotgg/t3code
-- **Board project:** `C:\Claude Works\Claude Project Board`, branch `main`, pushed to
-  github.com/FourWalker/claude-project-board (private).
+- **Board project:** `C:\Claude Works\Claude Project Board`. The matching standalone changes are on `board/shared-app-edits`, based on `main` at `3380791`.
   - The Claude mod is in `mod/project-board/`; the board app is `mod/project-board/app/server.js`.
   - Its previous `register.ts` is kept in `backup/`.
 - **Board data:** `%USERPROFILE%\.claude-board`. Boards today: NEFX (3 workspaces) and Claude Project Board.
@@ -42,8 +41,7 @@ Each step passed `vp run check:changed`, apart from the Windows-only failures li
 ## Next
 
 **Goal (from the owner, 2026-11-22):** the whole board app's UI flow, built into T3 Code itself, with
-linked chats opening as T3 threads in the same app: no jumping to Claude Desktop or VS Code. The
-current `/board` page (a list of cards) is a first slice to be replaced, not the target. The board
+linked chats opening as T3 threads in the same app: no jumping to Claude Desktop or VS Code. The board
 app (`mod/project-board/app`, screenshots in the board project's `docs/preview/`) is the reference
 for layout and behaviour; it keeps working alongside on the same `~/.claude-board`.
 
@@ -55,15 +53,36 @@ what's still unverified).
 mid-completion, then open the parent and resume in a fresh thread with another provider. Board and
 thread must agree on what's done, blocked and verified, and on the next action.
 
-Phases, in order (1 and 2 are done, read-only; "chats with no board" in the picker is still missing; showing planned work, current activity and verified results apart (review item 5) moves to phase 3, with editing):
+### Continuation on `board/continue-integration`
 
-3. **Editing, what's left.** The board app (`server.js`) still has its own copies of the actions; switching it to `board-core/edit.ts` (Node can load the TS with type stripping) makes it one implementation for both apps. Review item 5: show planned work, current activity and verified results apart.
-4. **Register and the rest.** Recommendations register page, By-service view, blocked/backlog, bug
-   fix tasks, Move dialog, settings (⚙).
-5. **Thread side.** The task already shows as an issue link on the thread (unlink there unlinks the
-   task); still to do: override/take over when another copy owns the task, deep links, command
-   palette, and the review's "Copy handoff" brief for models outside T3.
-6. Later: mobile, Board Mode with T3 worktrees.
+- **Phase 3.** The standalone app uses board-core for board and task edits, including delegated
+  completion, ownership, decisions and chat links. T3 shows the plan, current activity, and recorded
+  results in separate sections. For recognized standalone check commands reported by a provider,
+  T3 records the command name and exit code. The parent includes the results of delegated steps
+  marked complete. Raw arguments and output stay in the thread.
+- **Phase 4.** The Recommendations register lists and filters board-wide R#s, links to external
+  registers, and opens the task's Decisions tab. The board picker lists recent chats without a
+  board. Users can create service backlogs and report a bug against a finished task. By service,
+  the Blocked panel, Move, and settings are part of the same flow.
+- **Phase 5.** Board links open against the correct T3 environment. The command palette opens the
+  board. Task views offer Copy task link and Copy handoff. Continue in new thread links a fresh
+  draft before it opens; choosing a different workspace can override once or take over. A soft
+  release's pickup instructions persist into the first turn.
+- **Review follow-up.** The agent protocol calls for recording a blocker when it is found.
+  Compatible hosts serialize decision filing and reserve R#s with exclusive file creation. A T3
+  handoff records the matching checkpoint ref when the run's checkpoint is captured, even if the
+  original board chat has been reopened since the handoff was written.
+
+### Next verification
+
+- Run the acceptance sequence above end to end with real T3 providers. The isolated fixtures
+  exercise a second workspace, a fresh provider session, delegated completion, the parent's
+  next action and recorded checks, and attachment of the interrupted run?s checkpoint.
+- Verify the integrated web and desktop UI with T3's Browser panel, including register navigation
+  and saving a board setting, a decision and its implementation record. The standalone HTTP smoke
+  covers those edits against a temporary board and confirms that simultaneous writes from two
+  processes preserve both recommendations on one task.
+- **Phase 6 remains deferred.** Mobile and Board Mode with T3-created worktrees.
 
 ## How to run it (dev, isolated)
 
@@ -105,7 +124,6 @@ Phases, in order (1 and 2 are done, read-only; "chats with no board" in the pick
 - "Continue in new thread" picks the model in the composer, not on the button (the draft uses the
   project's defaults like any new thread). It always starts a local draft: a T3 worktree sits outside
   the board's roots, so the thread would land off the board.
-- A draft that reuses an existing unsent draft for the same project gets linked as that draft.
 - The switched Claude mod has been smoke-tested with a fake host, not yet in a real new Claude chat.
 - Windows-only test failures, with and without the board changes: 4 `ProviderTurnStartService.test.ts`
   cases (Git worktrees) and one `ServerEnvironment.test.ts` case (symlink EPERM). The mobile
@@ -116,11 +134,6 @@ Phases, in order (1 and 2 are done, read-only; "chats with no board" in the pick
 `refs/remotes/codex/project-board-handoff` (fetched from its bundle) is kept for reference. Not
 taken: board file reads inside the Orchestrator, plan repair on every save and read, handoff parsing
 by heading patterns, its task-detail tabs (phase 2 rebuilds them to match the board app).
-
-Still open from the review: record a blocker as soon as it's found (item 6); guard the board-wide
-R# counter against two chats (item 7); T3 doesn't yet pass its checkpoint ref to board_handoff or
-board_checkpoint. The board app's own "mark done" (its `server.js`) doesn't tick a parent's
-delegated step; phase 3 moves its actions into board-core.
 
 ## After editing board-core
 

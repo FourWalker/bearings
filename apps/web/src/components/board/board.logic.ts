@@ -1,8 +1,16 @@
-import type { BoardChat, BoardTask, BoardView, ProjectId } from "@t3tools/contracts";
+import type {
+  BoardChat,
+  BoardTask,
+  BoardTaskDetail,
+  BoardView,
+  ProjectId,
+} from "@t3tools/contracts";
 
 /** The board app's views: a column per master task, one level at a time, or a column per service. */
-export type BoardViewMode = "tree" | "1" | "2" | "3" | "svc";
+export type BoardViewMode = "tree" | "1" | "2" | "3" | "svc" | "register";
 export type BoardFilter = "active" | "paused" | "done" | "all";
+export type BoardTaskTab = "overview" | "threads" | "plan" | "handoff" | "subtasks" | "decisions";
+export type RecommendationFilter = "open" | "decided" | "all";
 
 export interface BoardSearch {
   readonly env?: string | undefined;
@@ -13,10 +21,21 @@ export interface BoardSearch {
   readonly task?: string | undefined;
   /** The module or task open in a modal, over the board or a master task's page. */
   readonly open?: string | undefined;
+  readonly tab?: BoardTaskTab | undefined;
+  readonly picker?: boolean | undefined;
+  readonly recommendationFilter?: RecommendationFilter | undefined;
 }
 
-const VIEWS: ReadonlyArray<string> = ["tree", "1", "2", "3", "svc"];
+const VIEWS: ReadonlyArray<string> = ["tree", "1", "2", "3", "svc", "register"];
 const FILTERS: ReadonlyArray<string> = ["active", "paused", "done", "all"];
+const TABS: ReadonlyArray<string> = [
+  "overview",
+  "threads",
+  "plan",
+  "handoff",
+  "subtasks",
+  "decisions",
+];
 
 export function boardSearchFromUrl(search: Record<string, unknown>): BoardSearch {
   const text = (value: unknown) =>
@@ -27,6 +46,8 @@ export function boardSearchFromUrl(search: Record<string, unknown>): BoardSearch
         : undefined;
   const view = text(search.view);
   const filter = text(search.filter);
+  const tab = text(search.tab);
+  const recommendationFilter = text(search.recommendationFilter);
   return {
     env: text(search.env),
     board: text(search.board),
@@ -34,7 +55,37 @@ export function boardSearchFromUrl(search: Record<string, unknown>): BoardSearch
     filter: filter !== undefined && FILTERS.includes(filter) ? (filter as BoardFilter) : undefined,
     task: text(search.task),
     open: text(search.open),
+    tab: tab !== undefined && TABS.includes(tab) ? (tab as BoardTaskTab) : undefined,
+    picker: search.picker === true ? true : undefined,
+    recommendationFilter:
+      recommendationFilter === "open" ||
+      recommendationFilter === "decided" ||
+      recommendationFilter === "all"
+        ? recommendationFilter
+        : undefined,
   };
+}
+
+export function recommendationsOf(index: BoardIndex) {
+  const numberOf = (r: string) => Number(r.replace(/\D/g, "")) || 0;
+  return index.tasks
+    .flatMap((owner) =>
+      owner.decisions.flatMap((decision) =>
+        decision.r
+          ? [
+              {
+                decision,
+                r: decision.r,
+                task:
+                  (decision.raisedFrom ? index.byId.get(decision.raisedFrom.id) : undefined) ??
+                  owner,
+                owner,
+              },
+            ]
+          : [],
+      ),
+    )
+    .toSorted((a, b) => numberOf(a.r) - numberOf(b.r));
 }
 
 /** The board's tasks, with the lookups every view needs. Built once per board read. */
@@ -73,6 +124,47 @@ export function ancestorsOf(index: BoardIndex, task: BoardTask): ReadonlyArray<B
     parent = parent.parentId === null ? undefined : index.byId.get(parent.parentId);
   }
   return out;
+}
+
+export function handoffBrief(
+  { index, task }: { readonly index: BoardIndex; readonly task: BoardTask },
+  detail: BoardTaskDetail,
+): string {
+  const blockers = blockersOf(index, task);
+  const decisions = detail.decisions.filter((decision) => decision.status === "decided");
+  const latest = detail.stepNotes[0];
+  return [
+    `# ${[...ancestorsOf(index, task), task].map((node) => node.title).join(" / ")}`,
+    `Task: ${task.id} (${task.status})`,
+    task.description,
+    task.next ? `## Next action\n${task.next.id} ${task.next.text}` : "",
+    blockers.length
+      ? `## Blocked by\n${blockers.map((blocker) => `- ${blocker.title} (${blocker.id})`).join("\n")}`
+      : "",
+    decisions.length
+      ? `## Binding decisions\n${decisions.map((decision) => `- ${decision.title}: ${decision.verdict}`).join("\n")}`
+      : "",
+    detail.handoff ? `## Living handoff\n${detail.handoff}` : "",
+    detail.handoffCheckpoint ? `T3 checkpoint: ${detail.handoffCheckpoint}` : "",
+    detail.checks?.length
+      ? `## Recorded checks\n${detail.checks
+          .map((check) => `- ${check.taskTitle}: ${check.command} exited ${check.exitCode}`)
+          .join("\n")}`
+      : "",
+    latest
+      ? `## Latest step note (${latest.step})\n${latest.text.replace(/<!--[\s\S]*?-->/g, "").trim()}`
+      : "",
+    detail.repoState.length
+      ? `## Recorded repository state\n${detail.repoState
+          .map(
+            (repo) =>
+              `- ${repo.name}: ${repo.branch} at ${repo.head}, ${repo.dirty} uncommitted changes`,
+          )
+          .join("\n")}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 export const tagsOf = (task: BoardTask): ReadonlyArray<string> => [
@@ -289,22 +381,24 @@ export function collisionsOf(
 export interface BoardContinueTarget {
   readonly label: string;
   readonly projectId: ProjectId;
+  readonly override?: "once" | "takeover";
 }
 
-/**
- * The workspace copies a new thread on the task can start in: the owning copy alone when the
- * task's module is owned (the others would be blocked), else every copy this server has a
- * project for.
- */
-export function boardContinueTargets(
+export function boardPickupTargets(
+  index: BoardIndex,
   workspaces: BoardView["workspaces"],
-  task: Pick<BoardTask, "ownerRoot">,
+  task: BoardTask,
 ): ReadonlyArray<BoardContinueTarget> {
-  return workspaces.flatMap((workspace) =>
-    workspace.projectId === null || (task.ownerRoot !== null && workspace.root !== task.ownerRoot)
-      ? []
-      : [{ label: workspace.label, projectId: workspace.projectId }],
-  );
+  const owner = ownerHolderOf(index, task)?.owner;
+  return workspaces.flatMap((workspace): BoardContinueTarget[] => {
+    if (workspace.projectId === null) return [];
+    const target = { label: workspace.label, projectId: workspace.projectId };
+    if (owner == null || workspace.root === owner.root || owner.state === "soft") return [target];
+    return [
+      { ...target, override: "once" },
+      { ...target, override: "takeover" },
+    ];
+  });
 }
 
 /** Open decisions a task's views count: its own, those raised here and filed higher up, and old

@@ -81,6 +81,7 @@ describe("RPC authorization scopes", () => {
   it("lets thread readers see the board, and only operators put threads on its tasks", () => {
     for (const method of [
       WS_METHODS.boardList,
+      WS_METHODS.boardUnassigned,
       WS_METHODS.boardView,
       WS_METHODS.boardTaskDetail,
       WS_METHODS.boardSettings,

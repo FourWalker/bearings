@@ -2,7 +2,7 @@ import { type BoardChat, type BoardTask, ProjectId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  boardContinueTargets,
+  boardPickupTargets,
   boardSearchFromUrl,
   chatsForView,
   chatStatusOf,
@@ -14,6 +14,7 @@ import {
   openDecisionCount,
   ownerHolderOf,
   panelOf,
+  recommendationsOf,
   serviceColumns,
   treeRoots,
 } from "./board.logic";
@@ -183,23 +184,48 @@ describe("serviceColumns", () => {
   });
 });
 
-describe("boardContinueTargets", () => {
-  it("offers the owning copy alone, else every copy with a project here", () => {
+describe("boardPickupTargets", () => {
+  it("offers explicit override and takeover choices for an owned task in another copy", () => {
     const workspaces = [
       { label: "main", root: "d:/nfx", projectId: ProjectId.make("p:main") },
       { label: "copy", root: "d:/nfx-copy", projectId: ProjectId.make("p:copy") },
       { label: "laptop", root: "e:/nfx", projectId: null },
     ];
-    expect(boardContinueTargets(workspaces, { ownerRoot: null }).map((t) => t.label)).toEqual([
-      "main",
-      "copy",
-    ]);
-    expect(boardContinueTargets(workspaces, { ownerRoot: "d:/nfx-copy" })).toEqual([
+    const parent = task("root", { owner: { root: "d:/nfx-copy", label: "copy", state: "owned" } });
+    const child = task("child", { level: 2, parentId: parent.id });
+    expect(boardPickupTargets(indexBoard([parent, child]), workspaces, child)).toEqual([
+      { label: "main", projectId: "p:main", override: "once" },
+      { label: "main", projectId: "p:main", override: "takeover" },
       { label: "copy", projectId: "p:copy" },
     ]);
-    // Owned by a copy this server has no project for: nowhere to start.
-    expect(boardContinueTargets(workspaces, { ownerRoot: "e:/nfx" })).toEqual([]);
+    expect(
+      boardPickupTargets(indexBoard([child]), workspaces, child).map((target) => target.label),
+    ).toEqual(["main", "copy"]);
   });
+});
+
+it("sorts recommendations numerically and links to the task where they were raised", () => {
+  const raisedFrom = { id: "module", title: "Module" };
+  const question = {
+    id: "d",
+    title: "Which strategy?",
+    status: "open",
+    level: 1,
+    raisedFrom,
+    r: null,
+  } as const;
+  const root = task("root", {
+    decisions: [
+      question,
+      { ...question, id: "d10", r: "R10", raisedFrom: null },
+      { ...question, id: "d2", r: "R2" },
+    ],
+  });
+  const module = task("module", { level: 2, parentId: root.id });
+  expect(recommendationsOf(indexBoard([root, module])).map(({ r, task }) => [r, task.id])).toEqual([
+    ["R2", module.id],
+    ["R10", root.id],
+  ]);
 });
 
 describe("boardSearchFromUrl", () => {

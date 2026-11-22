@@ -101,6 +101,13 @@ export interface TaskSessionRef {
   workspaceLabel: string;
 }
 
+export interface CheckResult {
+  id: string;
+  command: string;
+  exitCode: number;
+  at: number;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -141,6 +148,7 @@ export interface Task {
     | undefined;
   /** Each repo's branch / HEAD / push / clean state, recorded at every checkpoint. */
   repoState?: RepoState[] | undefined;
+  checks?: CheckResult[] | undefined;
   /** A fix for a bug found in finished work (linked with "fixes" to the original task). */
   bug?: boolean | undefined;
 }
@@ -212,5 +220,6 @@ export interface Session {
   suggestedRoot?: string | undefined;
   suggestedName?: string | undefined;
   boardModeOff?: boolean | undefined;
+  pickupNote?: string | undefined;
   source?: SessionSource | undefined;
 }

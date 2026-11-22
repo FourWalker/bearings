@@ -167,6 +167,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.issueTrackersConnect]: "issues",
   [WS_METHODS.issueTrackersBindProject]: "issues",
   [WS_METHODS.boardList]: "issues",
+  [WS_METHODS.boardUnassigned]: "issues",
   [WS_METHODS.boardView]: "issues",
   [WS_METHODS.boardTaskDetail]: "issues",
   [WS_METHODS.boardEditTask]: "issues",

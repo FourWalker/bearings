@@ -32,6 +32,11 @@ export function createBoardEnvironmentAtoms<R, E>(
       label: "environment-data:board:list",
       tag: WS_METHODS.boardList,
     }),
+    unassigned: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:board:unassigned",
+      tag: WS_METHODS.boardUnassigned,
+      refreshIntervalMs: 10_000,
+    }),
     view: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:board:view",
       tag: WS_METHODS.boardView,

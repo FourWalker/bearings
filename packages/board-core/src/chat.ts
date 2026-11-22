@@ -14,14 +14,16 @@ import {
   findDecision,
   moveTask,
   promoteTask,
+  setSessionTask,
   setTaskLink,
   settleDecision,
   syncDelegatedSteps,
 } from "./edit.ts";
 import type { BoardGit } from "./io.ts";
-import { nextStep, objectiveLine, planProgress, tickStep } from "./plan.ts";
+import { nextStep, objectiveLine, planPhases, planProgress, tickStep } from "./plan.ts";
 import { type BoardHost, boardModeProtocol, resumeHint, toolRules } from "./protocol.ts";
 import { BoardStore, LEVEL_NAME, findBoard, levelOf } from "./store.ts";
+import { checksForTask } from "./view.ts";
 import {
   base,
   clip,
@@ -36,6 +38,7 @@ import {
 } from "./text.ts";
 import type {
   Board,
+  CheckResult,
   Decision,
   ItemKind,
   LinkType,
@@ -82,6 +85,16 @@ const str = (v: unknown, fallback = ""): string =>
 export const repoLine = (r: RepoState): string =>
   `${r.name} · ${r.branch} @ ${r.head} · ${!r.upstream ? "not pushed (no upstream)" : r.ahead ? `${r.ahead} commit(s) not pushed` : "pushed"}${r.behind ? `, ${r.behind} behind` : ""} · ${r.dirty ? `${r.dirty} uncommitted` : "clean"}`;
 
+interface PendingCheckpoint {
+  readonly boardId: string;
+  readonly taskId: string;
+  readonly step: string | null;
+  readonly living: boolean;
+}
+
+const checkpointMarker = (ref: string | undefined, runId: string | undefined): string =>
+  ref ? ` · checkpoint ${ref}` : runId ? ` · awaiting checkpoint ${encodeURIComponent(runId)}` : "";
+
 export class BoardChat {
   readonly store: BoardStore;
   readonly git: BoardGit;
@@ -95,8 +108,6 @@ export class BoardChat {
   /** A chat is written only once the person has spoken in it (or it was linked or set up). */
   reported = false;
   lastActionSetThisTurn = false;
-  /** Shown to a chat that just took over a soft-released module, until it checkpoints. */
-  pickupNote = "";
   private readonly warnedServices = new Set<string>();
   private projectRoot: string | undefined;
 
@@ -114,6 +125,13 @@ export class BoardChat {
   }
   private loadTask(id: string) {
     return this.board ? this.store.loadTask(this.board.id, id) : Promise.resolve(null);
+  }
+
+  private async lookupTask(id: string): Promise<Task | null> {
+    const safeId = safeFileName(id);
+    const exact =
+      id === safeId && safeId && safeId !== "." && safeId !== ".." ? await this.loadTask(id) : null;
+    return exact ?? this.loadTask(slug(id));
   }
   private saveTask(t: Task) {
     return this.store.saveTask(this.boardId, t);
@@ -141,6 +159,16 @@ export class BoardChat {
   }
   async save(patch: Partial<Session>): Promise<void> {
     if (!this.sess || this.ignored) return;
+    if (
+      this.reported &&
+      this.board &&
+      patch.taskId === undefined &&
+      patch.linkDeclined === undefined
+    ) {
+      const saved = await this.store.readSession(this.board.id, this.sess.sessionId);
+      if (saved)
+        this.sess = { ...this.sess, taskId: saved.taskId, linkDeclined: saved.linkDeclined };
+    }
     this.sess = { ...this.sess, ...patch, updatedAt: this.now(), heartbeatAt: this.now() };
     if (this.reported) await this.store.writeSession(this.board?.id ?? null, this.sess);
   }
@@ -287,6 +315,7 @@ export class BoardChat {
         lastPrompt: prev.lastPrompt ?? "",
         lastAnswer: prev.lastAnswer ?? "",
         boardModeOff: prev.boardModeOff,
+        pickupNote: prev.pickupNote,
       };
     await this.save({});
     await this.rebuildContext();
@@ -336,6 +365,15 @@ export class BoardChat {
 
   async end(resumeId?: string): Promise<void> {
     await this.save({ status: "ended", resumeId }).catch(() => {});
+  }
+
+  async recordCheck(check: CheckResult): Promise<void> {
+    const taskId = this.sess?.taskId;
+    if (!taskId || !this.board) return;
+    const task = await this.loadTask(taskId);
+    if (!task || task.checks?.some((previous) => previous.id === check.id)) return;
+    task.checks = [check, ...(task.checks ?? [])].slice(0, 20);
+    await this.saveTask(task);
   }
 
   /** Heartbeat: hosts that can't see a chat's liveness call this every ~30 seconds. */
@@ -707,6 +745,7 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
       .trim();
     const ho = living ? null : await this.store.latestHandoff(this.boardId, t.id);
     const progress = planProgress(plan);
+    const checks = (await checksForTask(this.store, this.boardId, t, planPhases(plan))).slice(0, 5);
     const lines = [
       `### Task: ${t.title} (id ${t.id}, Level ${levelOf(t)}, ${t.status})`,
       t.description && `Purpose: ${clip(t.description, 350)}`,
@@ -720,6 +759,10 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
       blockers.length > 0 && `Open blockers:\n${blockers.slice(0, 5).join("\n")}`,
       decided.length > 0 && `Binding decisions:\n${decided.join("\n")}`,
       required.length > 0 && `Must-dos:\n${required.join("\n")}`,
+      checks.length > 0 &&
+        `Recorded check results:\n${checks
+          .map((check) => `- ${check.taskTitle}: ${check.command} exited ${check.exitCode}`)
+          .join("\n")}`,
       t.lastAction &&
         `Last action (${t.lastAction.workspaceLabel}): ${clip(t.lastAction.text, 260)}`,
       living
@@ -733,7 +776,8 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
   async rebuildContext(): Promise<void> {
     await this.buildContext();
     const b = this.board;
-    if (this.context && this.pickupNote) this.context += `\n\n### Pickup point\n${this.pickupNote}`;
+    if (this.context && this.sess?.pickupNote)
+      this.context += `\n\n### Pickup point\n${this.sess.pickupNote}`;
     if (this.context && b && this.boardModeOn) {
       const services = b.services?.length
         ? `\nServices on this board (folder patterns): ${b.services.map((x) => `${x.id}=${x.match.join("|")}`).join(", ")}`
@@ -798,12 +842,12 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
     if (!this.board) return reply(await this.unassignedHelp());
     const chat = this.host === "t3" ? "thread" : "chat";
     if (a.decline) {
-      await this.save({ linkDeclined: true, taskId: null });
-      await this.rebuildContext();
+      this.reported = true;
+      await this.unlink();
       return reply(`Noted: this ${chat} stays unlinked.`);
     }
     let t: Task | null = null;
-    if (a.taskId) t = await this.loadTask(slug(str(a.taskId)));
+    if (a.taskId) t = await this.lookupTask(str(a.taskId));
     if (!t && a.taskId && !a.newTaskTitle) {
       const all = await this.listTasks();
       t = all.find((x) => x.title.toLowerCase() === str(a.taskId).toLowerCase()) ?? null;
@@ -832,6 +876,7 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
     // Ownership: a module/feature worked on by another workspace copy is blocked unless the
     // person overrides once or takes over; a soft-released one is taken over freely.
     let ownerNote = "";
+    let pickupNote = s.taskId === t.id ? s.pickupNote : undefined;
     const holder = await this.ownerHolder(t);
     if (holder?.owner && !sameRoot(holder.owner.root, s.workspace)) {
       const o = holder.owner;
@@ -843,7 +888,7 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
       if (o.state === "soft" || a.override === "takeover") {
         const from = o.label;
         if (o.state === "soft" && o.pickup?.length)
-          this.pickupNote = `Picked up "${holder.title}" from workspace ${from}, soft-released at:\n${o.pickup.map((r) => `- ${repoLine(r)}`).join("\n")}\nBefore continuing: in this workspace, for each repo fetch and check out that branch, confirm HEAD matches (or is a fast-forward of) that commit, and stop if there are uncommitted changes or the branch has diverged. Then continue with the next step.`;
+          pickupNote = `Picked up "${holder.title}" from workspace ${from}, soft-released at:\n${o.pickup.map((r) => `- ${repoLine(r)}`).join("\n")}\nBefore continuing: in this workspace, for each repo fetch and check out that branch, confirm HEAD matches (or is a fast-forward of) that commit, and stop if there are uncommitted changes or the branch has diverged. Then continue with the next step.`;
         this.ownerHistory(holder, o.state === "soft" ? "takeover-after-soft-release" : "takeover", {
           from,
           to: s.workspaceLabel,
@@ -888,15 +933,13 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
       }
     }
     this.reported = true;
-    if (!t.sessions.some((x) => x.sessionId === s.sessionId))
-      t.sessions.push({
-        sessionId: s.sessionId,
-        linkedAt: this.now(),
-        workspaceLabel: s.workspaceLabel,
-      });
     if (a.description && !t.description) t.description = str(a.description);
-    await this.saveTask(t);
-    await this.save({ taskId: t.id, linkDeclined: false });
+    this.sess = await setSessionTask(
+      this.store,
+      this.boardId,
+      { ...s, pickupNote, heartbeatAt: this.now() },
+      t,
+    );
     await this.rebuildContext();
     return reply(
       `Linked this ${chat} to the task.${ownerNote ? ` ${ownerNote}` : ""}\n\n${await this.describeTask(t, true)}\n\n${toolRules(this.host)}`,
@@ -906,7 +949,16 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
 
   /** Unlinks the chat from its task (the person's `/task off`, or the UI's unlink). */
   async unlink(): Promise<BoardReply> {
-    await this.save({ taskId: null, linkDeclined: true });
+    if (this.sess && this.board && !this.ignored) {
+      this.sess = await setSessionTask(
+        this.store,
+        this.board.id,
+        { ...this.sess, heartbeatAt: this.now() },
+        null,
+      );
+    } else {
+      await this.save({ taskId: null, linkDeclined: true });
+    }
     await this.rebuildContext();
     return reply(`This ${this.host === "t3" ? "thread" : "chat"} is no longer linked to a task.`);
   }
@@ -914,9 +966,9 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
   private async requireTask(a: Record<string, unknown>): Promise<Task | string> {
     if (!this.board)
       return "This chat is not on a board yet: ask the person, then call board_setup.";
-    const id = a.taskId ? slug(str(a.taskId)) : this.sess?.taskId;
+    const id = a.taskId ? str(a.taskId) : this.sess?.taskId;
     if (!id) return "This chat is not linked to a task: call board_link first.";
-    const t = await this.loadTask(id);
+    const t = await this.lookupTask(id);
     if (!t) return `No task "${id}".`;
     // Writes respect ownership too: another workspace's module needs an override for this chat.
     const holder = await this.ownerHolder(t);
@@ -1033,18 +1085,23 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
    * and the tick, so an interrupted chat never leaves the checklist and the handoff pointing at
    * different next actions. Safe to retry: every write replaces, and ticking is idempotent.
    */
-  async writeHandoff(a: Record<string, unknown>, t3Checkpoint?: string): Promise<BoardReply> {
+  async writeHandoff(
+    a: Record<string, unknown>,
+    t3Checkpoint?: string,
+    t3RunId?: string,
+  ): Promise<BoardReply> {
     const t = await this.requireTask(a);
     if (typeof t === "string") return reply(t);
     const step = safeFileName(str(a.step)) || `note-${this.now()}`;
     const s = this.sess;
-    const header = `<!-- by ${this.byLine()}${s?.branch ? ` (${s.branch})` : ""}, ${stamp(this.now())} -->\n`;
+    const living = str(a.handoff).trim();
+    if (t3RunId) await this.notePendingCheckpoint(t3RunId, t.id, step, !!living);
+    const header = `<!-- by ${this.byLine()}${s?.branch ? ` (${s.branch})` : ""}, ${stamp(this.now())}${checkpointMarker(t3Checkpoint, t3RunId)} -->\n`;
     await this.store.io.write(
       this.store.stepHandoffPath(this.boardId, t.id, step),
       header + str(a.markdown),
     );
-    const living = str(a.handoff).trim();
-    const repos = living ? await this.writeLiving(t, living, t3Checkpoint) : [];
+    const repos = living ? await this.writeLiving(t, living, t3Checkpoint, t3RunId) : [];
     let plan = await this.readPlan(t.id);
     if (plan && a.markStepDone !== false) {
       plan = tickStep(plan, step);
@@ -1124,12 +1181,17 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
    * Rewrites the living handoff. `t3Checkpoint` is the T3 checkpoint ref of the turn it was
    * written in, when the host has one; it goes in the header so the handoff points at exact code.
    */
-  async checkpoint(a: Record<string, unknown>, t3Checkpoint?: string): Promise<BoardReply> {
+  async checkpoint(
+    a: Record<string, unknown>,
+    t3Checkpoint?: string,
+    t3RunId?: string,
+  ): Promise<BoardReply> {
     const t = await this.requireTask(a);
     if (typeof t === "string") return reply(t);
     const md = str(a.markdown).trim();
     if (!md) return reply("markdown is empty: nothing saved.");
-    const repos = await this.writeLiving(t, md, t3Checkpoint);
+    if (t3RunId) await this.notePendingCheckpoint(t3RunId, t.id, null, true);
+    const repos = await this.writeLiving(t, md, t3Checkpoint, t3RunId);
     if (a.lastAction) {
       t.lastAction = this.lastAction(str(a.lastAction));
       this.lastActionSetThisTurn = true;
@@ -1142,13 +1204,59 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
   }
 
   /** Rewrites the living handoff and records repo state on `t` (the caller saves the task). */
-  private async writeLiving(t: Task, md: string, t3Checkpoint?: string): Promise<RepoState[]> {
-    const header = `<!-- living handoff, rewritten in place · last by ${this.byLine()}, ${stamp(this.now())}${t3Checkpoint ? ` · checkpoint ${t3Checkpoint}` : ""} -->\n`;
+  private async writeLiving(
+    t: Task,
+    md: string,
+    t3Checkpoint?: string,
+    t3RunId?: string,
+  ): Promise<RepoState[]> {
+    const header = `<!-- living handoff, rewritten in place · last by ${this.byLine()}, ${stamp(this.now())}${checkpointMarker(t3Checkpoint, t3RunId)} -->\n`;
     await this.store.io.write(this.livingPath(t.id), header + md + "\n");
     const repos = await this.reposFor(t).catch(() => [] as RepoState[]);
     if (repos.length) t.repoState = repos;
-    this.pickupNote = "";
+    if (this.sess?.pickupNote) await this.save({ pickupNote: undefined });
     return repos;
+  }
+
+  private async notePendingCheckpoint(
+    runId: string,
+    taskId: string,
+    step: string | null,
+    living: boolean,
+  ) {
+    const path = this.pendingCheckpointPath(runId);
+    const notes = await this.store.readJson<PendingCheckpoint[]>(path, []);
+    notes.push({ boardId: this.boardId, taskId, step, living });
+    await this.store.writeJson(path, notes);
+  }
+
+  private pendingCheckpointPath(runId: string): string {
+    return `${this.store.home}/pending-handoff-checkpoints/${encodeURIComponent(runId)}.json`;
+  }
+
+  async attachCheckpoint(runId: string, checkpoint: string | null): Promise<void> {
+    const path = this.pendingCheckpointPath(runId);
+    const notes = await this.store.readJson<PendingCheckpoint[] | null>(path, null);
+    if (notes === null) return;
+    const files = new Set(
+      notes.flatMap(({ boardId, taskId, step, living }) => [
+        ...(step ? [this.store.stepHandoffPath(boardId, taskId, safeFileName(step))] : []),
+        ...(living ? [this.store.livingPath(boardId, taskId)] : []),
+      ]),
+    );
+    const marker = checkpointMarker(undefined, runId);
+    for (const file of files) {
+      const text = await this.store.readText(file);
+      const end = text.indexOf(" -->\n");
+      if (text.startsWith("<!-- ") && end >= 0 && text.slice(0, end).endsWith(marker))
+        await this.store.io.write(
+          file,
+          text.slice(0, end - marker.length) +
+            checkpointMarker(checkpoint ?? undefined, undefined) +
+            text.slice(end),
+        );
+    }
+    await this.store.io.remove?.(path);
   }
 
   async fileDecision(a: Record<string, unknown>): Promise<BoardReply> {
@@ -1427,7 +1535,7 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
   runTool(
     name: string,
     args: Record<string, unknown>,
-    extra?: { readonly t3Checkpoint?: string },
+    extra?: { readonly t3Checkpoint?: string | undefined; readonly t3RunId?: string | undefined },
   ): Promise<BoardReply> | null {
     switch (name) {
       case "board_setup":
@@ -1439,7 +1547,7 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
       case "board_plan":
         return this.savePlan(args);
       case "board_handoff":
-        return this.writeHandoff(args, extra?.t3Checkpoint);
+        return this.writeHandoff(args, extra?.t3Checkpoint, extra?.t3RunId);
       case "board_create_task":
         return this.createTask(args);
       case "board_decision":
@@ -1459,7 +1567,7 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
       case "board_promote":
         return this.promoteTask(args);
       case "board_checkpoint":
-        return this.checkpoint(args, extra?.t3Checkpoint);
+        return this.checkpoint(args, extra?.t3Checkpoint, extra?.t3RunId);
       case "board_read":
         return this.readTask(args);
       default:

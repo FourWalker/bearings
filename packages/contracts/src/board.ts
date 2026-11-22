@@ -49,6 +49,15 @@ export const BoardDecision = Schema.Struct({
   raisedFrom: Schema.NullOr(Schema.Struct({ id: Schema.String, title: Schema.String })),
   /** The recommendation's R#, when the decision is one. */
   r: Schema.NullOr(Schema.String),
+  recommendation: Schema.optional(
+    Schema.Struct({
+      description: Schema.String,
+      area: Schema.String,
+      verdict: Schema.String,
+      register: Schema.NullOr(Schema.String),
+      implemented: Schema.Boolean,
+    }),
+  ),
 });
 export type BoardDecision = typeof BoardDecision.Type;
 
@@ -105,6 +114,15 @@ export const BoardView = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   boardMode: Schema.Boolean,
+  registers: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        id: Schema.String,
+        topic: Schema.String,
+        url: Schema.String,
+      }),
+    ),
+  ),
   services: Schema.Array(
     Schema.Struct({ id: Schema.String, name: Schema.String, match: Schema.Array(Schema.String) }),
   ),
@@ -151,9 +169,26 @@ export const BoardTaskDetail = Schema.Struct({
   /** plan.md as written, for editing. */
   planMarkdown: Schema.String,
   handoff: Schema.String,
+  handoffCheckpoint: Schema.optional(Schema.NullOr(Schema.String)),
+  checks: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        id: Schema.String,
+        command: Schema.String,
+        exitCode: Schema.Int,
+        at: Schema.Number,
+        taskTitle: Schema.String,
+      }),
+    ),
+  ),
   /** Newest first. */
   stepNotes: Schema.Array(
-    Schema.Struct({ step: Schema.String, at: Schema.Number, text: Schema.String }),
+    Schema.Struct({
+      step: Schema.String,
+      at: Schema.Number,
+      text: Schema.String,
+      checkpointRef: Schema.optional(Schema.NullOr(Schema.String)),
+    }),
   ),
   /** This task's documents (`from` null), then its parents'. */
   docs: Schema.Array(
@@ -281,6 +316,7 @@ export const BoardTaskEdit = Schema.Union([
     title: Schema.String,
     fromStep: Schema.optional(Schema.String),
   }),
+  Schema.Struct({ op: Schema.Literal("reportBug"), title: Schema.String }),
   Schema.Struct({
     op: Schema.Literal("addDecision"),
     title: Schema.String,
@@ -288,7 +324,13 @@ export const BoardTaskEdit = Schema.Union([
     options: Schema.String,
     refs: Schema.Array(Schema.String),
     level: Schema.Literals([1, 2, 3]),
-    recommendation: Schema.optional(Schema.Struct({ area: Schema.String })),
+    recommendation: Schema.optional(
+      Schema.Struct({
+        area: Schema.String,
+        lldCheck: Schema.optional(Schema.String),
+        register: Schema.optional(Schema.NullOr(Schema.String)),
+      }),
+    ),
   }),
   Schema.Struct({
     op: Schema.Literal("setDecision"),
@@ -424,6 +466,7 @@ export const BoardLinkThreadInput = Schema.Struct({
   taskId: Schema.String,
   threadId: ThreadId,
   projectId: ProjectId,
+  override: Schema.optional(Schema.Literals(["once", "takeover"])),
 });
 export type BoardLinkThreadInput = typeof BoardLinkThreadInput.Type;
 

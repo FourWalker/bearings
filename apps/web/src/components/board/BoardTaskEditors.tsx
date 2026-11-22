@@ -42,7 +42,7 @@ export function BoardEditProvider(props: {
   readonly environmentId: EnvironmentId;
   readonly boardId: string;
   readonly taskId: string;
-  readonly onSaved: (createdId: string | null) => void;
+  readonly onSaved: (createdId: string | null, change: BoardTaskEdit) => void;
   readonly children: ReactNode;
 }) {
   const gt = useGT();
@@ -61,7 +61,7 @@ export function BoardEditProvider(props: {
       });
       return false;
     }
-    props.onSaved(result.value.createdId);
+    props.onSaved(result.value.createdId, change);
     return true;
   };
   return (
@@ -441,6 +441,7 @@ export function LinkAdder(props: {
 /** Files a new decision at the level it affects. */
 export function DecisionAdder(props: {
   readonly levels: ReadonlyArray<readonly [1 | 2 | 3, string]>;
+  readonly registers: ReadonlyArray<{ readonly id: string; readonly topic: string }>;
 }) {
   const gt = useGT();
   const { canEdit, edit } = useBoardEdit();
@@ -450,6 +451,8 @@ export function DecisionAdder(props: {
   const [refs, setRefs] = useState("");
   const [recommendation, setRecommendation] = useState(false);
   const [area, setArea] = useState("");
+  const [lldCheck, setLldCheck] = useState("");
+  const [register, setRegister] = useState("");
   const [first] = props.levels;
   const [level, setLevel] = useState<string>(String(first?.[0] ?? 3));
   if (!canEdit) return null;
@@ -469,7 +472,9 @@ export function DecisionAdder(props: {
             .map((r) => r.trim())
             .filter(Boolean),
           level: Number(level) as 1 | 2 | 3,
-          ...(recommendation ? { recommendation: { area } } : {}),
+          ...(recommendation
+            ? { recommendation: { area, lldCheck, register: register || null } }
+            : {}),
         }).then((ok) => {
           if (!ok) return;
           setTitle("");
@@ -477,6 +482,8 @@ export function DecisionAdder(props: {
           setOptions("");
           setRefs("");
           setArea("");
+          setLldCheck("");
+          setRegister("");
           setRecommendation(false);
         });
       }}
@@ -517,13 +524,33 @@ export function DecisionAdder(props: {
         <T>Recommendation for the register (gets an R#)</T>
       </label>
       {recommendation ? (
-        <Input
-          size="sm"
-          placeholder={gt("Area")}
-          aria-label={gt("Area")}
-          value={area}
-          onChange={(event) => setArea(event.target.value)}
-        />
+        <>
+          <Input
+            size="sm"
+            placeholder={gt("Area")}
+            aria-label={gt("Area")}
+            value={area}
+            onChange={(event) => setArea(event.target.value)}
+          />
+          <Input
+            size="sm"
+            placeholder={gt("LLD check (optional)")}
+            aria-label={gt("LLD check (optional)")}
+            value={lldCheck}
+            onChange={(event) => setLldCheck(event.target.value)}
+          />
+          {props.registers.length > 0 ? (
+            <ChoiceSelect
+              value={register}
+              label={gt("External register")}
+              choices={[
+                ["", gt("Board register")],
+                ...props.registers.map(({ id, topic }) => [id, topic] as const),
+              ]}
+              onChange={setRegister}
+            />
+          ) : null}
+        </>
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-muted-foreground text-xs">

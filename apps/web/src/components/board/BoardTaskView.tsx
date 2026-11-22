@@ -26,12 +26,14 @@ import {
   type BoardContinueTarget,
   type BoardIndex,
   type BoardLinkGroup,
+  type BoardTaskTab,
   LINK_GROUP_ORDER,
   ancestorsOf,
   chatsForView,
   dotOf,
   externalLinksOf,
   flagsOf,
+  handoffBrief,
   levelKindOf,
   openDecisionCount,
   openFixesOf,
@@ -64,7 +66,7 @@ import {
  * Overview; modules and tasks open beside the board. Same tabs and side column as the board app;
  * editing them comes with the board's write actions.
  */
-type Tab = "overview" | "threads" | "plan" | "handoff" | "subtasks" | "decisions";
+type Tab = BoardTaskTab;
 
 export interface BoardTaskViewProps {
   readonly index: BoardIndex;
@@ -79,6 +81,9 @@ export interface BoardTaskViewProps {
   readonly onClose: () => void;
   /** Re-reads the board after an edit. */
   readonly onChanged: () => void;
+  readonly tab?: Tab | undefined;
+  readonly onTabChange?: ((tab: Tab) => void) | undefined;
+  readonly onOpenCreated: (taskId: string) => void;
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -87,7 +92,11 @@ export function BoardTaskView(props: BoardTaskViewProps) {
   const gt = useGT();
   const { index, task } = props;
   const master = task.level === 1;
-  const [tab, setTab] = useState<Tab>(master ? "overview" : "threads");
+  const [localTab, setLocalTab] = useState<Tab>(master ? "overview" : "threads");
+  const setTab = (next: Tab) => {
+    setLocalTab(next);
+    props.onTabChange?.(next);
+  };
   const detail = useEnvironmentQuery(
     boardEnvironment.taskDetail({
       environmentId: props.environmentId,
@@ -115,6 +124,12 @@ export function BoardTaskView(props: BoardTaskViewProps) {
         ]
       : []),
   ];
+  const requestedTab = props.tab ?? localTab;
+  const tab = tabs.some(([value]) => value === requestedTab)
+    ? requestedTab
+    : master
+      ? "overview"
+      : "threads";
   const data = detail.data;
   const body = (which: Tab) => {
     if (which === "overview") return <OverviewTab {...props} onTab={setTab} />;
@@ -135,13 +150,14 @@ export function BoardTaskView(props: BoardTaskViewProps) {
       environmentId={props.environmentId}
       boardId={props.board.id}
       taskId={task.id}
-      onSaved={() => {
+      onSaved={(createdId, change) => {
         detail.refresh();
         props.onChanged();
+        if (createdId && change.op === "reportBug") props.onOpenCreated(createdId);
       }}
     >
       <div className="flex h-full min-h-0 flex-col">
-        <TaskHeader {...props} />
+        <TaskHeader {...props} detail={data} tab={tab} />
         <Tabs.Root
           value={tab}
           onValueChange={(next) => setTab(next as Tab)}
@@ -174,12 +190,23 @@ export function BoardTaskView(props: BoardTaskViewProps) {
   );
 }
 
-function TaskHeader(props: BoardTaskViewProps) {
+function TaskHeader(props: BoardTaskViewProps & { readonly detail: BoardTaskDetail | null }) {
   const gt = useGT();
   const { index, task } = props;
   const { canEdit, edit } = useBoardEdit();
   const levelLabel = useLevelLabel(index);
   const parents = ancestorsOf(index, task);
+  const clipboard = useCopyToClipboard();
+  const copyLink = () => {
+    const url = new URL("/board", window.location.origin);
+    url.search = new URLSearchParams({
+      env: props.environmentId,
+      board: props.board.id,
+      [task.level === 1 ? "task" : "open"]: task.id,
+      ...(props.tab ? { tab: props.tab } : {}),
+    }).toString();
+    clipboard.copyToClipboard(url.href, undefined);
+  };
   return (
     <header className="grid shrink-0 gap-1.5 border-b px-4 pt-3 pb-3">
       <div className="flex flex-wrap items-center gap-1 text-muted-foreground text-xs">
@@ -220,6 +247,26 @@ function TaskHeader(props: BoardTaskViewProps) {
           </Button>
         ) : null}
         <MoveMenu canBeTopLevel={task.parentId !== null} targets={moveTargets(index, task)} />
+        <Menu>
+          <MenuTrigger render={<Button variant="outline" size="xs" />}>
+            {clipboard.isCopied ? gt("Copied") : gt("Share")}
+          </MenuTrigger>
+          <MenuPopup align="end">
+            <MenuItem onClick={copyLink}>
+              <T>Copy task link</T>
+            </MenuItem>
+            {props.detail !== null ? (
+              <MenuItem
+                onClick={() => {
+                  if (props.detail)
+                    clipboard.copyToClipboard(handoffBrief(props, props.detail), undefined);
+                }}
+              >
+                <T>Copy handoff</T>
+              </MenuItem>
+            ) : null}
+          </MenuPopup>
+        </Menu>
         {canEdit ? (
           <ChoiceSelect
             value={task.status}
@@ -326,6 +373,7 @@ function ContinueButton(props: {
   readonly targets: ReadonlyArray<BoardContinueTarget>;
   readonly onContinue: (target: BoardContinueTarget) => void;
 }) {
+  const gt = useGT();
   const [only, ...rest] = props.targets;
   if (only === undefined) return null;
   const label = (
@@ -334,7 +382,7 @@ function ContinueButton(props: {
       <T>Continue in new thread</T>
     </>
   );
-  if (rest.length === 0)
+  if (rest.length === 0 && !only.override)
     return (
       <Button size="sm" onClick={() => props.onContinue(only)}>
         {label}
@@ -345,8 +393,15 @@ function ContinueButton(props: {
       <MenuTrigger render={<Button size="sm" />}>{label}</MenuTrigger>
       <MenuPopup align="start">
         {props.targets.map((target) => (
-          <MenuItem key={target.projectId} onClick={() => props.onContinue(target)}>
-            {target.label}
+          <MenuItem
+            key={`${target.projectId}:${target.override ?? ""}`}
+            onClick={() => props.onContinue(target)}
+          >
+            {target.override === "once"
+              ? gt("Continue once in {workspace}", { workspace: target.label })
+              : target.override === "takeover"
+                ? gt("Take over in {workspace}", { workspace: target.label })
+                : target.label}
           </MenuItem>
         ))}
       </MenuPopup>
@@ -391,86 +446,116 @@ function OverviewTab(props: BoardTaskViewProps & { readonly onTab: (tab: Tab) =>
       ))
     );
   };
+  const working = chats.filter(({ chat }) => chat.live === "working").length;
   return (
-    <div className="grid gap-4 @4xl/task:grid-cols-[3fr_1fr_1fr]">
-      <section className="grid content-start gap-3">
-        <h3 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-          {gt("Modules and tasks ({count})", { count: modules.length })}
-        </h3>
-        {modules.length === 0 ? (
-          <Card>
-            <Muted>
-              <T>No modules yet. Ask the planning thread to break the master plan down.</T>
-            </Muted>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(16rem,1fr))] items-start gap-3">
-            {modules.map((module) => (
-              <BoardModuleNote
-                key={module.id}
-                index={index}
-                task={module}
-                actions={props.actions}
-              />
-            ))}
-          </div>
-        )}
-        <AddRow
-          placeholder={gt("New module…")}
-          button={gt("Add module")}
-          onAdd={(title) => edit({ op: "createChild", title })}
-        />
-        <Card title={gt("Linked tasks ({count})", { count: externalLinksOf(index, task).length })}>
-          <LinkedTasks {...props} />
-        </Card>
-      </section>
-      <section className="grid content-start gap-2">
-        <h3 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-          {gt("Threads ({count})", { count: chats.length })}
-        </h3>
-        <ContinueButton targets={props.continueTargets} onContinue={props.onContinue} />
-        {chats.length === 0 ? (
-          <Muted>
-            <T>No threads on this task yet.</T>
-          </Muted>
-        ) : (
-          chats.map(({ chat, task: owner }) => (
-            <MiniChat
-              key={chat.sessionId}
-              chat={chat}
-              owner={owner}
-              here={task}
-              onOpenThread={props.onOpenThread}
-              onOpenTask={props.actions.onOpenTask}
-            />
-          ))
-        )}
-      </section>
-      <section className="grid content-start gap-2">
-        <h3 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-          <T>Mandatory</T>
-        </h3>
-        {itemList("mandatory")}
-        <h3 className="mt-2 font-medium text-muted-foreground text-xs uppercase tracking-wide">
-          <T>To do</T>
-        </h3>
-        {itemList("todo")}
-        <ItemAdder taskId={task.id} />
-        {openDecisions > 0 ? (
+    <div className="grid gap-4">
+      <div className="grid gap-3 @2xl/task:grid-cols-3">
+        <Card title={gt("Planned work")}>
           <button
             type="button"
-            className="mt-2 rounded-lg border border-warning/50 bg-warning/10 p-3 text-start"
-            onClick={() => props.onTab("decisions")}
+            className="text-start text-sm hover:underline"
+            onClick={() => props.onTab("plan")}
           >
-            <span className="font-medium text-sm">
-              {gt("{count} open decisions", { count: openDecisions })}
-            </span>
-            <span className="block text-muted-foreground text-xs">
-              <T>Decisions tab</T>
-            </span>
+            {task.next ? `${task.next.id} ${task.next.text}` : gt("Open plan")}
           </button>
-        ) : null}
-      </section>
+        </Card>
+        <Card title={gt("Current activity")}>
+          <p className="text-sm">{gt("{count} working threads", { count: working })}</p>
+          {task.lastAction ? <Muted>{task.lastAction.text}</Muted> : null}
+        </Card>
+        <Card title={gt("Recorded results")}>
+          <button
+            type="button"
+            className="text-start text-sm hover:underline"
+            onClick={() => props.onTab("handoff")}
+          >
+            {gt("{done} of {total} plan steps complete", task.steps)}
+          </button>
+        </Card>
+      </div>
+      <div className="grid gap-4 @4xl/task:grid-cols-[3fr_1fr_1fr]">
+        <section className="grid content-start gap-3">
+          <h3 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+            {gt("Modules and tasks ({count})", { count: modules.length })}
+          </h3>
+          {modules.length === 0 ? (
+            <Card>
+              <Muted>
+                <T>No modules yet. Ask the planning thread to break the master plan down.</T>
+              </Muted>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(16rem,1fr))] items-start gap-3">
+              {modules.map((module) => (
+                <BoardModuleNote
+                  key={module.id}
+                  index={index}
+                  task={module}
+                  actions={props.actions}
+                />
+              ))}
+            </div>
+          )}
+          <AddRow
+            placeholder={gt("New module…")}
+            button={gt("Add module")}
+            onAdd={(title) => edit({ op: "createChild", title })}
+          />
+          <Card
+            title={gt("Linked tasks ({count})", { count: externalLinksOf(index, task).length })}
+          >
+            <LinkedTasks {...props} />
+          </Card>
+          <BugsCard {...props} />
+        </section>
+        <section className="grid content-start gap-2">
+          <h3 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+            {gt("Threads ({count})", { count: chats.length })}
+          </h3>
+          <ContinueButton targets={props.continueTargets} onContinue={props.onContinue} />
+          {chats.length === 0 ? (
+            <Muted>
+              <T>No threads on this task yet.</T>
+            </Muted>
+          ) : (
+            chats.map(({ chat, task: owner }) => (
+              <MiniChat
+                key={chat.sessionId}
+                chat={chat}
+                owner={owner}
+                here={task}
+                onOpenThread={props.onOpenThread}
+                onOpenTask={props.actions.onOpenTask}
+              />
+            ))
+          )}
+        </section>
+        <section className="grid content-start gap-2">
+          <h3 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+            <T>Mandatory</T>
+          </h3>
+          {itemList("mandatory")}
+          <h3 className="mt-2 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+            <T>To do</T>
+          </h3>
+          {itemList("todo")}
+          <ItemAdder taskId={task.id} />
+          {openDecisions > 0 ? (
+            <button
+              type="button"
+              className="mt-2 rounded-lg border border-warning/50 bg-warning/10 p-3 text-start"
+              onClick={() => props.onTab("decisions")}
+            >
+              <span className="font-medium text-sm">
+                {gt("{count} open decisions", { count: openDecisions })}
+              </span>
+              <span className="block text-muted-foreground text-xs">
+                <T>Decisions tab</T>
+              </span>
+            </button>
+          ) : null}
+        </section>
+      </div>
     </div>
   );
 }
@@ -881,6 +966,21 @@ function HandoffTab(props: BoardTaskViewProps & { readonly detail: BoardTaskDeta
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   return (
     <>
+      {detail.checks && detail.checks.length > 0 ? (
+        <Card title={gt("Recorded results")}>
+          {detail.checks.map((check) => (
+            <div key={check.id} className="flex flex-wrap items-center gap-2 text-sm">
+              <code>{check.command}</code>
+              <Badge variant={check.exitCode === 0 ? "success" : "warning"}>
+                {gt("Exit code {code}", { code: check.exitCode })}
+              </Badge>
+              <span className="text-muted-foreground text-xs">
+                {check.taskTitle} · {formatRelativeTimeLabel(iso(check.at))}
+              </span>
+            </div>
+          ))}
+        </Card>
+      ) : null}
       <Muted>
         <T>
           The living handoff is what a new thread resumes from; step notes record each finished
@@ -888,6 +988,11 @@ function HandoffTab(props: BoardTaskViewProps & { readonly detail: BoardTaskDeta
         </T>
       </Muted>
       <Card title={gt("Living handoff")}>
+        {detail.handoffCheckpoint ? (
+          <p className="wrap-anywhere font-mono text-muted-foreground text-xs">
+            {gt("T3 checkpoint {ref}", { ref: detail.handoffCheckpoint })}
+          </p>
+        ) : null}
         <MarkdownEditor
           value={detail.handoff}
           label={gt("Living handoff")}
@@ -956,6 +1061,11 @@ function HandoffTab(props: BoardTaskViewProps & { readonly detail: BoardTaskDeta
               </div>
               {open.has(note.step) ? (
                 <div className="rounded-md bg-muted/40 p-2">
+                  {note.checkpointRef ? (
+                    <p className="wrap-anywhere font-mono text-muted-foreground text-xs">
+                      {gt("T3 checkpoint {ref}", { ref: note.checkpointRef })}
+                    </p>
+                  ) : null}
                   <Markdown text={note.text} environmentId={props.environmentId} />
                 </div>
               ) : null}
@@ -1017,6 +1127,7 @@ function DecisionsTab(props: BoardTaskViewProps & { readonly detail: BoardTaskDe
         </>
       ) : null}
       <DecisionAdder
+        registers={props.board.registers ?? []}
         levels={[task, ...ancestorsOf(props.index, task).toReversed()].map(
           (owner) =>
             [
@@ -1269,7 +1380,6 @@ function SideColumn(
   const gt = useGT();
   const { index, task } = props;
   const holder = ownerHolderOf(index, task);
-  const fixes = openFixesOf(index, task);
   const openDecisions = openDecisionCount(index, task);
   const last = task.lastAction;
   const flags = flagsOf(index, task);
@@ -1335,26 +1445,7 @@ function SideColumn(
           ))}
         </Card>
       ) : null}
-      {task.status === "done" || fixes.length > 0 ? (
-        <Card title={gt("Bugs")}>
-          {fixes.length === 0 ? (
-            <Muted>
-              <T>No open fixes.</T>
-            </Muted>
-          ) : (
-            fixes.map((fix) => (
-              <button
-                key={fix.id}
-                type="button"
-                className="text-start text-sm hover:underline"
-                onClick={() => props.actions.onOpenTask(fix)}
-              >
-                🐞 {fix.title}
-              </button>
-            ))
-          )}
-        </Card>
-      ) : null}
+      <BugsCard {...props} />
       <ServicesCard {...props} />
       <Card title={gt("Linked tasks")}>
         <LinkedTasks {...props} />
@@ -1398,6 +1489,40 @@ function SideColumn(
         <ItemAdder taskId={task.id} />
       </Card>
     </aside>
+  );
+}
+
+function BugsCard(props: BoardTaskViewProps) {
+  const gt = useGT();
+  const { canEdit, edit } = useBoardEdit();
+  const fixes = openFixesOf(props.index, props.task);
+  if (props.task.status !== "done" && fixes.length === 0) return null;
+  return (
+    <Card title={gt("Bugs")}>
+      {fixes.length === 0 ? (
+        <Muted>
+          <T>No open fixes.</T>
+        </Muted>
+      ) : (
+        fixes.map((fix) => (
+          <button
+            key={fix.id}
+            type="button"
+            className="text-start text-sm hover:underline"
+            onClick={() => props.actions.onOpenTask(fix)}
+          >
+            {fix.title}
+          </button>
+        ))
+      )}
+      {canEdit && props.task.status === "done" ? (
+        <AddRow
+          button={gt("Report a bug")}
+          placeholder={gt("Fix task title")}
+          onAdd={(title) => edit({ op: "reportBug", title })}
+        />
+      ) : null}
+    </Card>
   );
 }
 

@@ -12,6 +12,12 @@ export const LEVEL_NAME = { 1: "master task", 2: "module", 3: "task" } as const;
 export const levelOf = (t: Pick<Task, "level">): Level =>
   t.level === 2 || t.level === 3 ? t.level : 1;
 
+const pathSegment = (id: string): string => {
+  if (!id || id === "." || id === ".." || safeFileName(id) !== id)
+    throw new Error("Invalid board or task id.");
+  return id;
+};
+
 /** The board whose root contains `cwd`; the deepest root wins. */
 export function findBoard(reg: Registry, cwd: string): { board: Board; root: Root } | null {
   let best: { board: Board; root: Root } | null = null;
@@ -60,10 +66,10 @@ export class BoardStore {
     return this.writeJson(this.registryPath, reg);
   }
   projectDir(boardId: string): string {
-    return `${this.home}/projects/${boardId}`;
+    return `${this.home}/projects/${pathSegment(boardId)}`;
   }
   taskDir(boardId: string, id: string): string {
-    return `${this.projectDir(boardId)}/tasks/${id}`;
+    return `${this.projectDir(boardId)}/tasks/${pathSegment(id)}`;
   }
   planPath(boardId: string, id: string): string {
     return `${this.taskDir(boardId, id)}/plan.md`;
@@ -166,15 +172,14 @@ export class BoardStore {
   writeSession(boardId: string | null, s: Session): Promise<void> {
     return this.writeJson(this.sessionPath(boardId, s.sessionId), s);
   }
-  async listSessions(boardId: string): Promise<Session[]> {
+  async listSessions(boardId: string | null): Promise<Session[]> {
     try {
       const out: Session[] = [];
-      for (const f of await this.io.list(`${this.projectDir(boardId)}/sessions`)) {
+      const dir =
+        boardId === null ? `${this.home}/unassigned` : `${this.projectDir(boardId)}/sessions`;
+      for (const f of await this.io.list(dir)) {
         if (f.kind !== "file" || !f.name.endsWith(".json")) continue;
-        const s = await this.readJson<Session | null>(
-          `${this.projectDir(boardId)}/sessions/${f.name}`,
-          null,
-        );
+        const s = await this.readJson<Session | null>(`${dir}/${f.name}`, null);
         if (s) out.push(s);
       }
       return out;

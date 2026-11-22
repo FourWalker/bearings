@@ -183,6 +183,7 @@ import {
 } from "./review.ts";
 import { KeybindingsConfigError } from "./keybindings.ts";
 import {
+  BoardChat,
   BoardCreateTaskInput,
   BoardEditBoardInput,
   BoardEditFailure,
@@ -699,6 +700,7 @@ export const WS_METHODS = {
   issueTrackersBindProject: "issueTrackers.bindProject",
   // Project Board fork.
   boardList: "board.list",
+  boardUnassigned: "board.unassigned",
   boardView: "board.view",
   boardTaskDetail: "board.taskDetail",
   boardEditTask: "board.editTask",
@@ -1507,6 +1509,12 @@ const BoardRpcError = Schema.Union([BoardReadError, EnvironmentAuthorizationErro
 const WsBoardListRpc = Rpc.make(WS_METHODS.boardList, {
   payload: Schema.Struct({}),
   success: Schema.Array(BoardSummary),
+  error: BoardRpcError,
+});
+
+const WsBoardUnassignedRpc = Rpc.make(WS_METHODS.boardUnassigned, {
+  payload: Schema.Struct({}),
+  success: Schema.Array(BoardChat),
   error: BoardRpcError,
 });
 
@@ -2471,6 +2479,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsIssueTrackersConnectRpc,
   WsIssueTrackersBindProjectRpc,
   WsBoardListRpc,
+  WsBoardUnassignedRpc,
   WsBoardViewRpc,
   WsBoardTaskDetailRpc,
   WsBoardEditTaskRpc,

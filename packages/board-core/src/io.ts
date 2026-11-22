@@ -19,6 +19,10 @@ export interface BoardIO {
   readonly read: (path: string) => Promise<string>;
   /** Creates missing parent folders. */
   readonly write: (path: string, data: string) => Promise<void>;
+  /** Atomically creates an empty file. Returns false only if the file already exists. */
+  readonly claim?: ((path: string) => Promise<boolean>) | undefined;
+  readonly remove?: ((path: string) => Promise<void>) | undefined;
+  readonly delay?: ((milliseconds: number) => Promise<void>) | undefined;
   /** Rejects when the folder is missing. */
   readonly list: (path: string) => Promise<ReadonlyArray<BoardDirEntry>>;
   readonly exists: (path: string) => Promise<boolean>;

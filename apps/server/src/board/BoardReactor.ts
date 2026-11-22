@@ -19,6 +19,7 @@ import {
 } from "@t3tools/issue-tracker-board/shared/boardIssue";
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
 import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
@@ -42,6 +43,15 @@ export class BoardReactor extends Context.Service<
 const SETTLED = new Set(["completed", "failed", "interrupted", "cancelled", "rolled_back"]);
 // The board app shows a chat offline after 2.5 minutes without a heartbeat.
 const HEARTBEAT = "60 seconds";
+
+function checkCommand(input: string): string | undefined {
+  if (/[\r\n;&|]/.test(input)) return undefined;
+  const command =
+    /^(?:(?:vp|npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:test|lint|typecheck|check(?::changed)?|build)|(?:go|cargo|dotnet|mvn|gradle|\.[/\\](?:mvnw|gradlew)(?:\.(?:cmd|bat))?)\s+test|pytest|git\s+diff\s+--check)(?=\s|$)/.exec(
+      input.trim(),
+    )?.[0];
+  return command?.replace(/\s+/g, " ");
+}
 
 export const make = Effect.gen(function* () {
   const engine = yield* Orchestrator.OrchestratorV2;
@@ -110,10 +120,11 @@ export const make = Effect.gen(function* () {
     if (boardId === undefined) return;
     const keys = boardIssuesOf(links, boardId).map((link) => link.key);
     const taskId = chat.sess?.taskId ?? null;
-    const [only] = keys;
-    if (keys.length === 1 && only !== undefined && only !== taskId) {
-      yield* Effect.promise(() => chat.linkTask({ taskId: only }));
-      mirrored.set(threadId, chat.sess?.taskId ?? null);
+    const requested = keys.filter((key) => key !== taskId);
+    const [next] = requested;
+    if (requested.length === 1 && next !== undefined) {
+      yield* Effect.promise(() => chat.linkTask({ taskId: next }));
+      yield* mirrorToThread(threadId, chat);
     } else if (keys.length === 0 && taskId !== null && mirrored.get(threadId) === taskId) {
       yield* Effect.promise(() => chat.unlink());
       mirrored.set(threadId, null);
@@ -156,11 +167,34 @@ export const make = Effect.gen(function* () {
           return;
         }
         case "checkpoint.captured": {
-          if (event.payload.files.length === 0) return;
+          const { runId, ref, status, files } = event.payload;
+          if (runId == null && files.length === 0) return;
           const chat = yield* chatOf(event.threadId);
-          for (const file of event.payload.files) {
+          if (runId != null)
+            yield* Effect.promise(() =>
+              chat.attachCheckpoint(runId, status === "ready" ? ref : null),
+            );
+          for (const file of files) {
             yield* Effect.promise(() => chat.fileChanged(file.path));
           }
+          return;
+        }
+        case "turn-item.updated": {
+          const item = event.payload;
+          if (item.type !== "command_execution" || item.runId === null) return;
+          const { exitCode, completedAt } = item;
+          if (exitCode === undefined || completedAt === null) return;
+          const command = checkCommand(item.input);
+          if (!command) return;
+          const chat = yield* chatOf(event.threadId);
+          yield* Effect.promise(() =>
+            chat.recordCheck({
+              id: item.id,
+              command,
+              exitCode,
+              at: DateTime.toEpochMillis(completedAt),
+            }),
+          );
           return;
         }
         case "thread.issue-synced": {

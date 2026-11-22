@@ -43,8 +43,10 @@ import {
   type BoardContinueTarget,
   type BoardFilter,
   type BoardIndex,
+  type BoardTaskTab,
   type BoardViewMode,
-  boardContinueTargets,
+  type RecommendationFilter,
+  boardPickupTargets,
   collisionsOf,
   indexBoard,
   panelOf,
@@ -56,6 +58,8 @@ import { type BoardNoteActions, BoardModuleNote, BoardNote, BoardServiceRow } fr
 import { BoardPanel } from "./BoardPanel";
 import { BoardSettingsButton } from "./BoardSettingsDialog";
 import { BoardTaskView } from "./BoardTaskView";
+import { ChoiceSelect } from "./BoardTaskEditors";
+import { BoardRecommendations } from "./BoardRecommendations";
 
 /**
  * Project Board fork: the board app's main screen inside T3. One board of the machine a connected
@@ -71,22 +75,35 @@ export function BoardPage() {
     (environment) => environment.serverConfig?.environment.capabilities.projectBoard === true,
   );
   const environment =
-    capable.find((candidate) => candidate.environmentId === search.env) ?? capable[0];
+    search.env === undefined
+      ? capable[0]
+      : capable.find((candidate) => candidate.environmentId === search.env);
   const environmentId = environment?.environmentId ?? null;
   const boards = useEnvironmentQuery(
     environmentId === null ? null : boardEnvironment.boards({ environmentId, input: {} }),
   );
   // With one board there's nothing to pick; with several, the picker comes first.
   const boardId =
-    search.board ?? (boards.data !== null && boards.data.length === 1 ? boards.data[0]!.id : null);
+    search.board ?? (!search.picker && boards.data?.length === 1 ? boards.data[0]!.id : null);
   const view = useEnvironmentQuery(
     environmentId === null || boardId === null
       ? null
       : boardEnvironment.view({ environmentId, input: { boardId } }),
   );
+  const unassigned = useEnvironmentQuery(
+    environmentId === null || (boardId !== null && !search.picker)
+      ? null
+      : boardEnvironment.unassigned({ environmentId, input: {} }),
+  );
   const board = view.data;
   const selectBoard = (next: string | undefined) =>
-    void navigate({ search: (previous) => ({ ...previous, board: next }) });
+    void navigate({
+      search: {
+        env: environmentId ?? undefined,
+        board: next,
+        picker: next === undefined || undefined,
+      },
+    });
 
   const newThread = useNewThreadHandler();
   const linkThread = useAtomCommand(boardEnvironment.linkThread, { reportFailure: false });
@@ -94,26 +111,29 @@ export function BoardPage() {
   // carries the plan and handoff. Local, not a worktree: the board places a thread by its folder.
   const continueTask = async (task: BoardTask, target: BoardContinueTarget) => {
     if (environmentId === null || board === null) return;
-    const draft = await newThread(scopeProjectRef(environmentId, target.projectId), {
+    await newThread(scopeProjectRef(environmentId, target.projectId), {
       envMode: "local",
       prompt: gt("Continue this task from its handoff."),
-    });
-    if (draft === null) return;
-    const result = await linkThread({
-      environmentId,
-      input: {
-        boardId: board.id,
-        taskId: task.id,
-        threadId: draft.threadId,
-        projectId: target.projectId,
+      prepareNewDraft: async (threadId) => {
+        const result = await linkThread({
+          environmentId,
+          input: {
+            boardId: board.id,
+            taskId: task.id,
+            threadId,
+            projectId: target.projectId,
+            override: target.override,
+          },
+        });
+        if (result._tag !== "Failure") return true;
+        toastManager.add({
+          type: "error",
+          title: gt("Could not put the thread on {task}", { task: task.title }),
+          description: formatEnvironmentQueryError(result.cause),
+        });
+        return false;
       },
     });
-    if (result._tag === "Failure")
-      toastManager.add({
-        type: "error",
-        title: gt("Could not put the thread on {task}", { task: task.title }),
-        description: formatEnvironmentQueryError(result.cause),
-      });
   };
   const openThread = (chat: BoardChat) => {
     if (chat.threadId === null || environmentId === null) return;
@@ -132,13 +152,13 @@ export function BoardPage() {
         detail={boards.error}
         onRetry={boards.refresh}
       />
-    ) : boards.data !== null && boards.data.length === 0 ? (
-      <BoardEmpty
-        title={gt("No boards on this machine")}
-        detail={gt("Ask an agent in any thread to set up a board for its project.")}
-      />
     ) : boardId === null && boards.data !== null ? (
-      <BoardPicker boards={boards.data} onPick={selectBoard} />
+      <BoardPicker
+        boards={boards.data}
+        chats={unassigned.data ?? []}
+        onPick={selectBoard}
+        onOpenThread={openThread}
+      />
     ) : board === null && view.error !== null ? (
       <BoardEmpty
         title={gt("Could not load the board")}
@@ -153,12 +173,15 @@ export function BoardPage() {
       </div>
     ) : (
       <BoardScreen
+        key={`${environmentId}:${board.id}`}
         board={board}
         environmentId={environmentId}
         mode={search.view ?? "tree"}
         filter={search.filter ?? "active"}
         pageId={search.task ?? null}
         modalId={search.open ?? null}
+        tab={search.tab}
+        recommendationFilter={search.recommendationFilter ?? "open"}
         onChanged={view.refresh}
         onOpenThread={openThread}
         onContinue={(task, target) => void continueTask(task, target)}
@@ -256,7 +279,9 @@ function BoardEmpty(props: {
 
 function BoardPicker(props: {
   readonly boards: ReadonlyArray<BoardSummary>;
+  readonly chats: ReadonlyArray<BoardChat>;
   readonly onPick: (boardId: string) => void;
+  readonly onOpenThread: (chat: BoardChat) => void;
 }) {
   const gt = useGT();
   return (
@@ -264,6 +289,11 @@ function BoardPicker(props: {
       <h2 className="mb-4 font-medium text-lg">
         <T>Boards on this machine</T>
       </h2>
+      {props.boards.length === 0 ? (
+        <p className="text-muted-foreground text-sm">
+          <T>No boards on this machine</T>
+        </p>
+      ) : null}
       <div className="grid grid-cols-[repeat(auto-fill,minmax(16rem,1fr))] gap-3">
         {props.boards.map((candidate) => (
           <button
@@ -279,6 +309,33 @@ function BoardPicker(props: {
           </button>
         ))}
       </div>
+      {props.chats.length > 0 ? (
+        <section className="mt-6 grid gap-2">
+          <h2 className="font-medium text-lg">
+            <T>Chats with no board</T>
+          </h2>
+          <ul className="divide-y rounded-lg border">
+            {props.chats.map((chat) => (
+              <li key={chat.sessionId} className="grid gap-1 px-4 py-2">
+                {chat.threadId ? (
+                  <button
+                    type="button"
+                    className="text-start font-medium text-sm hover:underline"
+                    onClick={() => props.onOpenThread(chat)}
+                  >
+                    {chat.title}
+                  </button>
+                ) : (
+                  <span className="font-medium text-sm">{chat.title}</span>
+                )}
+                {chat.workspaceLabel && (
+                  <span className="text-muted-foreground text-xs">{chat.workspaceLabel}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -290,6 +347,8 @@ function BoardScreen(props: {
   readonly filter: BoardFilter;
   readonly pageId: string | null;
   readonly modalId: string | null;
+  readonly tab?: BoardTaskTab | undefined;
+  readonly recommendationFilter: RecommendationFilter;
   /** Re-reads the board after an edit. */
   readonly onChanged: () => void;
   readonly onOpenThread: (chat: BoardChat) => void;
@@ -313,20 +372,23 @@ function BoardScreen(props: {
       : linked !== null && linked.level > 1
         ? linked
         : null;
-  const openTask = (task: BoardTask) =>
+  const openTask = (task: BoardTask, tab?: BoardTaskTab) =>
     void navigate({
       search: (previous) =>
         task.level === 1
-          ? { ...previous, task: task.id, open: undefined }
-          : { ...previous, open: task.id },
+          ? { ...previous, task: task.id, open: undefined, tab }
+          : { ...previous, open: task.id, tab },
     });
   const closePage = () =>
-    void navigate({ search: (previous) => ({ ...previous, task: undefined, open: undefined }) });
+    void navigate({
+      search: (previous) => ({ ...previous, task: undefined, open: undefined, tab: undefined }),
+    });
   const closeModal = () =>
     void navigate({
       search: (previous) => ({
         ...previous,
         open: undefined,
+        tab: undefined,
         task: pageTask === null ? undefined : previous.task,
       }),
     });
@@ -371,12 +433,23 @@ function BoardScreen(props: {
       actions={actions}
       serviceName={serviceName}
       continueTargets={
-        canLink && task.status !== "done" ? boardContinueTargets(board.workspaces, task) : []
+        canLink && task.status !== "done" ? boardPickupTargets(index, board.workspaces, task) : []
       }
       onContinue={(target) => props.onContinue(task, target)}
       onOpenThread={props.onOpenThread}
       onClose={onClose}
       onChanged={props.onChanged}
+      tab={task.id === (modalTask ?? pageTask)?.id ? props.tab : undefined}
+      onTabChange={
+        task.id === (modalTask ?? pageTask)?.id
+          ? (tab) => void navigate({ search: (previous) => ({ ...previous, tab }), replace: true })
+          : undefined
+      }
+      onOpenCreated={(id) =>
+        void navigate({
+          search: (previous) => ({ ...previous, open: id, tab: "threads" }),
+        })
+      }
     />
   );
 
@@ -453,7 +526,12 @@ function BoardScreen(props: {
           onCreated={(taskId) => {
             props.onChanged();
             void navigate({
-              search: (previous) => ({ ...previous, task: taskId, open: undefined }),
+              search: (previous) => ({
+                ...previous,
+                task: taskId,
+                open: undefined,
+                tab: undefined,
+              }),
             });
           }}
         />
@@ -467,7 +545,8 @@ function BoardScreen(props: {
               value === "1" ||
               value === "2" ||
               value === "3" ||
-              value === "svc"
+              value === "svc" ||
+              value === "register"
             )
               setSearch({ view: value });
           }}
@@ -477,32 +556,50 @@ function BoardScreen(props: {
           <Toggle value="2">{gt("Level 2")}</Toggle>
           <Toggle value="3">{gt("Level 3")}</Toggle>
           <Toggle value="svc">{gt("By service")}</Toggle>
+          <Toggle value="register">{gt("Register")}</Toggle>
         </ToggleGroup>
-        <ToggleGroup
-          aria-label={gt("Task status")}
-          value={[props.filter]}
-          onValueChange={(next) => {
-            const value = next[0];
-            if (value === "active" || value === "paused" || value === "done" || value === "all")
-              setSearch({ filter: value });
-          }}
-        >
-          <Toggle value="active">{gt("Active")}</Toggle>
-          <Toggle value="paused">{gt("Paused")}</Toggle>
-          <Toggle value="done">{gt("Done")}</Toggle>
-          <Toggle value="all">{gt("All")}</Toggle>
-        </ToggleGroup>
+        {props.mode !== "register" ? (
+          <ToggleGroup
+            aria-label={gt("Task status")}
+            value={[props.filter]}
+            onValueChange={(next) => {
+              const value = next[0];
+              if (value === "active" || value === "paused" || value === "done" || value === "all")
+                setSearch({ filter: value });
+            }}
+          >
+            <Toggle value="active">{gt("Active")}</Toggle>
+            <Toggle value="paused">{gt("Paused")}</Toggle>
+            <Toggle value="done">{gt("Done")}</Toggle>
+            <Toggle value="all">{gt("All")}</Toggle>
+          </ToggleGroup>
+        ) : null}
       </div>
       <div className="flex min-h-0 flex-1 flex-col @container/board lg:flex-row">
         <div className="min-h-0 min-w-0 flex-1 overflow-auto p-4">
-          <BoardArea
-            index={index}
-            board={board}
-            mode={props.mode}
-            filter={props.filter}
-            serviceName={serviceName}
-            actions={actions}
-          />
+          {props.mode === "register" ? (
+            <BoardRecommendations
+              key={board.id}
+              index={index}
+              registers={board.registers ?? []}
+              filter={props.recommendationFilter}
+              onFilterChange={(recommendationFilter) =>
+                void navigate({
+                  search: (previous) => ({ ...previous, recommendationFilter }),
+                })
+              }
+              onOpen={(task) => openTask(task, "decisions")}
+            />
+          ) : (
+            <BoardArea
+              index={index}
+              board={board}
+              mode={props.mode}
+              filter={props.filter}
+              serviceName={serviceName}
+              actions={actions}
+            />
+          )}
         </div>
         <aside
           aria-label={gt("Board panel")}
@@ -544,7 +641,10 @@ function BoardArea(props: {
     return (
       <div className="flex items-start gap-4">
         {columns.map((column) => (
-          <section key={column.service?.id ?? ""} className="grid w-72 shrink-0 gap-2">
+          <section
+            key={column.service?.id ?? ""}
+            className="grid w-72 shrink-0 grid-cols-[minmax(0,1fr)] gap-2"
+          >
             <header className="grid gap-0.5">
               <span className="flex items-center justify-between font-medium text-sm">
                 {column.service?.name ?? gt("No service yet")}
@@ -626,6 +726,7 @@ function NewTaskButton(props: {
   const allowed = useAtomValue(boardEnvironment.createTask.permissionAtom(props.environmentId));
   const create = useAtomCommand(boardEnvironment.createTask, { reportFailure: false });
   const [title, setTitle] = useState<string | null>(null);
+  const [kind, setKind] = useState<"feature" | "backlog">("feature");
   if (!allowed) return null;
   if (title === null)
     return (
@@ -638,7 +739,7 @@ function NewTaskButton(props: {
     if (!title.trim()) return;
     const result = await create({
       environmentId: props.environmentId,
-      input: { boardId: props.boardId, title },
+      input: { boardId: props.boardId, title, kind },
     });
     if (result._tag === "Failure") {
       toastManager.add({
@@ -649,6 +750,7 @@ function NewTaskButton(props: {
       return;
     }
     setTitle(null);
+    setKind("feature");
     if (result.value.createdId !== null) props.onCreated(result.value.createdId);
   };
   return (
@@ -669,6 +771,15 @@ function NewTaskButton(props: {
         onKeyDown={(event) => {
           if (event.key === "Escape") setTitle(null);
         }}
+      />
+      <ChoiceSelect
+        label={gt("Master task type")}
+        value={kind}
+        choices={[
+          ["feature", gt("Feature")],
+          ["backlog", gt("Service backlog")],
+        ]}
+        onChange={setKind}
       />
       <Button type="submit" size="sm" disabled={!title.trim()}>
         <T>Create</T>

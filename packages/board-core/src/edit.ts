@@ -6,10 +6,10 @@
  *
  * @module board-core/edit
  */
-import type { BoardGit } from "./io.ts";
+import { type BoardGit, systemClock } from "./io.ts";
 import { markStepDelegated, setDelegatedDone, setStepDone, stepDone } from "./plan.ts";
 import { type BoardStore, levelOf } from "./store.ts";
-import { isInside, norm, sameRoot, slug, stamp } from "./text.ts";
+import { base, isInside, norm, sameRoot, slug, stamp } from "./text.ts";
 import type {
   Board,
   Decision,
@@ -17,6 +17,8 @@ import type {
   Level,
   LinkType,
   RepoState,
+  Root,
+  Session,
   Task,
   TaskDoc,
   TaskStatus,
@@ -67,6 +69,7 @@ export type TaskEdit =
       readonly type: LinkType | "blocks" | "led_to";
     }
   | { readonly op: "createChild"; readonly title: string; readonly fromStep?: string | undefined }
+  | { readonly op: "reportBug"; readonly title: string }
   | {
       readonly op: "addDecision";
       readonly title: string;
@@ -75,7 +78,13 @@ export type TaskEdit =
       readonly refs: ReadonlyArray<string>;
       /** The level it affects: filed on this task or the parent at that level. */
       readonly level: Level;
-      readonly recommendation?: { readonly area: string } | undefined;
+      readonly recommendation?:
+        | {
+            readonly area: string;
+            readonly lldCheck?: string | undefined;
+            readonly register?: string | null | undefined;
+          }
+        | undefined;
     }
   | {
       readonly op: "setDecision";
@@ -90,7 +99,11 @@ export type TaskEdit =
       readonly description?: string | undefined;
       readonly options?: string | undefined;
       readonly refs?: ReadonlyArray<string> | undefined;
+      readonly area?: string | undefined;
+      readonly lldCheck?: string | undefined;
+      readonly register?: string | null | undefined;
     }
+  | { readonly op: "deleteDecision"; readonly decisionId: string }
   | {
       readonly op: "implemented";
       readonly decisionId: string;
@@ -180,7 +193,7 @@ export async function createTask(
 ): Promise<Task> {
   const title = input.title.trim();
   if (!title) throw new BoardEditError("title is required.");
-  const parent = input.parentId ? await requireTask(store, boardId, slug(input.parentId)) : null;
+  const parent = input.parentId ? await requireTask(store, boardId, input.parentId) : null;
   if (parent && levelOf(parent) >= 3)
     throw new BoardEditError(
       `"${parent.title}" is a Level 3 task and can't have subtasks. Promote it first, then create subtasks under it.`,
@@ -205,11 +218,10 @@ export async function createTask(
   if (input.mainService) task.mainService = input.mainService;
   if (input.bug) task.bug = true;
   if (input.fixes) {
-    const original = await store.loadTask(boardId, slug(input.fixes));
-    if (original)
-      task.links = [
-        { to: original.id, type: "fixes", note: input.description ?? "", at: now, by: actor.by },
-      ];
+    const original = await requireTask(store, boardId, input.fixes);
+    task.links = [
+      { to: original.id, type: "fixes", note: input.description ?? "", at: now, by: actor.by },
+    ];
   }
   await store.saveTask(boardId, task);
   if (input.plan) await store.io.write(store.planPath(boardId, task.id), input.plan);
@@ -226,7 +238,74 @@ export async function createTask(
  * Files a decision at the level it affects: on `task`, or the parent at that level, mapped back
  * to `task` where it was raised. A recommendation gets the next board-wide R#.
  */
-export async function addDecision(
+export function addDecision(
+  ...args: Parameters<typeof fileDecision>
+): ReturnType<typeof fileDecision> {
+  const [store, boardId] = args;
+  const key = store.projectDir(boardId).toLowerCase();
+  const pending = pendingDecisions.get(key) ?? Promise.resolve();
+  const result = pending.then(() => withDecisionLock(store, boardId, () => fileDecision(...args)));
+  const settled = result.then(
+    () => {},
+    () => {},
+  );
+  pendingDecisions.set(key, settled);
+  return result.finally(() => {
+    if (pendingDecisions.get(key) === settled) pendingDecisions.delete(key);
+  });
+}
+
+const pendingDecisions = new Map<string, Promise<void>>();
+
+async function withDecisionLock<A>(store: BoardStore, boardId: string, write: () => Promise<A>) {
+  const { claim, remove, delay, stat } = store.io;
+  if (!claim || !remove || !delay) return write();
+  const path = `${store.projectDir(boardId)}/.decision-write.lock`;
+  for (let attempt = 0; attempt < 25; attempt++) {
+    if (await claim(path)) {
+      try {
+        return await write();
+      } finally {
+        await remove(path);
+      }
+    }
+    const previous = await stat(path).catch(() => null);
+    // A process that quits without releasing the lock must not block the board permanently.
+    if (previous && systemClock.now() - previous.mtimeMs > 120_000) {
+      const current = await stat(path).catch(() => null);
+      if (current?.mtimeMs === previous.mtimeMs) await remove(path);
+      continue;
+    }
+    await delay(20 * Math.min(attempt + 1, 8));
+  }
+  throw new BoardEditError("The board is filing another decision. Try again.");
+}
+
+async function reserveRecommendation(store: BoardStore, boardId: string, requested?: string) {
+  const used = new Set<number>();
+  for (const task of await store.listTasks(boardId)) {
+    for (const decision of task.decisions ?? []) {
+      const number = Number(String(decision.rec?.r ?? "").replace(/\D/g, ""));
+      if (Number.isSafeInteger(number) && number > 0) used.add(number);
+    }
+  }
+  const reserve = (number: number) =>
+    store.io.claim?.(`${store.projectDir(boardId)}/recommendation-numbers/R${number}`) ??
+    Promise.resolve(true);
+  if (requested) {
+    const number = Number(/^R(\d+)$/i.exec(requested.trim())?.[1]);
+    if (!Number.isSafeInteger(number) || number < 1)
+      throw new BoardEditError("Use a recommendation number like R12.");
+    if (used.has(number) || !(await reserve(number)))
+      throw new BoardEditError(`Recommendation R${number} is already on this board.`);
+    return `R${number}`;
+  }
+  let number = Math.max(0, ...used) + 1;
+  while (!(await reserve(number))) number += 1;
+  return `R${number}`;
+}
+
+async function fileDecision(
   store: BoardStore,
   boardId: string,
   task: Task,
@@ -249,11 +328,12 @@ export async function addDecision(
 ): Promise<{ readonly decision: Decision; readonly owner: Task }> {
   const title = input.title.trim();
   if (!title) throw new BoardEditError("title is required.");
-  const chain = [task, ...(await store.ancestorsOf(boardId, task))];
+  const current = await requireTask(store, boardId, task.id);
+  const chain = [current, ...(await store.ancestorsOf(boardId, current))];
   const want = input.level ?? levelOf(task);
   const owner = chain.find((x) => levelOf(x) <= want) ?? chain.at(-1) ?? task;
   const decision: Decision = {
-    id: newId(store, "D-", true),
+    id: newId(store, "D-", true, 1_000_000),
     title,
     description: input.description ?? "",
     level: levelOf(owner),
@@ -266,14 +346,8 @@ export async function addDecision(
     by: actor.by,
   };
   if (input.recommendation) {
-    const max = Math.max(
-      0,
-      ...(await store.listTasks(boardId)).flatMap((x) =>
-        (x.decisions ?? []).map((y) => Number(String(y.rec?.r ?? "").replace(/\D/g, "")) || 0),
-      ),
-    );
     decision.rec = {
-      r: input.recommendation.r || `R${max + 1}`,
+      r: await reserveRecommendation(store, boardId, input.recommendation.r),
       area: input.recommendation.area ?? "",
       lldCheck: input.recommendation.lldCheck ?? "",
       register: input.recommendation.register || null,
@@ -314,6 +388,40 @@ export function settleDecision(
     decision.status = "dropped";
     decision.verdict = verdict;
   } else decision.status = "open";
+}
+
+export async function setSessionTask(
+  store: BoardStore,
+  boardId: string,
+  session: Session,
+  task: Task | null,
+): Promise<Session> {
+  if (task) {
+    if (!task.sessions.some((ref) => ref.sessionId === session.sessionId)) {
+      task.sessions.push({
+        sessionId: session.sessionId,
+        linkedAt: store.clock.now(),
+        workspaceLabel: session.workspaceLabel,
+      });
+    }
+    await store.saveTask(boardId, task);
+  }
+  const linked = {
+    ...session,
+    taskId: task?.id ?? null,
+    linkDeclined: task === null,
+    pickupNote: task === null ? undefined : session.pickupNote,
+    updatedAt: store.clock.now(),
+  };
+  await store.writeSession(boardId, linked);
+  if (session.taskId && session.taskId !== task?.id) {
+    const previous = await store.loadTask(boardId, session.taskId);
+    if (previous?.sessions.some((ref) => ref.sessionId === session.sessionId)) {
+      previous.sessions = previous.sessions.filter((ref) => ref.sessionId !== session.sessionId);
+      await store.saveTask(boardId, previous);
+    }
+  }
+  return linked;
 }
 
 /**
@@ -498,6 +606,21 @@ async function softReleaseProblems(
   return problems;
 }
 
+export async function checkSoftRelease(
+  store: BoardStore,
+  boardId: string,
+  task: Task,
+  git: BoardGit,
+) {
+  const node = await ownerNodeOf(store, boardId, task);
+  if (!node.owner) throw new BoardEditError("Nobody owns this module or master task.");
+  const board = (await store.loadRegistry()).boards.find((b) => b.id === boardId);
+  if (!board) throw new BoardEditError("No such board.");
+  const pickup = await reposAt(store, boardId, board, node, node.owner.root, git);
+  const problems = await softReleaseProblems(store, boardId, node, pickup);
+  return { ok: problems.length === 0, problems, pickup, node, owner: node.owner };
+}
+
 /** Applies one change a person made to a task in an app. `git` reads repo state for a soft release. */
 export async function editTask(
   store: BoardStore,
@@ -627,6 +750,23 @@ export async function editTask(
       );
       return { message: `Created "${child.title}".`, createdId: child.id };
     }
+    case "reportBug": {
+      const fix = await createTask(
+        store,
+        boardId,
+        {
+          title: edit.title,
+          parentId: levelOf(task) === 3 ? task.parentId : task.id,
+          bug: true,
+          fixes: task.id,
+          services: [
+            ...new Set([...(task.services ?? []), ...(task.mainService ? [task.mainService] : [])]),
+          ],
+        },
+        actor,
+      );
+      return { message: `Created "${fix.title}".`, createdId: fix.id };
+    }
     case "addDecision": {
       const { decision, owner } = await addDecision(
         store,
@@ -664,8 +804,18 @@ export async function editTask(
       if (edit.description !== undefined) d.description = edit.description;
       if (edit.options !== undefined) d.options = edit.options;
       if (edit.refs !== undefined) d.refs = [...edit.refs];
+      if (d.rec) {
+        if (edit.area !== undefined) d.rec.area = edit.area;
+        if (edit.lldCheck !== undefined) d.rec.lldCheck = edit.lldCheck;
+        if (edit.register !== undefined) d.rec.register = edit.register;
+      }
       await store.saveTask(boardId, found.owner);
       return { message: "Decision saved." };
+    }
+    case "deleteDecision": {
+      task.decisions = (task.decisions ?? []).filter((decision) => decision.id !== edit.decisionId);
+      await store.saveTask(boardId, task);
+      return { message: "Decision removed." };
     }
     case "implemented": {
       const found = await findDecision(store, boardId, task, edit.decisionId);
@@ -715,17 +865,16 @@ export async function editTask(
       return { message: `"${node.title}" is owned by ${root.label}.` };
     }
     case "softRelease": {
-      const node = await ownerNodeOf(store, boardId, task);
-      if (!node.owner) throw new BoardEditError("Nobody owns this module or master task.");
       if (!git) throw new BoardEditError("Repo state can't be read here.");
-      const board = (await store.loadRegistry()).boards.find((b) => b.id === boardId);
-      if (!board) throw new BoardEditError("No such board.");
-      const repos = await reposAt(store, boardId, board, node, node.owner.root, git);
-      const problems = await softReleaseProblems(store, boardId, node, repos);
-      if (problems.length)
-        throw new BoardEditError(`Not ready for a soft release: ${problems.join("; ")}.`);
-      node.owner = { ...node.owner, state: "soft", softAt: now, pickup: repos };
-      ownerHistory(store, node, "soft-release", actor, { from: node.owner.label });
+      const { node, owner, pickup, problems, ok } = await checkSoftRelease(
+        store,
+        boardId,
+        task,
+        git,
+      );
+      if (!ok) throw new BoardEditError(`Not ready for a soft release: ${problems.join("; ")}.`);
+      node.owner = { ...owner, state: "soft", softAt: now, pickup };
+      ownerHistory(store, node, "soft-release", actor, { from: owner.label });
       await store.saveTask(boardId, node);
       return { message: `Soft-released "${node.title}": another workspace can take over.` };
     }
@@ -766,7 +915,58 @@ export type BoardSettingsEdit =
       }>;
     };
 
-const baseName = (p: string) => norm(p).split("/").pop() ?? p;
+async function workspaceRoot(
+  store: BoardStore,
+  boards: ReadonlyArray<Board>,
+  rawPath: string,
+  label: string,
+  boardId?: string,
+): Promise<Root> {
+  const path = norm(rawPath.trim());
+  if (
+    !/^(?:[A-Za-z]:\/|\/)/.test(path) ||
+    !(await store.io.list(path).then(
+      () => true,
+      () => false,
+    ))
+  )
+    throw new BoardEditError(`No folder at ${path}.`);
+  const taken = boards.find((board) =>
+    board.roots.some((r) => isInside(path, r.path) || isInside(r.path, path)),
+  );
+  if (taken)
+    throw new BoardEditError(
+      taken.id === boardId
+        ? "That folder is already a workspace of this board, or inside one."
+        : `That folder overlaps a workspace of the ${taken.name} board.`,
+    );
+  return { path, label: label.trim() || base(path) };
+}
+
+export async function createBoard(
+  store: BoardStore,
+  input: { readonly name: string; readonly path: string; readonly label: string },
+): Promise<Board> {
+  const name = input.name.trim();
+  if (!name) throw new BoardEditError("The board needs a name.");
+  const registry = await store.loadRegistry();
+  if (registry.boards.some((board) => board.name.toLowerCase() === name.toLowerCase()))
+    throw new BoardEditError(`A board named ${name} already exists.`);
+  const root = await workspaceRoot(store, registry.boards, input.path, input.label);
+  const prefix = slug(name);
+  let id = prefix;
+  for (
+    let n = 2;
+    registry.boards.some((board) => board.id === id) ||
+    (await store.io.exists(store.projectDir(id)));
+    n++
+  )
+    id = `${prefix}-${n}`;
+  const board = { id, name, roots: [root], createdAt: store.clock.now() };
+  registry.boards.push(board);
+  await store.saveRegistry(registry);
+  return board;
+}
 
 /** Applies one change to the board's settings in `boards.json`. */
 export async function editBoard(
@@ -787,22 +987,7 @@ export async function editBoard(
       break;
     }
     case "addRoot": {
-      const path = norm(edit.path.trim());
-      if (!path) throw new BoardEditError("A folder is required.");
-      if (!(await store.io.exists(path).catch(() => false)))
-        throw new BoardEditError(`No folder at ${path}.`);
-      const taken = reg.boards.find((b) =>
-        b.roots.some(
-          (r) => sameRoot(r.path, path) || isInside(path, r.path) || isInside(r.path, path),
-        ),
-      );
-      if (taken)
-        throw new BoardEditError(
-          taken.id === boardId
-            ? "That folder is already a workspace of this board, or inside one."
-            : `That folder overlaps a workspace of the ${taken.name} board.`,
-        );
-      board.roots.push({ path, label: edit.label.trim() || baseName(path) });
+      board.roots.push(await workspaceRoot(store, reg.boards, edit.path, edit.label, boardId));
       break;
     }
     case "removeRoot": {
