@@ -27,8 +27,37 @@ export const BoardChat = Schema.Struct({
   /** A thread on this server to open; null for Claude Code chats and threads it doesn't hold. */
   threadId: Schema.NullOr(ThreadId),
   provider: Schema.NullOr(Schema.String),
+  /** When the chat's current (or last) turn started; 0 before its first. */
+  turnStartedAt: Schema.Number,
 });
 export type BoardChat = typeof BoardChat.Type;
+
+export const BoardItem = Schema.Struct({
+  id: Schema.String,
+  kind: Schema.Literals(["mandatory", "decision", "todo"]),
+  text: Schema.String,
+  done: Schema.Boolean,
+});
+export type BoardItem = typeof BoardItem.Type;
+
+/** A decision as the board screen lists it; its full text is read with the task. */
+export const BoardDecision = Schema.Struct({
+  id: Schema.String,
+  title: Schema.String,
+  status: Schema.Literals(["open", "decided", "dropped"]),
+  level: Schema.Literals([1, 2, 3]),
+  raisedFrom: Schema.NullOr(Schema.Struct({ id: Schema.String, title: Schema.String })),
+  /** The recommendation's R#, when the decision is one. */
+  r: Schema.NullOr(Schema.String),
+});
+export type BoardDecision = typeof BoardDecision.Type;
+
+export const BoardTaskLink = Schema.Struct({
+  to: Schema.String,
+  type: Schema.Literals(["blocked_by", "found_during", "related", "fixes"]),
+  note: Schema.String,
+});
+export type BoardTaskLink = typeof BoardTaskLink.Type;
 
 export const BoardTask = Schema.Struct({
   id: Schema.String,
@@ -38,13 +67,34 @@ export const BoardTask = Schema.Struct({
   /** 1 = master task, 2 = module, 3 = task. */
   level: Schema.Literals([1, 2, 3]),
   parentId: Schema.NullOr(Schema.String),
+  /** Level 1 only: a feature or a service backlog. */
+  kind: Schema.NullOr(Schema.Literals(["feature", "backlog"])),
+  bug: Schema.Boolean,
+  mainService: Schema.NullOr(Schema.String),
   services: Schema.Array(Schema.String),
   lastAction: Schema.NullOr(
-    Schema.Struct({ text: Schema.String, at: Schema.Number, workspaceLabel: Schema.String }),
+    Schema.Struct({
+      text: Schema.String,
+      at: Schema.Number,
+      workspaceLabel: Schema.String,
+      sessionId: Schema.String,
+    }),
   ),
   next: Schema.NullOr(Schema.Struct({ id: Schema.String, text: Schema.String })),
   steps: Schema.Struct({ done: NonNegativeInt, total: NonNegativeInt }),
   chats: Schema.Array(BoardChat),
+  items: Schema.Array(BoardItem),
+  decisions: Schema.Array(BoardDecision),
+  links: Schema.Array(BoardTaskLink),
+  /** Set on the module or master task itself; tasks inherit it (see `ownerRoot`). */
+  owner: Schema.NullOr(
+    Schema.Struct({
+      root: Schema.String,
+      label: Schema.String,
+      state: Schema.Literals(["owned", "soft"]),
+    }),
+  ),
+  createdAt: Schema.Number,
   updatedAt: Schema.Number,
   /** The root of the workspace copy that owns the task's module or master task, if one does. */
   ownerRoot: Schema.NullOr(Schema.String),
@@ -54,7 +104,10 @@ export type BoardTask = typeof BoardTask.Type;
 export const BoardView = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
-  services: Schema.Array(Schema.Struct({ id: Schema.String, name: Schema.String })),
+  boardMode: Schema.Boolean,
+  services: Schema.Array(
+    Schema.Struct({ id: Schema.String, name: Schema.String, match: Schema.Array(Schema.String) }),
+  ),
   /** Each copy of the project the board spans, with this server's project at that folder. */
   workspaces: Schema.Array(
     Schema.Struct({

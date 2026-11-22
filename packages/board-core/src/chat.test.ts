@@ -254,7 +254,7 @@ describe("readBoardView", () => {
 
     const t2 = (await store.readSession("nefx", "t2")) as Session;
     const view = await readBoardView(store, "nefx", t2.heartbeatAt + OFFLINE_MS / 2);
-    expect(view?.services).toEqual([{ id: "api", name: "API" }]);
+    expect(view?.services).toEqual([{ id: "api", name: "API", match: ["api"] }]);
     expect(view?.workspaces).toEqual([
       { label: "main", root: norm(ws) },
       { label: "copy-b", root: norm(wsB) },
@@ -280,11 +280,20 @@ describe("readBoardView", () => {
     await store.saveTask("nefx", {
       ...sftp,
       owner: { root: wsB, label: "copy-b", state: "owned", since: 0 },
+      items: [{ id: "i1", kind: "mandatory", text: "Keep ids stable", done: false, at: 0 }],
+      links: [{ to: "retry", type: "blocked_by", note: "", at: 0 }],
     });
     // Past the heartbeat window a chat is offline.
     const later = await readBoardView(store, "nefx", t2.heartbeatAt + OFFLINE_MS * 2);
     const sftpLater = later?.tasks.find((t) => t.id === "sftp");
     expect(sftpLater?.chats[0]?.live).toBe("offline");
+    expect(sftpLater).toMatchObject({
+      kind: "feature",
+      owner: { root: norm(wsB), label: "copy-b", state: "owned" },
+      items: [{ id: "i1", kind: "mandatory", text: "Keep ids stable", done: false }],
+      links: [{ to: "retry", type: "blocked_by", note: "" }],
+      lastAction: null,
+    });
     expect(later?.tasks.map((t) => [t.id, t.ownerRoot])).toEqual(
       expect.arrayContaining([
         ["sftp", norm(wsB)],

@@ -1,11 +1,17 @@
 import { useAtomValue } from "@effect/atom-react";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
-import type { BoardChat, BoardTask, BoardView, EnvironmentId } from "@t3tools/contracts";
+import type {
+  BoardChat,
+  BoardSummary,
+  BoardTask,
+  BoardView,
+  EnvironmentId,
+} from "@t3tools/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { MessageSquarePlusIcon, SquareKanbanIcon } from "lucide-react";
+import { SquareKanbanIcon, TriangleAlertIcon } from "lucide-react";
 import { T, useGT } from "gt-react";
+import { useState } from "react";
 
-import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
   Empty,
@@ -15,19 +21,13 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "~/components/ui/empty";
-import {
-  Menu,
-  MenuItem,
-  MenuPopup,
-  MenuRadioGroup,
-  MenuRadioItem,
-  MenuTrigger,
-} from "~/components/ui/menu";
+import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "~/components/ui/menu";
 import { SidebarInset } from "~/components/ui/sidebar";
 import { Skeleton } from "~/components/ui/skeleton";
 import { toastManager } from "~/components/ui/toast";
+import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { WorkspaceBreadcrumb, WorkspaceBreadcrumbItem } from "~/components/WorkspaceBreadcrumb";
-import { WorkspacePageContainer } from "~/components/WorkspacePageContainer";
 import { WorkspacePageHeader } from "~/components/WorkspacePageHeader";
 import { isElectron } from "~/env";
 import { useNewThreadHandler } from "~/hooks/useHandleNewThread";
@@ -36,14 +36,28 @@ import { useEnvironments } from "~/state/environments";
 import { formatEnvironmentQueryError, useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { buildThreadRouteParams } from "~/threadRoutes";
-import { formatRelativeTimeLabel } from "~/timestampFormat";
 
-import { type BoardContinueTarget, boardContinueTargets, boardTaskTree } from "./board.logic";
+import {
+  type BoardContinueTarget,
+  type BoardFilter,
+  type BoardIndex,
+  type BoardViewMode,
+  boardContinueTargets,
+  collisionsOf,
+  indexBoard,
+  panelOf,
+  serviceColumns,
+  statusMatches,
+  treeRoots,
+} from "./board.logic";
+import { type BoardNoteActions, BoardModuleNote, BoardNote, BoardServiceRow } from "./BoardNotes";
+import { BoardPanel } from "./BoardPanel";
+import { BoardTaskSheet } from "./BoardTaskSheet";
 
 /**
- * Project Board fork: the board of the machine a connected server runs on, as the board app shows
- * it: master task › module › task, each with its plan's next step and the threads on it. Opening a
- * thread goes to that thread here.
+ * Project Board fork: the board app's main screen inside T3. One board of the machine a connected
+ * server runs on: a column per master task with its modules and tasks as notes, the level and
+ * service views, and the right panel. Chats on the board are T3 threads and open here.
  */
 export function BoardPage() {
   const gt = useGT();
@@ -59,13 +73,18 @@ export function BoardPage() {
   const boards = useEnvironmentQuery(
     environmentId === null ? null : boardEnvironment.boards({ environmentId, input: {} }),
   );
-  const boardId = search.board ?? boards.data?.[0]?.id ?? null;
+  // With one board there's nothing to pick; with several, the picker comes first.
+  const boardId =
+    search.board ?? (boards.data !== null && boards.data.length === 1 ? boards.data[0]!.id : null);
   const view = useEnvironmentQuery(
     environmentId === null || boardId === null
       ? null
       : boardEnvironment.view({ environmentId, input: { boardId } }),
   );
   const board = view.data;
+  const selectBoard = (next: string | undefined) =>
+    void navigate({ search: (previous) => ({ ...previous, board: next }) });
+
   const newThread = useNewThreadHandler();
   const linkThread = useAtomCommand(boardEnvironment.linkThread, { reportFailure: false });
   // A draft thread in the task's workspace, put on the task before its first turn so that turn
@@ -93,8 +112,13 @@ export function BoardPage() {
         description: formatEnvironmentQueryError(result.cause),
       });
   };
-  const selectBoard = (next: string) =>
-    void navigate({ search: (previous) => ({ ...previous, board: next }) });
+  const openThread = (chat: BoardChat) => {
+    if (chat.threadId === null || environmentId === null) return;
+    void navigate({
+      to: "/$environmentId/$threadId",
+      params: buildThreadRouteParams({ environmentId, threadId: chat.threadId }),
+    });
+  };
 
   const body =
     environmentId === null ? (
@@ -110,6 +134,8 @@ export function BoardPage() {
         title={gt("No boards on this machine")}
         detail={gt("Ask an agent in any thread to set up a board for its project.")}
       />
+    ) : boardId === null && boards.data !== null ? (
+      <BoardPicker boards={boards.data} onPick={selectBoard} />
     ) : board === null && view.error !== null ? (
       <BoardEmpty
         title={gt("Could not load the board")}
@@ -117,37 +143,24 @@ export function BoardPage() {
         onRetry={view.refresh}
       />
     ) : board === null ? (
-      <div className="grid gap-3">
-        <Skeleton className="h-24 w-full" />
-        <Skeleton className="h-24 w-full" />
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(18rem,1fr))] gap-4 p-4">
+        <Skeleton className="h-48" />
+        <Skeleton className="h-48" />
+        <Skeleton className="h-48" />
       </div>
     ) : (
-      <BoardBody
+      <BoardScreen
         board={board}
-        environmentId={environment!.environmentId}
-        onContinue={continueTask}
-        showDone={search.done === true}
-        onToggleDone={() =>
-          void navigate({
-            search: (previous) => ({
-              ...previous,
-              done: previous.done === true ? undefined : true,
-            }),
-          })
-        }
-        onOpenThread={(chat) => {
-          if (chat.threadId === null) return;
-          void navigate({
-            to: "/$environmentId/$threadId",
-            params: buildThreadRouteParams({
-              environmentId: environment!.environmentId,
-              threadId: chat.threadId,
-            }),
-          });
-        }}
+        environmentId={environmentId}
+        mode={search.view ?? "tree"}
+        filter={search.filter ?? "active"}
+        onOpenThread={openThread}
+        onContinue={(task, target) => void continueTask(task, target)}
       />
     );
 
+  const boardName =
+    board?.name ?? boards.data?.find((candidate) => candidate.id === boardId)?.name ?? null;
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
@@ -157,11 +170,26 @@ export function BoardPage() {
           className="relative bg-background"
         >
           <WorkspaceBreadcrumb ariaLabel={gt("Board breadcrumb")}>
-            <WorkspaceBreadcrumbItem current>
-              <h1 className="truncate">
-                <T context="page title, the Project Board">Board</T>
-              </h1>
+            <WorkspaceBreadcrumbItem current={boardName === null}>
+              {boardName === null ? (
+                <h1 className="truncate">
+                  <T context="page title, the Project Board">Board</T>
+                </h1>
+              ) : (
+                <button
+                  type="button"
+                  className="truncate hover:underline"
+                  onClick={() => selectBoard(undefined)}
+                >
+                  <T context="page title, the Project Board">Board</T>
+                </button>
+              )}
             </WorkspaceBreadcrumbItem>
+            {boardName !== null ? (
+              <WorkspaceBreadcrumbItem current>
+                <h1 className="truncate">{boardName}</h1>
+              </WorkspaceBreadcrumbItem>
+            ) : null}
           </WorkspaceBreadcrumb>
           <div className="min-w-0 flex-1" />
           {boards.data !== null && boards.data.length > 1 && boardId !== null ? (
@@ -171,9 +199,7 @@ export function BoardPage() {
                   aria-label={gt("Switch board")}
                   render={<Button variant="outline" size="sm" />}
                 >
-                  <span className="truncate">
-                    {boards.data.find((candidate) => candidate.id === boardId)?.name ?? boardId}
-                  </span>
+                  <span className="truncate">{boardName ?? boardId}</span>
                 </MenuTrigger>
                 <MenuPopup align="end">
                   <MenuRadioGroup
@@ -191,11 +217,7 @@ export function BoardPage() {
             </div>
           ) : null}
         </WorkspacePageHeader>
-        <div className="topbar-scroll-fade scrollbar-gutter-both min-h-0 flex-1 overflow-y-auto">
-          <WorkspacePageContainer width="expanded" className="min-h-full gap-4">
-            {body}
-          </WorkspacePageContainer>
-        </div>
+        <div className="min-h-0 flex-1">{body}</div>
       </div>
     </SidebarInset>
   );
@@ -226,196 +248,286 @@ function BoardEmpty(props: {
   );
 }
 
-function BoardBody(props: {
-  readonly board: BoardView;
-  readonly environmentId: EnvironmentId;
-  readonly showDone: boolean;
-  readonly onToggleDone: () => void;
-  readonly onOpenThread: (chat: BoardChat) => void;
-  readonly onContinue: (task: BoardTask, target: BoardContinueTarget) => void;
+function BoardPicker(props: {
+  readonly boards: ReadonlyArray<BoardSummary>;
+  readonly onPick: (boardId: string) => void;
 }) {
   const gt = useGT();
-  const canLink = useAtomValue(boardEnvironment.linkThread.permissionAtom(props.environmentId));
-  const rows = boardTaskTree(props.board.tasks, props.showDone);
-  const serviceName = new Map(props.board.services.map((service) => [service.id, service.name]));
-  const doneCount = props.board.tasks.filter((task) => task.status === "done").length;
   return (
-    <div className="@container/board">
-      <div className="grid gap-6 @3xl/board:grid-cols-[minmax(0,1fr)_18rem]">
-        <section className="grid content-start gap-3" aria-label={gt("Tasks")}>
-          <div className="flex items-center gap-2">
-            <h2 className="font-medium text-sm">{props.board.name}</h2>
-            <div className="flex-1" />
-            {doneCount > 0 ? (
-              <Button variant="ghost-muted" size="sm" onClick={props.onToggleDone}>
-                {props.showDone ? gt("Hide done") : gt("Show done ({count})", { count: doneCount })}
-              </Button>
-            ) : null}
-          </div>
-          {rows.length === 0 ? (
-            <BoardEmpty
-              title={gt("No tasks yet")}
-              detail={gt("Agents add tasks when you ask them to track work.")}
-            />
-          ) : (
-            rows.map(({ task, depth }) => (
-              <div key={task.id} style={{ marginInlineStart: `${depth * 1.5}rem` }}>
-                <BoardTaskCard
-                  task={task}
-                  serviceName={serviceName}
-                  onOpenThread={props.onOpenThread}
-                  continueTargets={
-                    canLink && task.status !== "done"
-                      ? boardContinueTargets(props.board.workspaces, task)
-                      : []
-                  }
-                  onContinue={(target) => props.onContinue(task, target)}
-                />
-              </div>
-            ))
-          )}
-        </section>
-        <aside className="grid content-start gap-2" aria-label={gt("Threads not on a task")}>
-          <h2 className="font-medium text-muted-foreground text-xs uppercase">
-            <T>Threads not on a task</T>
-          </h2>
-          {props.board.unlinked.length === 0 ? (
-            <p className="text-muted-foreground text-sm">
-              <T>Every open thread is on a task.</T>
-            </p>
-          ) : (
-            props.board.unlinked.map((chat) => (
-              <BoardChatRow key={chat.sessionId} chat={chat} onOpenThread={props.onOpenThread} />
-            ))
-          )}
-        </aside>
+    <div className="h-full overflow-y-auto p-6">
+      <h2 className="mb-4 font-medium text-lg">
+        <T>Boards on this machine</T>
+      </h2>
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(16rem,1fr))] gap-3">
+        {props.boards.map((candidate) => (
+          <button
+            key={candidate.id}
+            type="button"
+            className="grid gap-1 rounded-lg border bg-card p-4 text-start hover:bg-accent"
+            onClick={() => props.onPick(candidate.id)}
+          >
+            <span className="font-medium">{candidate.name}</span>
+            <span className="text-muted-foreground text-sm">
+              {gt("{count} tasks", { count: candidate.taskCount })}
+            </span>
+          </button>
+        ))}
       </div>
     </div>
   );
 }
 
-function BoardTaskCard(props: {
-  readonly task: BoardTask;
-  readonly serviceName: ReadonlyMap<string, string>;
+function BoardScreen(props: {
+  readonly board: BoardView;
+  readonly environmentId: EnvironmentId;
+  readonly mode: BoardViewMode;
+  readonly filter: BoardFilter;
   readonly onOpenThread: (chat: BoardChat) => void;
-  readonly continueTargets: ReadonlyArray<BoardContinueTarget>;
-  readonly onContinue: (target: BoardContinueTarget) => void;
+  readonly onContinue: (task: BoardTask, target: BoardContinueTarget) => void;
 }) {
   const gt = useGT();
-  const { task } = props;
-  const level = task.level === 1 ? gt("Master task") : task.level === 2 ? gt("Module") : gt("Task");
+  const navigate = useNavigate({ from: "/board" });
+  const { board } = props;
+  const index = indexBoard(board.tasks);
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const canLink = useAtomValue(boardEnvironment.linkThread.permissionAtom(props.environmentId));
+  const openTask = openTaskId === null ? null : (index.byId.get(openTaskId) ?? null);
+  const chatsById = new Map(
+    [...board.tasks.flatMap((task) => task.chats), ...board.unlinked].map((chat) => [
+      chat.sessionId,
+      chat,
+    ]),
+  );
+  const serviceName = (id: string) =>
+    board.services.find((service) => service.id === id)?.name ?? id;
+  const actions: BoardNoteActions = {
+    onOpenTask: (task) => setOpenTaskId(task.id),
+    canOpenChat: (sessionId) => (chatsById.get(sessionId)?.threadId ?? null) !== null,
+    onOpenChat: (sessionId) => {
+      const chat = chatsById.get(sessionId);
+      if (chat !== undefined) props.onOpenThread(chat);
+    },
+  };
+  const working = new Set(
+    [...chatsById.values()].filter((chat) => chat.live === "working").map((c) => c.workspaceLabel),
+  );
+  const collisions = collisionsOf(board.tasks, board.unlinked);
+  const setSearch = (patch: { view?: BoardViewMode; filter?: BoardFilter }) =>
+    void navigate({
+      search: (previous) => ({
+        ...previous,
+        ...("view" in patch ? { view: patch.view === "tree" ? undefined : patch.view } : {}),
+        ...("filter" in patch
+          ? { filter: patch.filter === "active" ? undefined : patch.filter }
+          : {}),
+      }),
+    });
+
   return (
-    <article className="grid gap-2 rounded-lg border bg-card p-3">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-muted-foreground text-xs uppercase">{level}</span>
-        {task.status === "paused" ? <Badge variant="outline">{gt("Paused")}</Badge> : null}
-        {task.status === "done" ? <Badge variant="secondary">{gt("Done")}</Badge> : null}
-      </div>
-      <h3 className="font-medium">{task.title}</h3>
-      {task.description ? (
-        <p className="text-muted-foreground text-sm">{task.description}</p>
-      ) : null}
-      {task.next !== null ? (
-        <p className="text-sm">
-          {gt("Next: {id} – {text}", { id: task.next.id, text: task.next.text })}
-        </p>
-      ) : null}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {task.steps.total > 0 ? (
-          <Badge variant="outline">
-            {gt("{done}/{total} steps", { done: task.steps.done, total: task.steps.total })}
-          </Badge>
-        ) : null}
-        {task.services.map((id) => (
-          <Badge key={id} variant="info">
-            {props.serviceName.get(id) ?? id}
-          </Badge>
-        ))}
-      </div>
-      {task.lastAction !== null ? (
-        <p className="text-muted-foreground text-xs">
-          {gt("Last action · {workspace} · {when}", {
-            workspace: task.lastAction.workspaceLabel,
-            when: formatRelativeTimeLabel(new Date(task.lastAction.at).toISOString()),
-          })}
-          <span className="block text-foreground text-sm">{task.lastAction.text}</span>
-        </p>
-      ) : null}
-      {task.chats.length > 0 ? (
-        <div className="grid gap-1">
-          {task.chats.map((chat) => (
-            <BoardChatRow key={chat.sessionId} chat={chat} onOpenThread={props.onOpenThread} />
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {board.workspaces.map((workspace) => (
+            <Tooltip key={workspace.root}>
+              <TooltipTrigger
+                render={
+                  <span
+                    className={
+                      working.has(workspace.label)
+                        ? "rounded-full border border-success/50 bg-success/15 px-2 py-0.5 text-xs"
+                        : "rounded-full border px-2 py-0.5 text-muted-foreground text-xs"
+                    }
+                  />
+                }
+              >
+                {workspace.label}
+                {working.has(workspace.label) ? " ●" : ""}
+              </TooltipTrigger>
+              <TooltipPopup>{workspace.root}</TooltipPopup>
+            </Tooltip>
           ))}
         </div>
-      ) : null}
-      <BoardContinueButton targets={props.continueTargets} onContinue={props.onContinue} />
-    </article>
+        {collisions.length > 0 ? (
+          <span className="flex items-center gap-1 text-warning-foreground text-xs">
+            <TriangleAlertIcon className="size-3.5" />
+            {collisions
+              .map((collision) =>
+                gt("{count} chats working in {workspace}", {
+                  count: collision.count,
+                  workspace: collision.workspace,
+                }),
+              )
+              .join(" · ")}
+          </span>
+        ) : null}
+        <div className="min-w-0 flex-1" />
+        <ToggleGroup
+          aria-label={gt("Board view")}
+          value={[props.mode]}
+          onValueChange={(next) => {
+            const value = next[0];
+            if (
+              value === "tree" ||
+              value === "1" ||
+              value === "2" ||
+              value === "3" ||
+              value === "svc"
+            )
+              setSearch({ view: value });
+          }}
+        >
+          <Toggle value="tree">{gt("Tree")}</Toggle>
+          <Toggle value="1">{gt("Level 1")}</Toggle>
+          <Toggle value="2">{gt("Level 2")}</Toggle>
+          <Toggle value="3">{gt("Level 3")}</Toggle>
+          <Toggle value="svc">{gt("By service")}</Toggle>
+        </ToggleGroup>
+        <ToggleGroup
+          aria-label={gt("Task status")}
+          value={[props.filter]}
+          onValueChange={(next) => {
+            const value = next[0];
+            if (value === "active" || value === "paused" || value === "done" || value === "all")
+              setSearch({ filter: value });
+          }}
+        >
+          <Toggle value="active">{gt("Active")}</Toggle>
+          <Toggle value="paused">{gt("Paused")}</Toggle>
+          <Toggle value="done">{gt("Done")}</Toggle>
+          <Toggle value="all">{gt("All")}</Toggle>
+        </ToggleGroup>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col @container/board lg:flex-row">
+        <div className="min-h-0 min-w-0 flex-1 overflow-auto p-4">
+          <BoardArea
+            index={index}
+            board={board}
+            mode={props.mode}
+            filter={props.filter}
+            serviceName={serviceName}
+            actions={actions}
+          />
+        </div>
+        <aside
+          aria-label={gt("Board panel")}
+          className="shrink-0 overflow-y-auto border-t bg-card/40 p-4 lg:w-80 lg:border-t-0 lg:border-l"
+        >
+          <BoardPanel
+            panel={panelOf(index, board.unlinked)}
+            onOpenTask={actions.onOpenTask}
+            onOpenChat={props.onOpenThread}
+          />
+        </aside>
+      </div>
+      <BoardTaskSheet
+        index={index}
+        task={openTask}
+        continueTargets={
+          openTask !== null && canLink && openTask.status !== "done"
+            ? boardContinueTargets(board.workspaces, openTask)
+            : []
+        }
+        onClose={() => setOpenTaskId(null)}
+        onOpenTask={actions.onOpenTask}
+        onOpenChat={props.onOpenThread}
+        onContinue={props.onContinue}
+      />
+    </div>
   );
 }
 
-function BoardChatRow(props: {
-  readonly chat: BoardChat;
-  readonly onOpenThread: (chat: BoardChat) => void;
+function BoardArea(props: {
+  readonly index: BoardIndex;
+  readonly board: BoardView;
+  readonly mode: BoardViewMode;
+  readonly filter: BoardFilter;
+  readonly serviceName: (id: string) => string;
+  readonly actions: BoardNoteActions;
 }) {
   const gt = useGT();
-  const { chat } = props;
-  const live =
-    chat.live === "working"
-      ? gt("Working")
-      : chat.live === "idle"
-        ? gt("Idle")
-        : chat.live === "ended"
-          ? gt("Ended")
-          : gt("Offline");
-  const label = (
-    <span className="flex w-full min-w-0 items-center gap-2 text-start">
-      <span className="text-muted-foreground text-xs">{live}</span>
-      <span className="min-w-0 flex-1 truncate">{chat.title || chat.sessionId}</span>
-      <span className="text-muted-foreground text-xs">{chat.provider ?? chat.workspaceLabel}</span>
-    </span>
-  );
-  // Claude Code chats and threads of another install can't open here.
-  return chat.threadId !== null ? (
-    <Button variant="ghost" size="sm" className="w-full" onClick={() => props.onOpenThread(chat)}>
-      {label}
-    </Button>
-  ) : (
-    <div className="px-2 text-sm">{label}</div>
-  );
-}
-
-function BoardContinueButton(props: {
-  readonly targets: ReadonlyArray<BoardContinueTarget>;
-  readonly onContinue: (target: BoardContinueTarget) => void;
-}) {
-  const [only, ...rest] = props.targets;
-  if (only === undefined) return null;
-  const label = (
-    <>
-      <MessageSquarePlusIcon />
-      <T>Continue in new thread</T>
-    </>
-  );
-  if (rest.length === 0)
+  const { index, filter } = props;
+  if (props.mode === "svc") {
+    const columns = serviceColumns(index, props.board.services, filter);
+    if (columns.length === 0)
+      return (
+        <BoardEmpty
+          title={gt("No tasks are tagged with a service yet")}
+          detail={gt(
+            "Tags are added when a thread edits files in a service's folder, or set on a task.",
+          )}
+        />
+      );
     return (
-      <div>
-        <Button variant="outline" size="sm" onClick={() => props.onContinue(only)}>
-          {label}
-        </Button>
+      <div className="flex items-start gap-4">
+        {columns.map((column) => (
+          <section key={column.service?.id ?? ""} className="grid w-72 shrink-0 gap-2">
+            <header className="grid gap-0.5">
+              <span className="flex items-center justify-between font-medium text-sm">
+                {column.service?.name ?? gt("No service yet")}
+                <span className="rounded-full bg-muted px-2 text-xs">{column.tasks.length}</span>
+              </span>
+              {column.service !== null ? (
+                <span className="truncate font-mono text-muted-foreground text-xs">
+                  {column.service.match.join(" · ")}
+                </span>
+              ) : null}
+            </header>
+            {column.tasks.map((task) => (
+              <BoardServiceRow key={task.id} index={index} task={task} actions={props.actions} />
+            ))}
+          </section>
+        ))}
       </div>
     );
+  }
+  if (props.mode === "tree") {
+    const roots = treeRoots(index, filter);
+    if (roots.length === 0)
+      return (
+        <BoardEmpty
+          title={index.tasks.length === 0 ? gt("No tasks yet") : gt("No tasks here")}
+          detail={
+            index.tasks.length === 0
+              ? gt("Agents add tasks when you ask them to track work.")
+              : undefined
+          }
+        />
+      );
+    return (
+      <div className="flex items-start gap-4">
+        {roots.map((root) => (
+          <section key={root.id} className="grid w-80 shrink-0 gap-3">
+            <BoardNote
+              index={index}
+              task={root}
+              serviceName={props.serviceName}
+              actions={props.actions}
+            />
+            {index.kidsOf(root.id).map((module) => (
+              <div key={module.id} className="ms-3">
+                <BoardModuleNote index={index} task={module} actions={props.actions} />
+              </div>
+            ))}
+          </section>
+        ))}
+      </div>
+    );
+  }
+  const level = Number(props.mode);
+  const list = index.tasks.filter((task) => task.level === level && statusMatches(filter, task));
+  if (list.length === 0) return <BoardEmpty title={gt("No tasks here")} />;
   return (
-    <div>
-      <Menu>
-        <MenuTrigger render={<Button variant="outline" size="sm" />}>{label}</MenuTrigger>
-        <MenuPopup align="start">
-          {props.targets.map((target) => (
-            <MenuItem key={target.projectId} onClick={() => props.onContinue(target)}>
-              {target.label}
-            </MenuItem>
-          ))}
-        </MenuPopup>
-      </Menu>
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(18rem,1fr))] items-start gap-4">
+      {list.map((task) => (
+        <BoardNote
+          key={task.id}
+          index={index}
+          task={task}
+          serviceName={props.serviceName}
+          actions={props.actions}
+          showParents
+        />
+      ))}
     </div>
   );
 }

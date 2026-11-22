@@ -2653,3 +2653,34 @@ code {
 .messages-timeline-scroll:focus-visible {
   outline: none;
 }
+
+/* Project Board fork: the board app's sticky-note colours, light and dark. */
+@theme inline {
+  --color-board-note-1: var(--board-note-1);
+  --color-board-note-2: var(--board-note-2);
+  --color-board-note-3: var(--board-note-3);
+  --color-board-note-4: var(--board-note-4);
+  --color-board-note-5: var(--board-note-5);
+  --color-board-note-6: var(--board-note-6);
+  --color-board-note-ink: var(--board-note-ink);
+}
+
+:root {
+  --board-note-1: #fff1a8;
+  --board-note-2: #d6f0d9;
+  --board-note-3: #d9e7fb;
+  --board-note-4: #fadbd6;
+  --board-note-5: #e6ddf7;
+  --board-note-6: #fde2c3;
+  --board-note-ink: #2a2721;
+}
+
+.dark {
+  --board-note-1: #4a4425;
+  --board-note-2: #2b4432;
+  --board-note-3: #2b3a52;
+  --board-note-4: #4d302b;
+  --board-note-5: #3b3350;
+  --board-note-6: #4d3a24;
+  --board-note-ink: #f1ede4;
+}

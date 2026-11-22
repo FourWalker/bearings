@@ -1,47 +1,182 @@
-﻿import { type BoardTask, ProjectId } from "@t3tools/contracts";
+﻿import { type BoardChat, type BoardTask, ProjectId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { boardContinueTargets, boardSearchFromUrl, boardTaskTree } from "./board.logic";
+import {
+  boardContinueTargets,
+  boardSearchFromUrl,
+  chatStatusOf,
+  collisionsOf,
+  flagsOf,
+  indexBoard,
+  levelKindOf,
+  ownerHolderOf,
+  panelOf,
+  serviceColumns,
+  treeRoots,
+} from "./board.logic";
 
-const task = (id: string, parentId: string | null, status: BoardTask["status"] = "active") =>
-  ({ id, parentId, status }) as BoardTask;
+const task = (id: string, patch: Partial<BoardTask> = {}): BoardTask => ({
+  id,
+  title: id,
+  description: "",
+  status: "active",
+  level: 1,
+  parentId: null,
+  kind: null,
+  bug: false,
+  mainService: null,
+  services: [],
+  lastAction: null,
+  next: null,
+  steps: { done: 0, total: 0 },
+  chats: [],
+  items: [],
+  decisions: [],
+  links: [],
+  owner: null,
+  createdAt: 0,
+  updatedAt: 0,
+  ownerRoot: null,
+  ...patch,
+});
 
-describe("boardTaskTree", () => {
-  it("nests modules and tasks under their parents and keeps orphans visible", () => {
-    const tasks = [
-      task("checkout", null),
-      task("payments", "checkout"),
-      task("refunds", "payments"),
-      task("orphan", "gone"),
-      task("old", null, "done"),
-      task("old-child", "old"),
-    ];
-    expect(boardTaskTree(tasks, false).map((r) => [r.task.id, r.depth])).toEqual([
-      ["checkout", 0],
-      ["payments", 1],
-      ["refunds", 2],
-      ["orphan", 0],
-      // Its parent is done and hidden; it still shows.
-      ["old-child", 0],
+const chat = (sessionId: string, patch: Partial<BoardChat> = {}): BoardChat => ({
+  sessionId,
+  title: sessionId,
+  live: "idle",
+  workspaceLabel: "main",
+  taskId: null,
+  updatedAt: 0,
+  threadId: null,
+  provider: null,
+  turnStartedAt: 0,
+  ...patch,
+});
+
+describe("board tree", () => {
+  it("puts master tasks and orphans in columns, children oldest first, and reads levels", () => {
+    const index = indexBoard([
+      task("checkout"),
+      task("refunds", { level: 2, parentId: "checkout", createdAt: 2 }),
+      task("payments", { level: 2, parentId: "checkout", createdAt: 1 }),
+      task("orphan", { level: 3, parentId: "gone" }),
+      task("old", { status: "done" }),
+      task("api", { kind: "backlog" }),
+      task("retry-bug", { level: 2, parentId: "api" }),
     ]);
-    expect(boardTaskTree(tasks, true).map((r) => r.task.id)).toEqual([
-      "checkout",
-      "payments",
-      "refunds",
-      "orphan",
-      "old",
-      "old-child",
+    expect(treeRoots(index, "active").map((t) => t.id)).toEqual(["checkout", "orphan", "api"]);
+    expect(treeRoots(index, "all").map((t) => t.id)).toContain("old");
+    expect(index.kidsOf("checkout").map((t) => t.id)).toEqual(["payments", "refunds"]);
+    const kinds = ["checkout", "api", "payments", "retry-bug", "orphan"].map((id) =>
+      levelKindOf(index, index.byId.get(id)!),
+    );
+    expect(kinds).toEqual(["master", "backlog", "module", "backlogItem", "task"]);
+  });
+
+  it("flags blockers, fixes and the owner a task inherits", () => {
+    const index = indexBoard([
+      task("feature", { owner: { root: "d:/nfx-b", label: "b", state: "owned" } }),
+      task("module", { level: 2, parentId: "feature" }),
+      task("a", {
+        level: 3,
+        parentId: "module",
+        links: [{ to: "b", type: "blocked_by", note: "" }],
+      }),
+      task("b", { level: 3, parentId: "module" }),
+      task("shipped", { level: 3, parentId: "module", status: "done" }),
+      task("fix", { bug: true, links: [{ to: "shipped", type: "fixes", note: "" }] }),
     ]);
+    const flags = (id: string) => flagsOf(index, index.byId.get(id)!);
+    expect(flags("a").blockedBy.map((t) => t.id)).toEqual(["b"]);
+    expect(flags("module")).toMatchObject({ blockedBelow: 1, openFixesBelow: 1 });
+    expect(flags("shipped").openFixes).toBe(1);
+    expect(flags("fix").fixes?.id).toBe("shipped");
+    expect(ownerHolderOf(index, index.byId.get("a")!)?.id).toBe("feature");
   });
 });
 
-describe("boardSearchFromUrl", () => {
-  it("keeps only meaningful values", () => {
-    expect(boardSearchFromUrl({ board: "nefx", env: "", done: "true", x: 1 })).toEqual({
-      env: undefined,
-      board: "nefx",
-      done: true,
+describe("chat status", () => {
+  it("rolls working chats up from subtasks", () => {
+    const index = indexBoard([
+      task("feature", { chats: [chat("s1", { live: "idle" })] }),
+      task("module", {
+        level: 2,
+        parentId: "feature",
+        chats: [chat("s2", { live: "working", workspaceLabel: "b", turnStartedAt: 50 })],
+      }),
+    ]);
+    expect(chatStatusOf(index, index.byId.get("feature")!, 100)).toEqual({
+      kind: "working",
+      workspaces: ["b"],
+      since: 50,
+      inSubtasks: 1,
     });
+    expect(chatStatusOf(index, indexBoard([task("x")]).byId.get("x")!, 0)).toEqual({
+      kind: "none",
+    });
+  });
+
+  it("warns when two chats work in one workspace copy", () => {
+    const tasks = [task("t", { chats: [chat("s1", { live: "working" })] })];
+    expect(collisionsOf(tasks, [chat("s2", { live: "working" })])).toEqual([
+      { workspace: "main", count: 2 },
+    ]);
+    expect(collisionsOf(tasks, [chat("s2", { live: "idle" })])).toEqual([]);
+  });
+});
+
+describe("panelOf", () => {
+  it("collects open items and decisions from unfinished tasks, and open unlinked chats", () => {
+    const index = indexBoard([
+      task("live", {
+        items: [
+          { id: "1", kind: "mandatory", text: "Keep ids", done: false },
+          { id: "2", kind: "todo", text: "Docs", done: true },
+          { id: "3", kind: "decision", text: "Old style", done: false },
+        ],
+        decisions: [
+          { id: "d", title: "UUIDs?", status: "open", level: 2, raisedFrom: null, r: null },
+          { id: "e", title: "Done", status: "decided", level: 1, raisedFrom: null, r: "R1" },
+        ],
+      }),
+      task("finished", {
+        status: "done",
+        items: [{ id: "4", kind: "mandatory", text: "Hidden", done: false }],
+      }),
+    ]);
+    const panel = panelOf(index, [chat("open"), chat("gone", { live: "ended" })]);
+    expect(panel.mandatory.map((e) => e.text)).toEqual(["Keep ids"]);
+    expect(panel.decisions.map((e) => [e.text, e.level])).toEqual([
+      ["UUIDs?", 2],
+      ["Old style", undefined],
+    ]);
+    expect(panel.todo).toEqual([]);
+    expect(panel.unlinked.map((c) => c.sessionId)).toEqual(["open"]);
+  });
+});
+
+describe("serviceColumns", () => {
+  it("lists tagged tasks per service, then untagged Level 3 tasks", () => {
+    const index = indexBoard([
+      task("a", { mainService: "api", services: ["api", "web"] }),
+      task("b", { level: 3, parentId: "a" }),
+      task("c", { level: 2, parentId: "a" }),
+    ]);
+    const services = [
+      { id: "api", name: "API", match: ["api"] },
+      { id: "web", name: "Web", match: ["web"] },
+      { id: "db", name: "DB", match: ["db"] },
+    ];
+    expect(
+      serviceColumns(index, services, "active").map((c) => [
+        c.service?.id ?? null,
+        c.tasks.map((t) => t.id),
+      ]),
+    ).toEqual([
+      ["api", ["a"]],
+      ["web", ["a"]],
+      [null, ["b"]],
+    ]);
   });
 });
 
@@ -61,5 +196,16 @@ describe("boardContinueTargets", () => {
     ]);
     // Owned by a copy this server has no project for: nowhere to start.
     expect(boardContinueTargets(workspaces, { ownerRoot: "e:/nfx" })).toEqual([]);
+  });
+});
+
+describe("boardSearchFromUrl", () => {
+  it("keeps only known views and filters", () => {
+    expect(boardSearchFromUrl({ board: "nefx", env: "", view: 2, filter: "nope" })).toEqual({
+      env: undefined,
+      board: "nefx",
+      view: "2",
+      filter: undefined,
+    });
   });
 });
