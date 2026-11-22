@@ -7,6 +7,8 @@
  */
 import {
   type BoardCreateTaskInput,
+  type BoardEditBoardInput,
+  type BoardSettings,
   BoardEditFailure,
   type BoardEditResult,
   type BoardEditTaskInput,
@@ -26,6 +28,7 @@ import {
   BoardChat,
   BoardEditError,
   createTask as createBoardTask,
+  editBoard as editBoardSettings,
   editTask as editBoardTask,
   type BoardGit,
   BoardStore,
@@ -61,6 +64,12 @@ export class BoardService extends Context.Service<
     ) => Effect.Effect<BoardEditResult, BoardEditFailure>;
     readonly createTask: (
       input: BoardCreateTaskInput,
+    ) => Effect.Effect<BoardEditResult, BoardEditFailure>;
+    readonly settings: (input: {
+      readonly boardId: string;
+    }) => Effect.Effect<BoardSettings, BoardReadError>;
+    readonly editBoard: (
+      input: BoardEditBoardInput,
     ) => Effect.Effect<BoardEditResult, BoardEditFailure>;
     readonly linkThread: (input: BoardLinkThreadInput) => Effect.Effect<void, BoardLinkError>;
   }
@@ -204,7 +213,7 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
     const result = yield* editLock.withLock(
       input.boardId,
       Effect.tryPromise({
-        try: () => editBoardTask(store, input.boardId, input.taskId, input.edit, APP),
+        try: () => editBoardTask(store, input.boardId, input.taskId, input.edit, APP, git),
         catch: editFailed,
       }),
     );
@@ -222,6 +231,33 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
       }),
     );
     return { message: `Created "${task.title}".`, createdId: task.id };
+  });
+
+  const settings = Effect.fn("BoardService.settings")(function* (input: {
+    readonly boardId: string;
+  }) {
+    const reg = yield* Effect.tryPromise({ try: () => store.loadRegistry(), catch: failed });
+    const board = reg.boards.find((b) => b.id === input.boardId);
+    if (!board) return yield* new BoardReadError({ reason: "not-found", detail: "No such board." });
+    return {
+      name: board.name,
+      roots: board.roots.map((r) => ({ path: norm(r.path), label: r.label })),
+      services: (board.services ?? []).map((s) => ({ id: s.id, name: s.name, match: s.match })),
+      rules: board.rules ?? "",
+      boardMode: !!board.boardMode,
+      registers: (board.registers ?? []).map((r) => ({ id: r.id, topic: r.topic, url: r.url })),
+    } satisfies BoardSettings;
+  });
+
+  const editBoard = Effect.fn("BoardService.editBoard")(function* (input: BoardEditBoardInput) {
+    const result = yield* editLock.withLock(
+      input.boardId,
+      Effect.tryPromise({
+        try: () => editBoardSettings(store, input.boardId, input.edit),
+        catch: editFailed,
+      }),
+    );
+    return { message: result.message, createdId: null };
   });
 
   // Only a thread with no turn yet: a running thread's open board chat holds its own link.
@@ -262,7 +298,16 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
     }).pipe(Effect.flatMap((error) => (error === null ? Effect.void : Effect.fail(error))));
   });
 
-  return BoardService.of({ list, view, taskDetail, editTask, createTask, linkThread });
+  return BoardService.of({
+    list,
+    view,
+    taskDetail,
+    editTask,
+    createTask,
+    settings,
+    editBoard,
+    linkThread,
+  });
 });
 
 export const layer = Layer.effect(

@@ -184,8 +184,10 @@ import {
 import { KeybindingsConfigError } from "./keybindings.ts";
 import {
   BoardCreateTaskInput,
+  BoardEditBoardInput,
   BoardEditFailure,
   BoardEditResult,
+  BoardSettings,
   BoardEditTaskInput,
   BoardLinkError,
   BoardLinkThreadInput,
@@ -701,6 +703,8 @@ export const WS_METHODS = {
   boardTaskDetail: "board.taskDetail",
   boardEditTask: "board.editTask",
   boardCreateTask: "board.createTask",
+  boardSettings: "board.settings",
+  boardEditBoard: "board.editBoard",
   boardLinkThread: "board.linkThread",
 
   sourceControlLookupRepository: "sourceControl.lookupRepository",
@@ -1532,6 +1536,20 @@ const WsBoardEditTaskRpc = Rpc.make(WS_METHODS.boardEditTask, {
 /** Project Board fork: a new master task on a board. */
 const WsBoardCreateTaskRpc = Rpc.make(WS_METHODS.boardCreateTask, {
   payload: BoardCreateTaskInput,
+  success: BoardEditResult,
+  error: BoardEditRpcError,
+});
+
+/** Project Board fork: a board's settings, for ⚙. */
+const WsBoardSettingsRpc = Rpc.make(WS_METHODS.boardSettings, {
+  payload: BoardViewInput,
+  success: BoardSettings,
+  error: BoardRpcError,
+});
+
+/** Project Board fork: one change to a board's settings. */
+const WsBoardEditBoardRpc = Rpc.make(WS_METHODS.boardEditBoard, {
+  payload: BoardEditBoardInput,
   success: BoardEditResult,
   error: BoardEditRpcError,
 });
@@ -2457,6 +2475,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsBoardTaskDetailRpc,
   WsBoardEditTaskRpc,
   WsBoardCreateTaskRpc,
+  WsBoardSettingsRpc,
+  WsBoardEditBoardRpc,
   WsBoardLinkThreadRpc,
   WsGuestShareCreateRpc,
   WsServerProbeRpc,

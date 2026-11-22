@@ -26,7 +26,7 @@ import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "~/c
 import { SidebarInset } from "~/components/ui/sidebar";
 import { Skeleton } from "~/components/ui/skeleton";
 import { toastManager } from "~/components/ui/toast";
-import { Sheet, SheetHeader, SheetPopup, SheetTitle } from "~/components/ui/sheet";
+import { Dialog, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { WorkspaceBreadcrumb, WorkspaceBreadcrumbItem } from "~/components/WorkspaceBreadcrumb";
@@ -54,6 +54,7 @@ import {
 } from "./board.logic";
 import { type BoardNoteActions, BoardModuleNote, BoardNote, BoardServiceRow } from "./BoardNotes";
 import { BoardPanel } from "./BoardPanel";
+import { BoardSettingsButton } from "./BoardSettingsDialog";
 import { BoardTaskView } from "./BoardTaskView";
 
 /**
@@ -156,7 +157,8 @@ export function BoardPage() {
         environmentId={environmentId}
         mode={search.view ?? "tree"}
         filter={search.filter ?? "active"}
-        taskId={search.task ?? null}
+        pageId={search.task ?? null}
+        modalId={search.open ?? null}
         onChanged={view.refresh}
         onOpenThread={openThread}
         onContinue={(task, target) => void continueTask(task, target)}
@@ -286,7 +288,8 @@ function BoardScreen(props: {
   readonly environmentId: EnvironmentId;
   readonly mode: BoardViewMode;
   readonly filter: BoardFilter;
-  readonly taskId: string | null;
+  readonly pageId: string | null;
+  readonly modalId: string | null;
   /** Re-reads the board after an edit. */
   readonly onChanged: () => void;
   readonly onOpenThread: (chat: BoardChat) => void;
@@ -297,10 +300,36 @@ function BoardScreen(props: {
   const { board } = props;
   const index = indexBoard(board.tasks);
   const canLink = useAtomValue(boardEnvironment.linkThread.permissionAtom(props.environmentId));
-  const openTask = props.taskId === null ? null : (index.byId.get(props.taskId) ?? null);
-  // In the URL, so the back button and a shared link reopen the same task.
-  const setOpenTask = (taskId: string | undefined) =>
-    void navigate({ search: (previous) => ({ ...previous, task: taskId }) });
+  // As in the board app: a master task opens as a page in place of the board; a module or task
+  // opens in a modal over whatever is showing. Both are in the URL, so back and shared links work.
+  const byId = (id: string | null) => (id === null ? null : (index.byId.get(id) ?? null));
+  // A task that becomes a master task (promoted, moved to the top) moves to its own page.
+  const linked = byId(props.pageId);
+  const opened = byId(props.modalId);
+  const pageTask = opened?.level === 1 ? opened : linked?.level === 1 ? linked : null;
+  const modalTask =
+    opened !== null && opened.level > 1
+      ? opened
+      : linked !== null && linked.level > 1
+        ? linked
+        : null;
+  const openTask = (task: BoardTask) =>
+    void navigate({
+      search: (previous) =>
+        task.level === 1
+          ? { ...previous, task: task.id, open: undefined }
+          : { ...previous, open: task.id },
+    });
+  const closePage = () =>
+    void navigate({ search: (previous) => ({ ...previous, task: undefined, open: undefined }) });
+  const closeModal = () =>
+    void navigate({
+      search: (previous) => ({
+        ...previous,
+        open: undefined,
+        task: pageTask === null ? undefined : previous.task,
+      }),
+    });
   const chatsById = new Map(
     [...board.tasks.flatMap((task) => task.chats), ...board.unlinked].map((chat) => [
       chat.sessionId,
@@ -310,7 +339,7 @@ function BoardScreen(props: {
   const serviceName = (id: string) =>
     board.services.find((service) => service.id === id)?.name ?? id;
   const actions: BoardNoteActions = {
-    onOpenTask: (task) => setOpenTask(task.id),
+    onOpenTask: openTask,
     canOpenChat: (sessionId) => (chatsById.get(sessionId)?.threadId ?? null) !== null,
     onOpenChat: (sessionId) => {
       const chat = chatsById.get(sessionId);
@@ -332,7 +361,7 @@ function BoardScreen(props: {
       }),
     });
 
-  const taskView = (task: BoardTask) => (
+  const taskView = (task: BoardTask, onClose: () => void) => (
     <BoardTaskView
       key={task.id}
       index={index}
@@ -346,14 +375,34 @@ function BoardScreen(props: {
       }
       onContinue={(target) => props.onContinue(task, target)}
       onOpenThread={props.onOpenThread}
-      onClose={() => setOpenTask(undefined)}
+      onClose={onClose}
       onChanged={props.onChanged}
     />
   );
 
-  // A master task replaces the board with its own page, as in the board app.
-  if (openTask !== null && openTask.level === 1)
-    return <div className="@container/task h-full min-h-0">{taskView(openTask)}</div>;
+  const modal = (
+    <Dialog
+      open={modalTask !== null}
+      onOpenChange={(open) => {
+        if (!open) closeModal();
+      }}
+    >
+      <DialogPopup showCloseButton={false} className="h-[90dvh] w-[min(96vw,72rem)] sm:max-w-none">
+        <DialogTitle className="sr-only">{modalTask?.title ?? ""}</DialogTitle>
+        <div className="@container/task h-full min-h-0 overflow-hidden">
+          {modalTask !== null ? taskView(modalTask, closeModal) : null}
+        </div>
+      </DialogPopup>
+    </Dialog>
+  );
+
+  if (pageTask !== null)
+    return (
+      <div className="@container/task h-full min-h-0">
+        {taskView(pageTask, closePage)}
+        {modal}
+      </div>
+    );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -393,12 +442,19 @@ function BoardScreen(props: {
           </span>
         ) : null}
         <div className="min-w-0 flex-1" />
+        <BoardSettingsButton
+          environmentId={props.environmentId}
+          boardId={board.id}
+          onChanged={props.onChanged}
+        />
         <NewTaskButton
           environmentId={props.environmentId}
           boardId={board.id}
           onCreated={(taskId) => {
             props.onChanged();
-            setOpenTask(taskId);
+            void navigate({
+              search: (previous) => ({ ...previous, task: taskId, open: undefined }),
+            });
           }}
         />
         <ToggleGroup
@@ -459,21 +515,7 @@ function BoardScreen(props: {
           />
         </aside>
       </div>
-      <Sheet
-        open={openTask !== null}
-        onOpenChange={(open) => {
-          if (!open) setOpenTask(undefined);
-        }}
-      >
-        <SheetPopup side="right" showCloseButton={false} className="w-[min(96vw,64rem)]">
-          <SheetHeader className="sr-only">
-            <SheetTitle>{openTask?.title ?? ""}</SheetTitle>
-          </SheetHeader>
-          <div className="@container/task h-full min-h-0">
-            {openTask !== null ? taskView(openTask) : null}
-          </div>
-        </SheetPopup>
-      </Sheet>
+      {modal}
     </div>
   );
 }
@@ -538,7 +580,7 @@ function BoardArea(props: {
     return (
       <div className="flex items-start gap-4">
         {roots.map((root) => (
-          <section key={root.id} className="grid w-80 shrink-0 gap-3">
+          <section key={root.id} className="grid w-80 shrink-0 grid-cols-[minmax(0,1fr)] gap-3">
             <BoardNote
               index={index}
               task={root}

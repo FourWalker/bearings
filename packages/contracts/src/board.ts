@@ -181,6 +181,16 @@ export const BoardTaskDetail = Schema.Struct({
       group: Schema.Literals(["own", "up", "inherited"]),
       r: Schema.NullOr(Schema.String),
       area: Schema.String,
+      /** A decided recommendation's record of how it was built. */
+      implemented: Schema.NullOr(
+        Schema.Struct({
+          problem: Schema.String,
+          approach: Schema.String,
+          api: Schema.String,
+          code: Schema.String,
+          tests: Schema.String,
+        }),
+      ),
       decidedAt: Schema.NullOr(Schema.Number),
       raisedFrom: Schema.NullOr(TaskRef),
       filedOn: TaskRef,
@@ -286,6 +296,30 @@ export const BoardTaskEdit = Schema.Union([
     action: Schema.Literals(["decide", "drop", "reopen"]),
     verdict: Schema.optional(Schema.String),
   }),
+  Schema.Struct({
+    op: Schema.Literal("updateDecision"),
+    decisionId: Schema.String,
+    title: Schema.optional(Schema.String),
+    description: Schema.optional(Schema.String),
+    options: Schema.optional(Schema.String),
+    refs: Schema.optional(Schema.Array(Schema.String)),
+  }),
+  Schema.Struct({
+    op: Schema.Literal("implemented"),
+    decisionId: Schema.String,
+    problem: Schema.String,
+    approach: Schema.String,
+    api: Schema.String,
+    code: Schema.String,
+    tests: Schema.String,
+  }),
+  /** Re-parents the task (null: a master task); its subtasks move with it. */
+  Schema.Struct({ op: Schema.Literal("move"), parentId: Schema.NullOr(Schema.String) }),
+  Schema.Struct({ op: Schema.Literal("promote") }),
+  /** Gives the task's module or master task to a workspace copy (by root), or releases it. */
+  Schema.Struct({ op: Schema.Literal("setOwner"), root: Schema.NullOr(Schema.String) }),
+  Schema.Struct({ op: Schema.Literal("softRelease") }),
+  Schema.Struct({ op: Schema.Literal("reclaim") }),
 ]);
 export type BoardTaskEdit = typeof BoardTaskEdit.Type;
 
@@ -295,6 +329,58 @@ export const BoardEditTaskInput = Schema.Struct({
   edit: BoardTaskEdit,
 });
 export type BoardEditTaskInput = typeof BoardEditTaskInput.Type;
+
+/** A change to a board's own settings (⚙). */
+export const BoardSettingsEdit = Schema.Union([
+  Schema.Struct({ op: Schema.Literal("rename"), name: Schema.String }),
+  Schema.Struct({ op: Schema.Literal("addRoot"), path: Schema.String, label: Schema.String }),
+  Schema.Struct({ op: Schema.Literal("removeRoot"), path: Schema.String }),
+  Schema.Struct({ op: Schema.Literal("labelRoot"), path: Schema.String, label: Schema.String }),
+  Schema.Struct({
+    op: Schema.Literal("saveServices"),
+    services: Schema.Array(
+      Schema.Struct({
+        id: Schema.optional(Schema.String),
+        name: Schema.String,
+        match: Schema.Array(Schema.String),
+      }),
+    ),
+  }),
+  Schema.Struct({ op: Schema.Literal("saveRules"), rules: Schema.String }),
+  Schema.Struct({ op: Schema.Literal("setBoardMode"), on: Schema.Boolean }),
+  Schema.Struct({
+    op: Schema.Literal("saveRegisters"),
+    registers: Schema.Array(
+      Schema.Struct({
+        id: Schema.optional(Schema.String),
+        topic: Schema.String,
+        url: Schema.String,
+      }),
+    ),
+  }),
+]);
+export type BoardSettingsEdit = typeof BoardSettingsEdit.Type;
+
+export const BoardEditBoardInput = Schema.Struct({
+  boardId: Schema.String,
+  edit: BoardSettingsEdit,
+});
+export type BoardEditBoardInput = typeof BoardEditBoardInput.Type;
+
+/** A board's settings as ⚙ edits them: the parts the board screen leaves out. */
+export const BoardSettings = Schema.Struct({
+  name: Schema.String,
+  roots: Schema.Array(Schema.Struct({ path: Schema.String, label: Schema.String })),
+  services: Schema.Array(
+    Schema.Struct({ id: Schema.String, name: Schema.String, match: Schema.Array(Schema.String) }),
+  ),
+  rules: Schema.String,
+  boardMode: Schema.Boolean,
+  registers: Schema.Array(
+    Schema.Struct({ id: Schema.String, topic: Schema.String, url: Schema.String }),
+  ),
+});
+export type BoardSettings = typeof BoardSettings.Type;
 
 export const BoardCreateTaskInput = Schema.Struct({
   boardId: Schema.String,

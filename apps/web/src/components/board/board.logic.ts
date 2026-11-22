@@ -9,8 +9,10 @@ export interface BoardSearch {
   readonly board?: string | undefined;
   readonly view?: BoardViewMode | undefined;
   readonly filter?: BoardFilter | undefined;
-  /** The task whose view is open: a page for a master task, a side view for the rest. */
+  /** The master task whose page is open, in place of the board. */
   readonly task?: string | undefined;
+  /** The module or task open in a modal, over the board or a master task's page. */
+  readonly open?: string | undefined;
 }
 
 const VIEWS: ReadonlyArray<string> = ["tree", "1", "2", "3", "svc"];
@@ -31,6 +33,7 @@ export function boardSearchFromUrl(search: Record<string, unknown>): BoardSearch
     view: view !== undefined && VIEWS.includes(view) ? (view as BoardViewMode) : undefined,
     filter: filter !== undefined && FILTERS.includes(filter) ? (filter as BoardFilter) : undefined,
     task: text(search.task),
+    open: text(search.open),
   };
 }
 

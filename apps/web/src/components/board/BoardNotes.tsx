@@ -273,7 +273,7 @@ function NoteFrame(props: {
         }
       }}
       className={cn(
-        "grid cursor-pointer gap-1.5 rounded-lg p-3 text-board-note-ink shadow-sm outline-none ring-ring focus-visible:ring-2 focus-visible:ring-inset",
+        "grid min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)] gap-1.5 rounded-lg p-3 text-board-note-ink shadow-sm outline-none ring-ring wrap-anywhere focus-visible:ring-2 focus-visible:ring-inset",
         colourOf(props.task.id),
         props.task.status === "done" && "opacity-60",
         props.className,
@@ -449,7 +449,7 @@ export function BoardModuleNote(props: {
       <h3 className="font-semibold leading-tight">{task.title}</h3>
       <PlanLine task={task} showEmpty={false} />
       {kids.length > 0 ? (
-        <div className="grid gap-0.5">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-0.5">
           {kids.map((kid) => (
             <BoardTaskRow key={kid.id} index={index} task={kid} actions={props.actions} />
           ))}

@@ -7,6 +7,7 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
 import { Input } from "~/components/ui/input";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import {
   Select,
   SelectItem,
@@ -600,6 +601,214 @@ export function VerdictControls(props: {
       >
         <T>Drop</T>
       </Button>
+    </form>
+  );
+}
+
+/** Moves the task under another master task or module, or to the top level. */
+export function MoveMenu(props: {
+  readonly targets: ReadonlyArray<{ readonly id: string; readonly label: string }>;
+  readonly canBeTopLevel: boolean;
+}) {
+  const gt = useGT();
+  const { canEdit, edit } = useBoardEdit();
+  if (!canEdit) return null;
+  return (
+    <Menu>
+      <MenuTrigger render={<Button variant="outline" size="xs" />}>
+        <T>Move…</T>
+      </MenuTrigger>
+      <MenuPopup align="end" className="max-h-80 overflow-y-auto">
+        {props.canBeTopLevel ? (
+          <MenuItem onClick={() => void edit({ op: "move", parentId: null })}>
+            {gt("Top level (master task)")}
+          </MenuItem>
+        ) : null}
+        {props.targets.map((target) => (
+          <MenuItem key={target.id} onClick={() => void edit({ op: "move", parentId: target.id })}>
+            {target.label}
+          </MenuItem>
+        ))}
+      </MenuPopup>
+    </Menu>
+  );
+}
+
+/** Owner of the task's module or master task: assign a workspace copy, hand over, take back. */
+export function WorkspaceControls(props: {
+  readonly workspaces: ReadonlyArray<{ readonly root: string; readonly label: string }>;
+  readonly owner: { readonly root: string; readonly state: "owned" | "soft" } | null;
+}) {
+  const gt = useGT();
+  const { canEdit, edit } = useBoardEdit();
+  if (!canEdit) return null;
+  const NOBODY = "\u0000";
+  return (
+    <div className="grid gap-2">
+      <ChoiceSelect
+        value={props.owner?.root ?? NOBODY}
+        width="full"
+        label={gt("Owning workspace")}
+        choices={[
+          [NOBODY, props.owner ? gt("Release (nobody)") : gt("Nobody owns it")],
+          ...props.workspaces.map((w) => [w.root, w.label] as const),
+        ]}
+        onChange={(root) => void edit({ op: "setOwner", root: root === NOBODY ? null : root })}
+      />
+      {props.owner?.state === "owned" ? (
+        <div>
+          <Button variant="outline" size="xs" onClick={() => void edit({ op: "softRelease" })}>
+            <T>Soft release</T>
+          </Button>
+        </div>
+      ) : props.owner?.state === "soft" ? (
+        <div>
+          <Button variant="outline" size="xs" onClick={() => void edit({ op: "reclaim" })}>
+            <T>Reclaim</T>
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Edits a decision's question, context, options and references. */
+export function DecisionTextEditor(props: {
+  readonly decision: {
+    readonly id: string;
+    readonly title: string;
+    readonly description: string;
+    readonly options: string;
+    readonly refs: ReadonlyArray<string>;
+  };
+}) {
+  const gt = useGT();
+  const { canEdit, edit } = useBoardEdit();
+  const [draft, setDraft] = useState<{
+    title: string;
+    description: string;
+    options: string;
+    refs: string;
+  } | null>(null);
+  if (!canEdit) return null;
+  const d = props.decision;
+  if (draft === null)
+    return (
+      <div>
+        <Button
+          variant="ghost-muted"
+          size="xs"
+          onClick={() =>
+            setDraft({
+              title: d.title,
+              description: d.description,
+              options: d.options,
+              refs: d.refs.join("\n"),
+            })
+          }
+        >
+          <T>Edit</T>
+        </Button>
+      </div>
+    );
+  return (
+    <form
+      className="grid gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void edit({
+          op: "updateDecision",
+          decisionId: d.id,
+          title: draft.title,
+          description: draft.description,
+          options: draft.options,
+          refs: draft.refs
+            .split(/\r?\n/)
+            .map((r) => r.trim())
+            .filter(Boolean),
+        }).then((ok) => ok && setDraft(null));
+      }}
+    >
+      <Input
+        size="sm"
+        aria-label={gt("The question to decide")}
+        value={draft.title}
+        onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+      />
+      <Textarea
+        aria-label={gt("Context")}
+        value={draft.description}
+        onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+      />
+      <Textarea
+        aria-label={gt("Options / recommendation (optional)")}
+        value={draft.options}
+        onChange={(event) => setDraft({ ...draft, options: event.target.value })}
+      />
+      <Textarea
+        aria-label={gt("References")}
+        value={draft.refs}
+        onChange={(event) => setDraft({ ...draft, refs: event.target.value })}
+      />
+      <div className="flex gap-2">
+        <Button type="submit" size="xs" disabled={!draft.title.trim()}>
+          <T>Save</T>
+        </Button>
+        <Button type="button" variant="outline" size="xs" onClick={() => setDraft(null)}>
+          <T>Cancel</T>
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/** Records how a decided recommendation was built. */
+export function ImplementedForm(props: { readonly decisionId: string }) {
+  const gt = useGT();
+  const { canEdit, edit } = useBoardEdit();
+  const [open, setOpen] = useState(false);
+  const [fields, setFields] = useState({ problem: "", approach: "", api: "", code: "", tests: "" });
+  if (!canEdit) return null;
+  if (!open)
+    return (
+      <div>
+        <Button variant="outline" size="xs" onClick={() => setOpen(true)}>
+          <T>Record how it was implemented</T>
+        </Button>
+      </div>
+    );
+  const field = (key: keyof typeof fields, label: string) => (
+    <Input
+      size="sm"
+      placeholder={label}
+      aria-label={label}
+      value={fields[key]}
+      onChange={(event) => setFields({ ...fields, [key]: event.target.value })}
+    />
+  );
+  return (
+    <form
+      className="grid gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void edit({ op: "implemented", decisionId: props.decisionId, ...fields }).then(
+          (ok) => ok && setOpen(false),
+        );
+      }}
+    >
+      {field("problem", gt("Problem"))}
+      {field("approach", gt("Approach"))}
+      {field("api", gt("New API (method, path, purpose, responses)"))}
+      {field("code", gt("Code (repo, branch, commit, classes)"))}
+      {field("tests", gt("Tests"))}
+      <div className="flex gap-2">
+        <Button type="submit" size="xs">
+          <T>Save</T>
+        </Button>
+        <Button type="button" variant="outline" size="xs" onClick={() => setOpen(false)}>
+          <T>Cancel</T>
+        </Button>
+      </div>
     </form>
   );
 }

@@ -56,6 +56,17 @@ export function createBoardEnvironmentAtoms<R, E>(
       scheduler: editScheduler,
       concurrency: serialPerBoard,
     }),
+    /** A board's settings, read while ⚙ is open. */
+    settings: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:board:settings",
+      tag: WS_METHODS.boardSettings,
+    }),
+    editBoard: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:board:edit-board",
+      tag: WS_METHODS.boardEditBoard,
+      scheduler: editScheduler,
+      concurrency: serialPerBoard,
+    }),
     /** Puts a new thread on a task before its first turn. */
     linkThread: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:board:link-thread",

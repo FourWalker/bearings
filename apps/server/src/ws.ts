@@ -2010,6 +2010,8 @@ export const layerWsRpc = (
         [WS_METHODS.boardTaskDetail]: (input) => boards.taskDetail(input),
         [WS_METHODS.boardEditTask]: (input) => boards.editTask(input),
         [WS_METHODS.boardCreateTask]: (input) => boards.createTask(input),
+        [WS_METHODS.boardSettings]: (input) => boards.settings(input),
+        [WS_METHODS.boardEditBoard]: (input) => boards.editBoard(input),
         [WS_METHODS.boardLinkThread]: (input) => boards.linkThread(input),
         [ORCHESTRATION_V2_WS_METHODS.dispatchCommand]: (command) =>
           Effect.annotateCurrentSpan({

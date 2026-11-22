@@ -59,6 +59,8 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   // Board edits change what every thread on the task works from, as linking one does.
   [WS_METHODS.boardEditTask]: AuthOrchestrationOperateScope,
   [WS_METHODS.boardCreateTask]: AuthOrchestrationOperateScope,
+  // A board's workspaces, rules and Board Mode shape every thread on it: settings, as elsewhere.
+  [WS_METHODS.boardEditBoard]: AuthSettingsWriteScope,
   [WS_METHODS.sourceControlCloneRepository]: AuthSourceControlWriteScope,
   [WS_METHODS.sourceControlPublishRepository]: AuthSourceControlWriteScope,
   [WS_METHODS.sourceControlStar]: AuthSourceControlWriteScope,

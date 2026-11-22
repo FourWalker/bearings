@@ -171,6 +171,8 @@ const RPC_AGGREGATES = {
   [WS_METHODS.boardTaskDetail]: "issues",
   [WS_METHODS.boardEditTask]: "issues",
   [WS_METHODS.boardCreateTask]: "issues",
+  [WS_METHODS.boardSettings]: "issues",
+  [WS_METHODS.boardEditBoard]: "issues",
   [WS_METHODS.boardLinkThread]: "issues",
   [WS_METHODS.sourceControlLookupRepository]: "source-control",
   [WS_METHODS.sourceControlCloneRepository]: "source-control",

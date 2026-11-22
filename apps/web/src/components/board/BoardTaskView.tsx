@@ -45,13 +45,17 @@ import {
   BoardEditProvider,
   ChoiceSelect,
   DecisionAdder,
+  DecisionTextEditor,
   DocAdder,
   EditableText,
   ItemAdder,
+  ImplementedForm,
   ItemRow,
   LinkAdder,
   MarkdownEditor,
+  MoveMenu,
   VerdictControls,
+  WorkspaceControls,
   useBoardEdit,
 } from "./BoardTaskEditors";
 
@@ -210,6 +214,12 @@ function TaskHeader(props: BoardTaskViewProps) {
             <h2 className="font-semibold text-lg leading-tight">{task.title}</h2>
           </EditableText>
         </div>
+        {canEdit && task.level > 1 ? (
+          <Button variant="outline" size="xs" onClick={() => void edit({ op: "promote" })}>
+            {task.level === 3 ? gt("Promote to module") : gt("Promote to master task")}
+          </Button>
+        ) : null}
+        <MoveMenu canBeTopLevel={task.parentId !== null} targets={moveTargets(index, task)} />
         {canEdit ? (
           <ChoiceSelect
             value={task.status}
@@ -1120,7 +1130,30 @@ function DecisionCard(
           {d.verdict || gt("no verdict recorded")}
         </p>
       ) : null}
+      {d.implemented !== null ? (
+        <div className="grid gap-0.5 rounded-md border p-2 text-xs">
+          <b>{gt("How implemented")}</b>
+          {d.implemented.problem ? (
+            <span>{gt("Problem: {text}", { text: d.implemented.problem })}</span>
+          ) : null}
+          {d.implemented.approach ? (
+            <span>{gt("Approach: {text}", { text: d.implemented.approach })}</span>
+          ) : null}
+          {d.implemented.api ? (
+            <span>{gt("New API: {text}", { text: d.implemented.api })}</span>
+          ) : null}
+          {d.implemented.code ? (
+            <span>{gt("Code: {text}", { text: d.implemented.code })}</span>
+          ) : null}
+          {d.implemented.tests ? (
+            <span>{gt("Tests: {text}", { text: d.implemented.tests })}</span>
+          ) : null}
+        </div>
+      ) : d.r !== null && d.status === "decided" ? (
+        <ImplementedForm decisionId={d.id} />
+      ) : null}
       <VerdictControls decisionId={d.id} status={d.status} />
+      <DecisionTextEditor decision={d} />
     </Card>
   );
 }
@@ -1268,6 +1301,9 @@ function SideColumn(
         )}
       </Card>
       <Card title={gt("Workspace")}>
+        {task.level < 3 ? (
+          <WorkspaceControls workspaces={props.board.workspaces} owner={task.owner} />
+        ) : null}
         {holder?.owner == null ? (
           <Muted>
             <T>No owner yet: the first thread that links to its module claims it.</T>
@@ -1444,4 +1480,19 @@ function ServicesCard(props: BoardTaskViewProps) {
       ) : null}
     </Card>
   );
+}
+
+/** Where a task can move: master tasks and modules outside its own subtree. */
+function moveTargets(
+  index: BoardIndex,
+  task: BoardTask,
+): ReadonlyArray<{ readonly id: string; readonly label: string }> {
+  const inside = new Set(subtreeOf(index, task).map((t) => t.id));
+  return index.tasks
+    .filter((t) => t.level < 3 && !inside.has(t.id) && t.id !== task.parentId)
+    .map((t) => ({
+      id: t.id,
+      label: [...ancestorsOf(index, t), t].map((a) => a.title).join(" › "),
+    }))
+    .toSorted((a, b) => a.label.localeCompare(b.label));
 }
