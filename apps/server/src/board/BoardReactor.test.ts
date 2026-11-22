@@ -153,15 +153,31 @@ it.effect("records a thread's turns, answers and changed files on its board task
       yield* reactor.handle(check);
       yield* reactor.handle(
         event("turn-item.updated", {
+          id: "check:pwsh",
+          type: "command_execution",
+          runId,
+          completedAt,
+          exitCode: 0,
+          input: `"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'npm test'`,
+        }),
+      );
+      yield* reactor.handle(
+        event("turn-item.updated", {
           id: "check:2",
           type: "command_execution",
           runId,
           completedAt,
           exitCode: 0,
-          input: "vp test run failing.test.ts; echo done",
+          input: `powershell.exe -Command "vp test run failing.test.ts; echo done"`,
         }),
       );
       expect((yield* task())?.checks).toEqual([
+        {
+          id: "check:pwsh",
+          command: "npm test",
+          exitCode: 0,
+          at: DateTime.toEpochMillis(completedAt),
+        },
         { id: "check:1", command: "vp test", exitCode: 1, at: DateTime.toEpochMillis(completedAt) },
       ]);
 

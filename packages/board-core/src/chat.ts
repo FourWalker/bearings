@@ -155,7 +155,7 @@ export class BoardChat {
     return this.board;
   }
   get boardModeOn(): boolean {
-    return !!this.board?.boardMode && !this.sess?.boardModeOff;
+    return !!this.board?.boardMode && !!this.sess?.taskId && !this.sess.boardModeOff;
   }
   async save(patch: Partial<Session>): Promise<void> {
     if (!this.sess || this.ignored) return;
@@ -706,7 +706,8 @@ Before creating any task, ask the person ONE question: create a new board (ask f
         : "";
     this.context = `${head}
 This ${chat} is not linked to a board task yet.${recent.length ? `\nRecently active tasks on the board:\n${recent.join("\n")}${more}` : " The board has no active tasks."}
-Once you understand what the person is working on: if it clearly matches an active task, ask once "Link this ${chat} to <task>?"; if it is new multi-step work, offer once to create a task for it. On yes call board_link; on no call board_link with decline: true. Don't ask for one-off questions.
+Use the standard conversation workflow for questions, debugging and planning. Keep this ${chat} unlinked until the person asks you to take or work on a board task. Do not prompt them to link just because the discussion involves multi-step work.
+When the person asks to create board items, use board_create_task to create features, modules, tasks or bugs with the requested parent hierarchy. Creating items keeps this conversation unlinked. When they ask you to take a task, call board_link with its taskId and continue from its plan and handoff.
 When linked, the tool returns the task's plan and handoff: continue from them.`;
   }
 
@@ -745,7 +746,12 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
       .trim();
     const ho = living ? null : await this.store.latestHandoff(this.boardId, t.id);
     const progress = planProgress(plan);
-    const checks = (await checksForTask(this.store, this.boardId, t, planPhases(plan))).slice(0, 5);
+    const phases = planPhases(plan);
+    const delegated = phases
+      .flatMap((phase) => phase.steps)
+      .filter((step) => step.done && step.childId !== null)
+      .slice(-5);
+    const checks = (await checksForTask(this.store, this.boardId, t, phases)).slice(0, 5);
     const lines = [
       `### Task: ${t.title} (id ${t.id}, Level ${levelOf(t)}, ${t.status})`,
       t.description && `Purpose: ${clip(t.description, 350)}`,
@@ -756,6 +762,8 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
         : plan
           ? "Next action: every plan step is done; confirm with the person what's left."
           : "No plan yet: write one with board_plan before starting multi-step work.",
+      delegated.length > 0 &&
+        `Completed delegated steps:\n${delegated.map((step) => `- ${step.id} – ${step.text} (task ${step.childId})`).join("\n")}`,
       blockers.length > 0 && `Open blockers:\n${blockers.slice(0, 5).join("\n")}`,
       decided.length > 0 && `Binding decisions:\n${decided.join("\n")}`,
       required.length > 0 && `Must-dos:\n${required.join("\n")}`,

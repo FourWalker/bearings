@@ -108,7 +108,9 @@ export function SidebarThreadHeader({
           </>
         ) : null}
         <SidebarHeaderIconButton
-          label={gt("New thread")}
+          label={gt("New chat")}
+          size="default"
+          className="w-auto"
           tooltip={
             showNewThreadInProjectHint ? (
               <span className="flex flex-col gap-0.5">
@@ -129,6 +131,7 @@ export function SidebarThreadHeader({
           onClick={onNewThread}
         >
           <SquarePenIcon />
+          <span>{gt("New chat")}</span>
         </SidebarHeaderIconButton>
       </div>
     </div>
@@ -155,11 +158,11 @@ export function SidebarHeaderIconButton({
       <TooltipTrigger
         render={
           <SidebarMenuButton
-            size="icon"
+            size={rest.size ?? "icon"}
             type="button"
             aria-label={label}
             {...rest}
-            className={cn("relative size-7 shrink-0", className)}
+            className={cn("relative h-7 shrink-0", rest.size === undefined && "w-7", className)}
           />
         }
       >

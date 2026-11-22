@@ -73,15 +73,31 @@ thread must agree on what's done, blocked and verified, and on the next action.
   handoff records the matching checkpoint ref when the run's checkpoint is captured, even if the
   original board chat has been reopened since the handoff was written.
 
-### Next verification
+### Acceptance verified on 2026-11-23
 
-- Run the acceptance sequence above end to end with real T3 providers. The isolated fixtures
-  exercise a second workspace, a fresh provider session, delegated completion, the parent's
-  next action and recorded checks, and attachment of the interrupted run?s checkpoint.
-- Verify the integrated web and desktop UI with T3's Browser panel, including register navigation
-  and saving a board setting, a decision and its implementation record. The standalone HTTP smoke
-  covers those edits against a temporary board and confirms that simultaneous writes from two
-  processes preserve both recommendations on one task.
+- Real Codex `gpt-6-luna` completed delegated A1 in workspace copy-b, ran `npm test`
+  with exit code 0, saved its handoff, and was interrupted before its final answer.
+  The interrupted run's checkpoint ref reached both the step note and living handoff.
+  A fresh Claude Haiku `claude-haiku-4-5` parent thread, using only injected context and
+  zero tool calls, correctly reported completed A1, the check and exit code, next step A2,
+  and the Review sign-off blocker. All data and Git workspaces were isolated fixtures.
+- The live T3 Browser panel exercised register navigation, board rename, editing and deciding
+  a recommendation, and recording its four implementation fields. The saved values persisted
+  on the board. The native Electron Browser panel also displayed this board and register.
+  Desktop task-header measurement confirmed zero overlap after widening the status selector.
+  The register Area column now fits its label.
+- Fixed check capture for Codex's PowerShell-wrapped commands and included explicit completed
+  delegated steps in fresh-thread context. Compound shell commands remain outside check capture.
+- The Threads list now exposes a visible New chat action using T3's normal composer.
+  Unlinked conversations use the standard workflow. Models can create board items and hierarchy
+  with `board_create_task` during discussion. Taking a task with `board_link` activates the
+  board workflow when Board Mode is enabled for that board. Shared code is synced to the mod.
+- Changed-file checks passed formatting, lint, both knip passes, GraphQL generation,
+  typechecks across 41 packages, and 190 tests. After the chat changes, all 18 focused
+  chat/reactor tests passed. Packaging regression tests passed 53 cases with 2 platform skips.
+- Windows packaging now excludes the generated server bytecode cache from the loose-file budget.
+  The production payload passed its native-load and self-contained bundle probes with 66
+  budgeted files and 26 sidecar native files.
 - **Phase 6 remains deferred.** Mobile and Board Mode with T3-created worktrees.
 
 ## How to run it (dev, isolated)
@@ -117,7 +133,7 @@ thread must agree on what's done, blocked and verified, and on the next action.
 
 - The board app still shows T3 threads unused since a restart as "offline", and its jump link
   (`claude://…`) is wrong for T3 threads. T3's own Board page has neither problem.
-- Claude threads in T3 (`T3_BOARD_HOST=t3`): untested here (no Claude CLI).
+- Claude threads in T3 (`T3_BOARD_HOST=t3`) passed the real-provider handoff acceptance above.
 - Service tags arrive with the turn's checkpoint, after the turn, so the "outside this task's
   services" note isn't shown to the agent (the mod shows it mid-turn).
 - Threads in folders on no board get the short "not on a board yet" note, as the mod does.

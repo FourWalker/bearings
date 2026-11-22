@@ -75,7 +75,7 @@ export function BoardRecommendations(props: {
                 <th scope="col" className="px-3 py-2 text-start">
                   R#
                 </th>
-                <th scope="col" className="px-3 py-2 text-start">
+                <th scope="col" className="min-w-24 px-3 py-2 text-start">
                   <T>Area</T>
                 </th>
                 <th scope="col" className="px-3 py-2 text-start">

@@ -200,6 +200,9 @@ describe("BoardChat", () => {
     });
     await resumed.linkTask({ taskId: "retries" });
     expect(resumed.context).toContain("Next action: A2");
+    expect(resumed.context).toContain(
+      "Completed delegated steps:\n- A1 – Retry handling (task retry-key)",
+    );
     expect(resumed.context).toContain("Retry key: vp test exited 0");
 
     // Reopened, it takes its step back.
@@ -333,10 +336,18 @@ describe("BoardChat", () => {
   it("adds the reconciled Board Mode protocol for T3 threads and the mod's own for Claude chats", async () => {
     const store = await seedBoard({ boardMode: true, rules: "Use pnpm." });
     const t3 = await openChat(store, "t1", ws, "t3");
+    expect(t3.boardModeOn).toBe(false);
+    expect(t3.context).toContain("standard conversation workflow");
+    await t3.createTask({ title: "Discussed feature" });
+    expect(t3.sess?.taskId).toBeFalsy();
+    expect(t3.context).not.toContain("one phase per thread");
     await t3.linkTask({ newTaskTitle: "Task" });
+    expect(t3.boardModeOn).toBe(true);
     expect(t3.context).toContain("one phase per thread");
     expect(t3.context).toContain("## Project rules for the NEFX board\nUse pnpm.");
     const cc = await openChat(store, "c1", ws, "claude-code");
+    expect(cc.context).not.toContain("one phase per chat");
+    await cc.linkTask({ taskId: "task" });
     expect(cc.context).toContain("one phase per chat");
     expect(boardModeProtocol("t3")).not.toMatch(/\bchat\b/);
   });

@@ -45,10 +45,16 @@ const SETTLED = new Set(["completed", "failed", "interrupted", "cancelled", "rol
 const HEARTBEAT = "60 seconds";
 
 function checkCommand(input: string): string | undefined {
-  if (/[\r\n;&|]/.test(input)) return undefined;
+  // Codex reports the Windows shell invocation rather than the command inside it.
+  const powershell =
+    /^(?:"(?:[^"\r\n]*[/\\])?(?:powershell|pwsh)(?:\.exe)?"|(?:powershell|pwsh)(?:\.exe)?)(?:\s+-(?:NoProfile|NoLogo|NonInteractive))*\s+-Command\s+(['"])(.*)\1$/i.exec(
+      input.trim(),
+    );
+  const script = powershell?.[2] ?? input;
+  if (/[\r\n;&|]/.test(script)) return undefined;
   const command =
     /^(?:(?:vp|npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:test|lint|typecheck|check(?::changed)?|build)|(?:go|cargo|dotnet|mvn|gradle|\.[/\\](?:mvnw|gradlew)(?:\.(?:cmd|bat))?)\s+test|pytest|git\s+diff\s+--check)(?=\s|$)/.exec(
-      input.trim(),
+      script.trim(),
     )?.[0];
   return command?.replace(/\s+/g, " ");
 }

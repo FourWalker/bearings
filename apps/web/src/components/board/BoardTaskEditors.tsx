@@ -87,7 +87,7 @@ export function ChoiceSelect<V extends string>(props: {
         props.width === "full"
           ? "min-w-0"
           : props.width === "sm"
-            ? "w-28 shrink-0"
+            ? "w-36 shrink-0"
             : "w-44 shrink-0"
       }
     >

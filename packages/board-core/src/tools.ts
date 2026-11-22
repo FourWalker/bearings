@@ -348,7 +348,7 @@ export const BOARD_TOOLS: ReadonlyArray<BoardToolDefinition> = [
   {
     name: "board_link",
     description:
-      "Link this chat to a task on its board (or create one, or record that the person declined). Returns the task's plan and latest handoff.",
+      "Take a board task when the person asks this chat to work on it. Links this chat and activates its board workflow. For planning or creating items without taking them, use board_create_task. Returns the task's plan and latest handoff.",
     inputSchema: SCHEMA.link,
   },
   {
@@ -371,7 +371,7 @@ export const BOARD_TOOLS: ReadonlyArray<BoardToolDefinition> = [
   {
     name: "board_create_task",
     description:
-      "Create a task on the board: a Level 1 master task, a Level 2 module under it, or a Level 3 task under a module. Use it to delegate parts of a plan to later chats.",
+      "Create a board item without linking this chat or activating Board Mode: a Level 1 feature/master task, a Level 2 module under it, or a Level 3 task under a module. Set bug for a bug task. Use parentId to assign items to their feature or module.",
     inputSchema: SCHEMA.create,
   },
   {
