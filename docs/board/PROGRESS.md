@@ -54,11 +54,25 @@ Verified: the thread's record lands on the right board with title, prompt, idle 
 the turn context is built for the turn. One `BoardChats` is shared by every user of
 `BoardChats.layer` in a build (checked against Effect directly).
 
+### Real provider: Codex `gpt-6-luna` (two turns)
+
+- Asked only "which board and workspace, and what does the project rule say", Codex answered
+  "Dev Board", "main" and the rule's BOARD-DEV-OK: the board context reaches a non-Claude provider.
+- Asked to track the work, it called the board tools: created and linked `refund-api`, saved a
+  two-step plan, ticked A1 after creating `api/refunds.ts`, wrote the living handoff and `A1.md`.
+  The last action it set was kept; the checkpoint tagged the task `api`; the thread's record is idle
+  and linked.
+- The board app (`BOARD_ROOT=<copy> BOARD_PORT=4318 node server.js`) shows the task card with next
+  step, 1/2 progress, the API tag, the last action and "Idle · 1 chat open".
+
 ## Not verified yet
 
-- What a real provider does with the board context, and `board_link` from a real agent: both need a
-  paid turn (use Haiku or Luna).
-- The board app (`Start Board.cmd`) showing T3 threads: point it at the dev copy to check.
+- After a server restart, a T3 thread nobody has used since shows "offline" in the board app: only
+  chats opened in this process get the heartbeat, but a T3 thread is available whenever the server
+  runs. Decide in the Board view step what "live" means for T3 threads.
+- Clicking a T3 thread in the board app uses `jumpUrl` (`claude://…`), which is wrong for T3
+  threads; the `t3board://` links of the Board view step replace it.
+- Claude threads in T3 (`T3_BOARD_HOST=t3`): this machine has no Claude CLI on PATH, so untested.
 - On this Windows machine, 4 `ProviderTurnStartService.test.ts` cases (worktree recovery, startup
   coordination) fail with and without the board changes. They're Git worktree failures on Windows, not the board.
 - Step 5: service tags arrive with the turn's checkpoint, after the turn, so the "outside this task's
