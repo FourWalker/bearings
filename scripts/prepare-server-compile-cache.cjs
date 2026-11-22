@@ -68,5 +68,19 @@ module.exports = async ({ appOutDir, electronPlatformName, arch, packager }) => 
   }
   if (result.status !== 0)
     throw new Error(`Server compile cache generation failed: ${result.error || result.stderr}`);
+  // Windows can keep the helper's executable locked briefly after it exits.
+  // Resource editing follows this hook and needs the image to be writable.
+  if (electronPlatformName === "win32") {
+    for (let attempt = 0; attempt < 20; attempt++) {
+      try {
+        const handle = await fs.promises.open(executable, "r+");
+        await handle.close();
+        break;
+      } catch (error) {
+        if (error.code !== "EBUSY" || attempt === 19) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
+  }
   console.log("[server-compile-cache] Prepared server bytecode with packaged Electron");
 };

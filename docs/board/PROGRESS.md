@@ -107,6 +107,10 @@ thread must agree on what's done, blocked and verified, and on the next action.
 - Fresh extraction caught a desktop entry-file loss during the multi-entry bundle build.
   All secondary desktop outputs now preserve the output directory, and packaging explicitly
   requires main.cjs, boot.cjs and preload.cjs before staging.
+- The Windows cache-generation hook waits for its executable to become writable before
+  electron-builder edits its resources, with a bounded retry for transient EBUSY locks.
+  Appearance settings now use the shared built-in theme list, matching the command palette.
+  Plotter Tide also honors the existing Glass opacity control.
 - **Phase 6 remains deferred.** Mobile and Board Mode with T3-created worktrees.
 
 ## How to run it (dev, isolated)
