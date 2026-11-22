@@ -137,6 +137,9 @@ board's face. See [RECONCILIATION.md](RECONCILIATION.md) for what changes and wh
   - `apps/server/src/mcp/McpHttpServer.ts`: register `BoardToolkit` (done)
   - `apps/server/src/provider/Drivers/ClaudeHome.ts`: `T3_BOARD_HOST` for Claude threads (done)
   - `apps/server/src/provider/agentContextBudget.json`: the larger tool list (done)
+  - `apps/server/src/orchestration-v2/ProviderTurnStartService.ts`: the board context joins the inline
+    turn context, read with `serviceOption` (done)
+  - `apps/server/src/orchestration-v2/runtimeLayer.ts`: provide `BoardTurnContext` to turn start (done)
   - `packages/contracts`: `board` RPC + capability
 - Upstream is `upstream` (`https://github.com/pingdotgg/t3code`). Rebase `board/integration` on
   `upstream/main` regularly.

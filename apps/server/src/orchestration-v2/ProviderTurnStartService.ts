@@ -75,6 +75,7 @@ import {
 import * as RunExecutionService from "./RunExecutionService.ts";
 import * as RuntimePolicy from "./RuntimePolicy.ts";
 import * as TurnItemPositionStore from "./TurnItemPositionStore.ts";
+import * as BoardTurnContext from "../board/BoardTurnContext.ts";
 import {
   isRestartNoteContinuation,
   pendingRestartCancelledBackgroundWork,
@@ -289,6 +290,8 @@ export const layer: Layer.Layer<
     const runtimePolicy = yield* RuntimePolicy.RuntimePolicyV2;
     const restoreMissingWorktree = yield* makeRestoreMissingWorktree;
     const turnItemPositions = yield* TurnItemPositionStore.TurnItemPositionStoreV2;
+    // Project Board fork: optional, so layers built without the board are unchanged.
+    const boardTurnContext = yield* Effect.serviceOption(BoardTurnContext.BoardTurnContext);
 
     // Build draining callbacks outside startup scope so they cannot retain full thread history.
     const makeRunControls = (input: {
@@ -2051,7 +2054,19 @@ export const layer: Layer.Layer<
             sideChatHandoff === undefined || compact || goalCommand
               ? ""
               : sideChatHandoff.summaryText;
-          const context = [delivery.context, sideChatContext, restartNote]
+          // Project Board fork: the board's context, when it changed, for every provider.
+          const board =
+            boardTurnContext._tag === "None" || turnInput.resume === true || goalCommand
+              ? BoardTurnContext.NONE
+              : compact
+                ? yield* boardTurnContext.value
+                    .forget(turnInput.threadId)
+                    .pipe(Effect.as(BoardTurnContext.NONE))
+                : yield* boardTurnContext.value.forTurn({
+                    threadId: turnInput.threadId,
+                    fresh: turnInput.nativeThreadHasTurns !== true,
+                  });
+          const context = [board.text, delivery.context, sideChatContext, restartNote]
             .filter((part) => part !== "")
             .join("\n\n");
           const { restartContinuationOfRunId: _resumedRunId, ...promptedInput } = turnInput;
@@ -2101,6 +2116,7 @@ export const layer: Layer.Layer<
                 : Effect.void,
             ),
           );
+          yield* board.sent;
           // After provider acceptance, failed delivery bookkeeping must not stop live ingestion.
           const nativeThreadId = runningProviderThread.nativeThreadRef?.nativeId;
           yield* Effect.forEach(
