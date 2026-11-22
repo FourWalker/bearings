@@ -10,7 +10,6 @@ import type {
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { SquareKanbanIcon, TriangleAlertIcon } from "lucide-react";
 import { T, useGT } from "gt-react";
-import { useState } from "react";
 
 import { Button } from "~/components/ui/button";
 import {
@@ -25,6 +24,7 @@ import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "~/c
 import { SidebarInset } from "~/components/ui/sidebar";
 import { Skeleton } from "~/components/ui/skeleton";
 import { toastManager } from "~/components/ui/toast";
+import { Sheet, SheetHeader, SheetPopup, SheetTitle } from "~/components/ui/sheet";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { WorkspaceBreadcrumb, WorkspaceBreadcrumbItem } from "~/components/WorkspaceBreadcrumb";
@@ -52,7 +52,7 @@ import {
 } from "./board.logic";
 import { type BoardNoteActions, BoardModuleNote, BoardNote, BoardServiceRow } from "./BoardNotes";
 import { BoardPanel } from "./BoardPanel";
-import { BoardTaskSheet } from "./BoardTaskSheet";
+import { BoardTaskView } from "./BoardTaskView";
 
 /**
  * Project Board fork: the board app's main screen inside T3. One board of the machine a connected
@@ -154,6 +154,7 @@ export function BoardPage() {
         environmentId={environmentId}
         mode={search.view ?? "tree"}
         filter={search.filter ?? "active"}
+        taskId={search.task ?? null}
         onOpenThread={openThread}
         onContinue={(task, target) => void continueTask(task, target)}
       />
@@ -282,6 +283,7 @@ function BoardScreen(props: {
   readonly environmentId: EnvironmentId;
   readonly mode: BoardViewMode;
   readonly filter: BoardFilter;
+  readonly taskId: string | null;
   readonly onOpenThread: (chat: BoardChat) => void;
   readonly onContinue: (task: BoardTask, target: BoardContinueTarget) => void;
 }) {
@@ -289,9 +291,11 @@ function BoardScreen(props: {
   const navigate = useNavigate({ from: "/board" });
   const { board } = props;
   const index = indexBoard(board.tasks);
-  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const canLink = useAtomValue(boardEnvironment.linkThread.permissionAtom(props.environmentId));
-  const openTask = openTaskId === null ? null : (index.byId.get(openTaskId) ?? null);
+  const openTask = props.taskId === null ? null : (index.byId.get(props.taskId) ?? null);
+  // In the URL, so the back button and a shared link reopen the same task.
+  const setOpenTask = (taskId: string | undefined) =>
+    void navigate({ search: (previous) => ({ ...previous, task: taskId }) });
   const chatsById = new Map(
     [...board.tasks.flatMap((task) => task.chats), ...board.unlinked].map((chat) => [
       chat.sessionId,
@@ -301,7 +305,7 @@ function BoardScreen(props: {
   const serviceName = (id: string) =>
     board.services.find((service) => service.id === id)?.name ?? id;
   const actions: BoardNoteActions = {
-    onOpenTask: (task) => setOpenTaskId(task.id),
+    onOpenTask: (task) => setOpenTask(task.id),
     canOpenChat: (sessionId) => (chatsById.get(sessionId)?.threadId ?? null) !== null,
     onOpenChat: (sessionId) => {
       const chat = chatsById.get(sessionId);
@@ -322,6 +326,28 @@ function BoardScreen(props: {
           : {}),
       }),
     });
+
+  const taskView = (task: BoardTask) => (
+    <BoardTaskView
+      key={task.id}
+      index={index}
+      board={board}
+      task={task}
+      environmentId={props.environmentId}
+      actions={actions}
+      serviceName={serviceName}
+      continueTargets={
+        canLink && task.status !== "done" ? boardContinueTargets(board.workspaces, task) : []
+      }
+      onContinue={(target) => props.onContinue(task, target)}
+      onOpenThread={props.onOpenThread}
+      onClose={() => setOpenTask(undefined)}
+    />
+  );
+
+  // A master task replaces the board with its own page, as in the board app.
+  if (openTask !== null && openTask.level === 1)
+    return <div className="@container/task h-full min-h-0">{taskView(openTask)}</div>;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -419,19 +445,21 @@ function BoardScreen(props: {
           />
         </aside>
       </div>
-      <BoardTaskSheet
-        index={index}
-        task={openTask}
-        continueTargets={
-          openTask !== null && canLink && openTask.status !== "done"
-            ? boardContinueTargets(board.workspaces, openTask)
-            : []
-        }
-        onClose={() => setOpenTaskId(null)}
-        onOpenTask={actions.onOpenTask}
-        onOpenChat={props.onOpenThread}
-        onContinue={props.onContinue}
-      />
+      <Sheet
+        open={openTask !== null}
+        onOpenChange={(open) => {
+          if (!open) setOpenTask(undefined);
+        }}
+      >
+        <SheetPopup side="right" showCloseButton={false} className="w-[min(96vw,64rem)]">
+          <SheetHeader className="sr-only">
+            <SheetTitle>{openTask?.title ?? ""}</SheetTitle>
+          </SheetHeader>
+          <div className="@container/task h-full min-h-0">
+            {openTask !== null ? taskView(openTask) : null}
+          </div>
+        </SheetPopup>
+      </Sheet>
     </div>
   );
 }

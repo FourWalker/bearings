@@ -128,13 +128,32 @@ export const BoardTaskDetailInput = Schema.Struct({
 export type BoardTaskDetailInput = typeof BoardTaskDetailInput.Type;
 
 /** One task's documents, read when its task view opens: the texts the board screen leaves out. */
+const Level = Schema.Literals([1, 2, 3]);
+const TaskRef = Schema.Struct({ id: Schema.String, title: Schema.String });
 export const BoardTaskDetail = Schema.Struct({
   /** The master implementation plan of the task's master task (its own, for a master task). */
   masterPlan: Schema.String,
   masterTaskId: Schema.String,
-  plan: Schema.String,
+  plan: Schema.Array(
+    Schema.Struct({
+      title: Schema.String,
+      steps: Schema.Array(
+        Schema.Struct({
+          id: Schema.String,
+          text: Schema.String,
+          done: Schema.Boolean,
+          /** The subtask that took the step over. */
+          childId: Schema.NullOr(Schema.String),
+        }),
+      ),
+    }),
+  ),
   handoff: Schema.String,
-  latestNote: Schema.NullOr(Schema.Struct({ step: Schema.String, text: Schema.String })),
+  /** Newest first. */
+  stepNotes: Schema.Array(
+    Schema.Struct({ step: Schema.String, at: Schema.Number, text: Schema.String }),
+  ),
+  /** This task's documents (`from` null), then its parents'. */
   docs: Schema.Array(
     Schema.Struct({
       id: Schema.String,
@@ -142,9 +161,10 @@ export const BoardTaskDetail = Schema.Struct({
       title: Schema.String,
       ref: Schema.String,
       note: Schema.String,
+      from: Schema.NullOr(Schema.Struct({ id: Schema.String, title: Schema.String, level: Level })),
     }),
   ),
-  /** Decisions filed on this task, and on its parents when raised here. */
+  /** `own`: filed here; `up`: raised here, filed on a parent; `inherited`: a parent's own. */
   decisions: Schema.Array(
     Schema.Struct({
       id: Schema.String,
@@ -153,9 +173,46 @@ export const BoardTaskDetail = Schema.Struct({
       options: Schema.String,
       verdict: Schema.String,
       status: Schema.Literals(["open", "decided", "dropped"]),
-      level: Schema.Literals([1, 2, 3]),
+      level: Level,
+      refs: Schema.Array(Schema.String),
+      at: Schema.Number,
+      group: Schema.Literals(["own", "up", "inherited"]),
       r: Schema.NullOr(Schema.String),
-      filedOn: Schema.Struct({ id: Schema.String, title: Schema.String }),
+      area: Schema.String,
+      decidedAt: Schema.NullOr(Schema.Number),
+      raisedFrom: Schema.NullOr(TaskRef),
+      filedOn: TaskRef,
+    }),
+  ),
+  repoState: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      branch: Schema.String,
+      head: Schema.String,
+      upstream: Schema.NullOr(Schema.String),
+      ahead: Schema.NullOr(Schema.Number),
+      behind: Schema.NullOr(Schema.Number),
+      dirty: Schema.Number,
+      at: Schema.Number,
+    }),
+  ),
+  /** Root first, with each parent's objective line. */
+  parents: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      title: Schema.String,
+      level: Level,
+      objective: Schema.String,
+    }),
+  ),
+  /** What each chat on the task (on a master task, in its tree) last asked and answered. */
+  chats: Schema.Array(
+    Schema.Struct({
+      sessionId: Schema.String,
+      lastPrompt: Schema.String,
+      lastAnswer: Schema.String,
+      branch: Schema.String,
+      subfolder: Schema.String,
     }),
   ),
 });

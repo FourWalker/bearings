@@ -9,6 +9,8 @@ export interface BoardSearch {
   readonly board?: string | undefined;
   readonly view?: BoardViewMode | undefined;
   readonly filter?: BoardFilter | undefined;
+  /** The task whose view is open: a page for a master task, a side view for the rest. */
+  readonly task?: string | undefined;
 }
 
 const VIEWS: ReadonlyArray<string> = ["tree", "1", "2", "3", "svc"];
@@ -28,6 +30,7 @@ export function boardSearchFromUrl(search: Record<string, unknown>): BoardSearch
     board: text(search.board),
     view: view !== undefined && VIEWS.includes(view) ? (view as BoardViewMode) : undefined,
     filter: filter !== undefined && FILTERS.includes(filter) ? (filter as BoardFilter) : undefined,
+    task: text(search.task),
   };
 }
 
@@ -52,7 +55,7 @@ export function indexBoard(tasks: ReadonlyArray<BoardTask>): BoardIndex {
   return { tasks, byId, kidsOf: (id) => kids.get(id) ?? [] };
 }
 
-function subtreeOf(index: BoardIndex, task: BoardTask): ReadonlyArray<BoardTask> {
+export function subtreeOf(index: BoardIndex, task: BoardTask): ReadonlyArray<BoardTask> {
   return [task, ...index.kidsOf(task.id).flatMap((kid) => subtreeOf(index, kid))];
 }
 
@@ -81,7 +84,7 @@ function blockersOf(index: BoardIndex, task: BoardTask): ReadonlyArray<BoardTask
 }
 
 /** Unfinished fix tasks pointing at this task with a `fixes` link. */
-function openFixesOf(index: BoardIndex, task: BoardTask): ReadonlyArray<BoardTask> {
+export function openFixesOf(index: BoardIndex, task: BoardTask): ReadonlyArray<BoardTask> {
   return index.tasks.filter(
     (other) =>
       other.status !== "done" &&
@@ -299,4 +302,101 @@ export function boardContinueTargets(
       ? []
       : [{ label: workspace.label, projectId: workspace.projectId }],
   );
+}
+
+/** Open decisions a task's views count: its own, those raised here and filed higher up, and old
+ * decision items. */
+export function openDecisionCount(index: BoardIndex, task: BoardTask): number {
+  const raisedHere = ancestorsOf(index, task).flatMap((parent) =>
+    parent.decisions.filter((d) => d.status === "open" && d.raisedFrom?.id === task.id),
+  );
+  return (
+    task.decisions.filter((d) => d.status === "open").length +
+    raisedHere.length +
+    task.items.filter((item) => item.kind === "decision" && !item.done).length
+  );
+}
+
+/** How a link reads from the side of the task's tree, as the board app groups them. */
+export type BoardLinkGroup =
+  | "blockingUs"
+  | "weBlock"
+  | "fixedBy"
+  | "fixes"
+  | "cameFrom"
+  | "spunOff"
+  | "related";
+
+export const LINK_GROUP_ORDER: ReadonlyArray<BoardLinkGroup> = [
+  "blockingUs",
+  "weBlock",
+  "fixedBy",
+  "fixes",
+  "cameFrom",
+  "spunOff",
+  "related",
+];
+
+export interface BoardExternalLink {
+  readonly group: BoardLinkGroup;
+  /** The task outside the tree, or null when it's gone. */
+  readonly other: BoardTask | null;
+  readonly otherId: string;
+  /** The task inside the tree the link is on. */
+  readonly ours: BoardTask | null;
+  readonly note: string;
+}
+
+const GROUPS: Record<string, BoardLinkGroup> = {
+  "out:fixes": "fixes",
+  "in:fixes": "fixedBy",
+  "out:blocked_by": "blockingUs",
+  "in:blocked_by": "weBlock",
+  "out:found_during": "cameFrom",
+  "in:found_during": "spunOff",
+  "out:related": "related",
+  "in:related": "related",
+};
+
+/** Links between the task's tree and tasks outside it, from the tree's point of view. */
+export function externalLinksOf(
+  index: BoardIndex,
+  task: BoardTask,
+): ReadonlyArray<BoardExternalLink> {
+  const inside = new Set(subtreeOf(index, task).map((t) => t.id));
+  const out: Array<BoardExternalLink> = [];
+  for (const from of index.tasks)
+    for (const link of from.links) {
+      const fromIn = inside.has(from.id);
+      if (fromIn === inside.has(link.to)) continue;
+      const group = GROUPS[`${fromIn ? "out" : "in"}:${link.type}`];
+      if (group === undefined) continue;
+      out.push({
+        group,
+        other: fromIn ? (index.byId.get(link.to) ?? null) : from,
+        otherId: fromIn ? link.to : from.id,
+        ours: fromIn ? from : (index.byId.get(link.to) ?? null),
+        note: link.note,
+      });
+    }
+  return out.toSorted(
+    (a, b) => LINK_GROUP_ORDER.indexOf(a.group) - LINK_GROUP_ORDER.indexOf(b.group),
+  );
+}
+
+const LIVE_ORDER = { working: 0, idle: 1, offline: 2, ended: 3 } as const;
+
+/** A task's chats (on a master task, its tree's), working first, then most recent. */
+export function chatsForView(
+  index: BoardIndex,
+  task: BoardTask,
+  rollUp: boolean,
+): ReadonlyArray<{ readonly chat: BoardChat; readonly task: BoardTask }> {
+  const owners = rollUp ? subtreeOf(index, task) : [task];
+  return owners
+    .flatMap((owner) => owner.chats.map((chat) => ({ chat, task: owner })))
+    .toSorted(
+      (a, b) =>
+        LIVE_ORDER[a.chat.live] - LIVE_ORDER[b.chat.live] || b.chat.updatedAt - a.chat.updatedAt,
+    );
 }

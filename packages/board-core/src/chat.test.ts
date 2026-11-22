@@ -339,16 +339,35 @@ describe("readBoardView", () => {
     await chat.saveMasterPlan({ markdown: "Objective: payments" });
     await chat.createTask({ title: "Gateway", parentId: "payments" });
     await chat.linkTask({ taskId: "gateway" });
-    await chat.savePlan({ markdown: "- [ ] A1 Client" });
+    await chat.turnStart("Wire the gateway");
+    await chat.savePlan({
+      markdown: ["## Phase A — Client", "- [x] A1 Client", "- [ ] A2 Retry"].join("\n"),
+    });
+    await chat.writeHandoff({ step: "A1", markdown: "Client done.", markStepDone: false });
     await chat.checkpoint({ markdown: "Objective: gateway" });
     await chat.fileDecision({ title: "Which provider?", level: 1 });
+    await chat.mapDoc({ taskId: "payments", kind: "HLD", title: "Design", ref: "docs/hld.md" });
     const detail = await readTaskDetail(store, "nefx", "gateway");
     expect(detail).toMatchObject({
       masterTaskId: "payments",
       masterPlan: expect.stringContaining("Objective: payments"),
-      plan: "- [ ] A1 Client",
+      plan: [
+        {
+          title: "Phase A — Client",
+          steps: [
+            { id: "A1", text: "Client", done: true, childId: null },
+            { id: "A2", text: "Retry", done: false, childId: null },
+          ],
+        },
+      ],
       handoff: expect.stringContaining("Objective: gateway"),
-      decisions: [{ title: "Which provider?", status: "open", filedOn: { id: "payments" } }],
+      stepNotes: [{ step: "A1", text: "Client done." }],
+      docs: [{ title: "Design", from: { id: "payments", level: 1 } }],
+      decisions: [
+        { title: "Which provider?", status: "open", group: "up", filedOn: { id: "payments" } },
+      ],
+      parents: [{ id: "payments", level: 1 }],
+      chats: [{ sessionId: "t1", lastPrompt: "Wire the gateway" }],
     });
     expect(await readTaskDetail(store, "nefx", "nope")).toBeNull();
   });

@@ -1,14 +1,17 @@
-﻿import { type BoardChat, type BoardTask, ProjectId } from "@t3tools/contracts";
+import { type BoardChat, type BoardTask, ProjectId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
   boardContinueTargets,
   boardSearchFromUrl,
+  chatsForView,
   chatStatusOf,
   collisionsOf,
+  externalLinksOf,
   flagsOf,
   indexBoard,
   levelKindOf,
+  openDecisionCount,
   ownerHolderOf,
   panelOf,
   serviceColumns,
@@ -207,5 +210,46 @@ describe("boardSearchFromUrl", () => {
       view: "2",
       filter: undefined,
     });
+  });
+});
+
+describe("task views", () => {
+  it("groups links to work outside the tree, counts open decisions, and rolls up chats", () => {
+    const index = indexBoard([
+      task("feature", {
+        decisions: [
+          {
+            id: "d1",
+            title: "Up",
+            status: "open",
+            level: 1,
+            raisedFrom: { id: "module", title: "module" },
+            r: null,
+          },
+        ],
+      }),
+      task("module", {
+        level: 2,
+        parentId: "feature",
+        links: [{ to: "contract", type: "blocked_by", note: "invoice" }],
+        decisions: [
+          { id: "d2", title: "Own", status: "open", level: 2, raisedFrom: null, r: null },
+        ],
+        items: [{ id: "i1", kind: "decision", text: "Old style", done: false }],
+        chats: [chat("idle", { live: "idle", updatedAt: 5 })],
+      }),
+      task("contract", { links: [{ to: "feature", type: "related", note: "" }] }),
+    ]);
+    const feature = index.byId.get("feature")!;
+    const module = index.byId.get("module")!;
+    expect(externalLinksOf(index, feature).map((l) => [l.group, l.otherId, l.ours?.id])).toEqual([
+      ["blockingUs", "contract", "module"],
+      ["related", "contract", "feature"],
+    ]);
+    expect(openDecisionCount(index, module)).toBe(3);
+    expect(chatsForView(index, feature, true).map((c) => [c.chat.sessionId, c.task.id])).toEqual([
+      ["idle", "module"],
+    ]);
+    expect(chatsForView(index, feature, false)).toEqual([]);
   });
 });
