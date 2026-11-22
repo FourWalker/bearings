@@ -21,6 +21,10 @@ html[data-theme-id="plotter-tide"]
     [data-slot="menu-popup"],
     .surface-glass
   ) {
-  background-color: color-mix(in srgb, var(--app-theme-surface-overlay) 88%, transparent);
+  background-color: color-mix(
+    in srgb,
+    var(--app-theme-surface-overlay) var(--glass-opacity),
+    transparent
+  );
   backdrop-filter: blur(18px);
 }
