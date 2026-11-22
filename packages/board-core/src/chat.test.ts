@@ -139,6 +139,72 @@ describe("BoardChat", () => {
     expect(sess.source).toEqual({ kind: "t3-thread", threadId: "t1", provider: "codex" });
   });
 
+  it("finishes a step and its living handoff in one call, and a delegated subtask ticks its parent step", async () => {
+    const store = await seedBoard();
+    const chat = await openChat(store, "t1", ws);
+    await chat.linkTask({ newTaskTitle: "Retries" });
+    await chat.savePlan({
+      markdown: "## Phase A — Retry\n- [ ] A1 Retry handling\n- [ ] A2 Run the integration test",
+    });
+    await chat.createTask({ title: "Retry key", parentId: "retries", fromStep: "A1" });
+    expect(nextStep(await store.readText(store.planPath("nefx", "retries")))?.id).toBe("A1");
+
+    // The subtask finishes: the parent's next step moves past the work it took over.
+    await chat.linkTask({ taskId: "retry-key" });
+    await chat.savePlan({ markdown: "- [ ] B1 Persist the key" });
+    const done = await chat.writeHandoff({
+      step: "B1",
+      markdown: "Key persisted.",
+      handoff: "Objective: retry key\nNext step: none, task done",
+    });
+    expect(done.text).toContain("Living handoff rewritten");
+    expect(await store.readText(store.livingPath("nefx", "retry-key"))).toContain(
+      "Next step: none, task done",
+    );
+    expect(await store.readText(store.planPath("nefx", "retry-key"))).toContain("- [x] B1");
+    const finished = await chat.updateTask({ status: "done" });
+    expect(finished.text).toContain("(A1)");
+    const parentPlan = () => store.readText(store.planPath("nefx", "retries"));
+    expect(nextStep(await parentPlan())).toEqual({ id: "A2", text: "Run the integration test" });
+
+    // Reopened, it takes its step back.
+    await chat.updateTask({ status: "active" });
+    expect(nextStep(await parentPlan())?.id).toBe("A1");
+
+    // Without a handoff the reply says the living handoff is now behind.
+    await chat.linkTask({ taskId: "retries" });
+    const bare = await chat.writeHandoff({ step: "A2", markdown: "Ran it." });
+    expect(bare.text).toContain("living handoff was not rewritten");
+  });
+
+  it("keeps binding decisions in the resume context ahead of open questions", async () => {
+    const store = await seedBoard();
+    const chat = await openChat(store, "t1", ws);
+    await chat.linkTask({ newTaskTitle: "Retries" });
+    const task = (await store.loadTask("nefx", "retries")) as Task;
+    const decision = (id: string, status: "open" | "decided") => ({
+      id,
+      title: `Question ${id}`,
+      description: "",
+      level: 1 as const,
+      raisedFrom: null,
+      refs: [],
+      options: "",
+      verdict: status === "decided" ? "Retry at most 3 times" : "",
+      status,
+      at: 0,
+    });
+    await store.saveTask("nefx", {
+      ...task,
+      decisions: [
+        ...Array.from({ length: 20 }, (_, i) => decision(`D-${i}`, "open")),
+        decision("D-final", "decided"),
+      ],
+    });
+    const text = await chat.describeTask((await store.loadTask("nefx", "retries")) as Task, true);
+    expect(text).toContain("Retry at most 3 times");
+  });
+
   it("uses the answer's first paragraph as last action unless a tool set one this turn", async () => {
     const store = await seedBoard();
     const chat = await openChat(store, "t1", ws);
