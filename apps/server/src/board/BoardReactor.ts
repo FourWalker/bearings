@@ -51,9 +51,9 @@ export const make = Effect.gen(function* () {
             const prompts = yield* projections.getMessagesById(run.threadId, [run.userMessageId]);
             const prompt = prompts.get(run.userMessageId);
             const chat = yield* chatOf(run.threadId);
-            // Wakes and agent-sent messages aren't the person's words.
+            // Server wakes aren't the work's brief; people, the CLI and delegating agents' are.
             yield* Effect.promise(() =>
-              chat.turnStart(prompt?.createdBy === "user" ? prompt.text : ""),
+              chat.turnStart(prompt?.creationSource === "server" ? "" : (prompt?.text ?? "")),
             );
             return;
           }

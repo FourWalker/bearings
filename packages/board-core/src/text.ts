@@ -55,7 +55,8 @@ export const isInside = (dir: string, root: string): boolean => {
   return c === r || c.startsWith(r + "/");
 };
 
-export const safeStepId = (s: string): string => s.replace(/[^A-Za-z0-9._-]/g, "");
+/** The board app's file-name rule (app/server.js `safe`): both sides must name a record alike. */
+export const safeFileName = (s: string): string => s.replace(/[^A-Za-z0-9._-]/g, "");
 
 export const stamp = (at: number): string =>
   new Date(at).toISOString().replace("T", " ").slice(0, 16);

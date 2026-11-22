@@ -2157,6 +2157,8 @@ export const layer: Layer.Layer<
         ),
       );
       const deliverySession =
+        // Project Board fork: the board's context is delivered the same way, so plain turns get it too.
+        boardTurnContext._tag === "None" &&
         effectiveHandoffs.length === 0 &&
         retryHandoff.handoffs.length === 0 &&
         retryHandoff.attachments.length === 0 &&

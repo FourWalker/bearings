@@ -97,6 +97,19 @@ describe("BoardChat", () => {
     expect(await store.readSession("nefx", "t1")).toBeNull();
   });
 
+  // T3 thread ids hold colons, which Windows reads as an NTFS stream; the board app names files the same way.
+  it("stores a thread whose id isn't a file name under the board app's safe name", async () => {
+    const store = await seedBoard();
+    const chat = await openChat(store, "mcp:3bbe-f26a", ws);
+    await chat.turnStart("Add the refund API");
+    expect(await NodeFSP.readdir(NodePath.join(home, "projects", "nefx", "sessions"))).toEqual([
+      "mcp3bbe-f26a.json",
+    ]);
+    expect((await store.readSession("nefx", "mcp:3bbe-f26a"))?.lastPrompt).toBe(
+      "Add the refund API",
+    );
+  });
+
   it("links a new task, then keeps plan, handoffs and last action on it", async () => {
     const store = await seedBoard();
     const chat = await openChat(store, "t1", ws);

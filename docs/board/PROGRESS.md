@@ -34,14 +34,31 @@ Each step passed `vp run check:changed`.
    open it. Add "Continue in new thread" on a task, with a provider and model picker.
 2. Later: Board Mode details (ownership with T3 worktrees, the R# register UI), mobile.
 
+## First dev run (2026-11-22)
+
+How: `.t3/claude-board` is a copy of `~/.claude-board` plus a throwaway "Dev Board" rooted at
+`.t3/board-ws` (a small git repo). With `T3_BOARD_HOME` set to it, `vp run dev --home-dir .t3`, then
+`t3 project add` that folder and `t3 thread start --provider devReplay --model showcase` (free).
+This machine has no `~/.t3`, so there was no live database to migrate or protect.
+
+It found and fixed three bugs:
+
+- T3 thread ids hold colons; on Windows the record went into an NTFS stream (`sessions/mcp`).
+  board-core now names records with the board app's `safe()` rule.
+- A plain turn (no handoff) never went through the inline-context path, so the board context was
+  never sent. Turn start now uses that path whenever the board is present.
+- The reactor dropped the prompt of CLI- and agent-started threads (`createdBy: "agent"`), so their
+  records were never written. It now skips only server wakes (`creationSource: "server"`).
+
+Verified: the thread's record lands on the right board with title, prompt, idle status and answer;
+the turn context is built for the turn. One `BoardChats` is shared by every user of
+`BoardChats.layer` in a build (checked against Effect directly).
+
 ## Not verified yet
 
-- The fork has never been run in dev mode. Everything is covered by unit and integration tests only.
-  Before running, isolate its state:
-  `vp run migrate-dev-db --base-dir <clone>/.t3`, then `vp run dev --home-dir <clone>/.t3`.
-  Point `T3_BOARD_HOME` at a copy of `.claude-board`, so tests and dev runs never touch the live board.
-- Step 4 relies on Effect memoizing `BoardChats.layer` so the MCP tools and the turn context share one
-  set of chats (a `board_link` shows in the next turn). Check this in the first dev run.
+- What a real provider does with the board context, and `board_link` from a real agent: both need a
+  paid turn (use Haiku or Luna).
+- The board app (`Start Board.cmd`) showing T3 threads: point it at the dev copy to check.
 - On this Windows machine, 4 `ProviderTurnStartService.test.ts` cases (worktree recovery, startup
   coordination) fail with and without the board changes. They're Git worktree failures on Windows, not the board.
 - Step 5: service tags arrive with the turn's checkpoint, after the turn, so the "outside this task's

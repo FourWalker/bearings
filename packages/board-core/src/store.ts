@@ -5,7 +5,7 @@
  * @module board-core/store
  */
 import { type BoardClock, type BoardIO, systemClock } from "./io.ts";
-import { isInside, norm } from "./text.ts";
+import { isInside, norm, safeFileName } from "./text.ts";
 import type { Board, Level, Registry, Root, Session, Task } from "./types.ts";
 
 export const LEVEL_NAME = { 1: "master task", 2: "module", 3: "task" } as const;
@@ -80,8 +80,8 @@ export class BoardStore {
   /** A chat's record: in its board, or under `unassigned/` while no board covers its folder. */
   sessionPath(boardId: string | null, sessionId: string): string {
     return boardId
-      ? `${this.projectDir(boardId)}/sessions/${sessionId}.json`
-      : `${this.home}/unassigned/${sessionId}.json`;
+      ? `${this.projectDir(boardId)}/sessions/${safeFileName(sessionId)}.json`
+      : `${this.home}/unassigned/${safeFileName(sessionId)}.json`;
   }
   loadTask(boardId: string, id: string): Promise<Task | null> {
     return this.readJson<Task | null>(`${this.taskDir(boardId, id)}/task.json`, null);

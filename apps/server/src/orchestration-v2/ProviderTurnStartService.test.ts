@@ -66,6 +66,7 @@ import * as ProviderAuthService from "../provider/ProviderAuthService.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as ContextHandoffService from "./ContextHandoffService.ts";
 import { withInlineContext } from "./ContextHandoffDelivery.ts";
+import * as BoardTurnContext from "../board/BoardTurnContext.ts";
 import * as EventSink from "./EventSink.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as EffectOutbox from "./EffectOutbox.ts";
@@ -484,6 +485,8 @@ function makeLocalCommandHarness(input: {
   readonly failReadsAfterRunning?: boolean;
   readonly missingProviderSession?: boolean;
   readonly recoveryReadFailure?: string;
+  /** Project Board fork: the board context the turn is given. */
+  readonly board?: string;
   readonly previousTurn?: {
     readonly runStatus: "failed" | "completed" | "interrupted";
     readonly turnStatus: "running" | "completed" | "interrupted";
@@ -1173,7 +1176,7 @@ function makeLocalCommandHarness(input: {
           startTurn(ProviderAdapter.resumeTurnInput(input)),
   };
   const open = vi.fn(() =>
-    input.sideChat !== undefined
+    input.sideChat !== undefined || input.board !== undefined
       ? Effect.succeed(sideChatSession as never)
       : input.interruptOpen === true
         ? Effect.interrupt
@@ -1209,7 +1212,7 @@ function makeLocalCommandHarness(input: {
       input: RunExecutionService.RunExecutionServiceV2StartRootRunInput,
     ) => Effect.Effect<void, RunExecutionService.RunExecutionServiceV2Error>
   >((runInput) =>
-    input.sideChat !== undefined
+    input.sideChat !== undefined || input.board !== undefined
       ? (runInput.resume
           ? runInput.session.resumeTurn!({
               ...runInput,
@@ -1349,6 +1352,15 @@ function makeLocalCommandHarness(input: {
         }),
         IdAllocator.layer,
         Layer.mock(TurnItemPositionStore.TurnItemPositionStoreV2)({}),
+        Layer.succeed(BoardTurnContext.BoardTurnContext, {
+          forTurn: () =>
+            Effect.succeed(
+              input.board === undefined
+                ? BoardTurnContext.NONE
+                : { text: input.board, sent: Effect.void },
+            ),
+          forget: () => Effect.void,
+        }),
         layerWorktreeLocation(input.worktreesDir),
         layerNoTaskFolders,
         input.fileSystem === undefined
@@ -2260,6 +2272,22 @@ effectIt.effect("sends new steering text when restarting a manual continuation",
     yield* harness.start;
     expect(harness.startTurn.mock.calls[0]?.[0].message.text).toBe("New steering instruction");
     expect(harness.startRootRun.mock.calls[0]?.[0].resume).toBe(false);
+  }),
+);
+
+// Project Board fork: a plain turn, with no handoff to deliver, still carries the board's context.
+effectIt.effect("puts the board's context ahead of a plain turn's message", () =>
+  Effect.gen(function* () {
+    const harness = makeLocalCommandHarness({
+      text: "Add the refund API",
+      board: "<project_board>B</project_board>",
+    });
+    yield* harness.start;
+    const sent = harness.startTurn.mock.calls[0]?.[0];
+    expect(sent?.message.text).toBe(
+      withInlineContext("<project_board>B</project_board>", "Add the refund API"),
+    );
+    expect(sent?.inlineContextLength).toBe(sent!.message.text.length - "Add the refund API".length);
   }),
 );
 

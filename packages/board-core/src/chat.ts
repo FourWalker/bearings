@@ -17,7 +17,7 @@ import {
   isInside,
   norm,
   parent,
-  safeStepId,
+  safeFileName,
   sameRoot,
   slug,
   stamp,
@@ -929,7 +929,7 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
   async writeHandoff(a: Record<string, unknown>): Promise<BoardReply> {
     const t = await this.requireTask(a);
     if (typeof t === "string") return reply(t);
-    const step = safeStepId(str(a.step)) || `note-${this.now()}`;
+    const step = safeFileName(str(a.step)) || `note-${this.now()}`;
     const s = this.sess;
     const header = `<!-- by ${this.byLine()}${s?.branch ? ` (${s.branch})` : ""}, ${stamp(this.now())} -->\n`;
     await this.store.io.write(
@@ -1361,7 +1361,7 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
     let text = await this.describeTask(t, true);
     if (a.step) {
       const h = await this.store.readText(
-        this.store.stepHandoffPath(this.boardId, t.id, safeStepId(str(a.step))),
+        this.store.stepHandoffPath(this.boardId, t.id, safeFileName(str(a.step))),
       );
       text += `\n\n### Handoff ${str(a.step)}\n${h || "(none)"}`;
     }
