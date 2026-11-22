@@ -255,6 +255,10 @@ describe("readBoardView", () => {
     const t2 = (await store.readSession("nefx", "t2")) as Session;
     const view = await readBoardView(store, "nefx", t2.heartbeatAt + OFFLINE_MS / 2);
     expect(view?.services).toEqual([{ id: "api", name: "API" }]);
+    expect(view?.workspaces).toEqual([
+      { label: "main", root: norm(ws) },
+      { label: "copy-b", root: norm(wsB) },
+    ]);
     expect(view?.tasks).toMatchObject([
       {
         id: "sftp",
@@ -263,15 +267,30 @@ describe("readBoardView", () => {
         next: { id: "A2", text: "Retry" },
         steps: { done: 1, total: 2 },
         chats: [{ sessionId: "t1", threadId: "t1", provider: "codex", live: "working" }],
+        ownerRoot: null,
       },
     ]);
     expect(view?.unlinked.map((c) => [c.sessionId, c.title, c.threadId])).toEqual([
       ["t3", "Old chat", "t3"],
       ["t2", "A quick question", "t2"],
     ]);
+    // A task with no owner of its own belongs to the nearest owned parent's workspace copy.
+    await linked.createTask({ title: "Retry", level: 3, parentId: "sftp" });
+    const sftp = (await store.loadTask("nefx", "sftp")) as Task;
+    await store.saveTask("nefx", {
+      ...sftp,
+      owner: { root: wsB, label: "copy-b", state: "owned", since: 0 },
+    });
     // Past the heartbeat window a chat is offline.
     const later = await readBoardView(store, "nefx", t2.heartbeatAt + OFFLINE_MS * 2);
-    expect(later?.tasks[0]?.chats[0]?.live).toBe("offline");
+    const sftpLater = later?.tasks.find((t) => t.id === "sftp");
+    expect(sftpLater?.chats[0]?.live).toBe("offline");
+    expect(later?.tasks.map((t) => [t.id, t.ownerRoot])).toEqual(
+      expect.arrayContaining([
+        ["sftp", norm(wsB)],
+        ["retry", norm(wsB)],
+      ]),
+    );
     expect(later?.unlinked.map((c) => c.live)).toEqual(["offline", "offline"]);
     expect(await readBoardView(store, "nope", 0)).toBeNull();
   });

@@ -1,4 +1,4 @@
-import type { BoardTask } from "@t3tools/contracts";
+import type { BoardTask, BoardView, ProjectId } from "@t3tools/contracts";
 
 export interface BoardSearch {
   readonly env?: string | undefined;
@@ -39,4 +39,25 @@ export function boardTaskTree(
     if (task.parentId === null || !ids.has(task.parentId)) visit(task, 0);
   }
   return rows;
+}
+
+export interface BoardContinueTarget {
+  readonly label: string;
+  readonly projectId: ProjectId;
+}
+
+/**
+ * The workspace copies a new thread on the task can start in: the owning copy alone when the
+ * task's module is owned (the others would be blocked), else every copy this server has a
+ * project for.
+ */
+export function boardContinueTargets(
+  workspaces: BoardView["workspaces"],
+  task: Pick<BoardTask, "ownerRoot">,
+): ReadonlyArray<BoardContinueTarget> {
+  return workspaces.flatMap((workspace) =>
+    workspace.projectId === null || (task.ownerRoot !== null && workspace.root !== task.ownerRoot)
+      ? []
+      : [{ label: workspace.label, projectId: workspace.projectId }],
+  );
 }

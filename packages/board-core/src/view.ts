@@ -6,6 +6,7 @@
  */
 import { nextStep, planProgress, type PlanStep } from "./plan.ts";
 import type { BoardStore } from "./store.ts";
+import { norm } from "./text.ts";
 import type { Level, Session, Task, TaskStatus } from "./types.ts";
 
 /** The board app marks a chat offline after this long without a heartbeat. */
@@ -48,12 +49,16 @@ export interface BoardViewTask {
   readonly steps: { readonly done: number; readonly total: number };
   readonly chats: ReadonlyArray<BoardViewChat>;
   readonly updatedAt: number;
+  /** The root of the workspace copy that owns the task's module or master task, if one does. */
+  readonly ownerRoot: string | null;
 }
 
 export interface BoardView {
   readonly id: string;
   readonly name: string;
   readonly services: ReadonlyArray<{ readonly id: string; readonly name: string }>;
+  /** Each copy of the project the board spans: the folders a thread can work on its tasks in. */
+  readonly workspaces: ReadonlyArray<{ readonly label: string; readonly root: string }>;
   readonly tasks: ReadonlyArray<BoardViewTask>;
   /** Chats on the board that aren't linked to a task and haven't ended (offline ones too). */
   readonly unlinked: ReadonlyArray<BoardViewChat>;
@@ -96,8 +101,21 @@ export async function readBoardView(
     .filter((s) => !s.supersededBy && (s.taskId || s.lastPrompt || s.title))
     .toSorted((a, b) => b.updatedAt - a.updatedAt);
   const chats = sessions.map((s) => chatOf(s, now));
+  const all = await store.listTasks(boardId);
+  const byId = new Map(all.map((t) => [t.id, t]));
+  // As BoardChat.ownerHolder: a task belongs to its module's owner, else the nearest owned parent.
+  const ownerRoot = (t: Task): string | null => {
+    let cur = t.level === 3 && t.parentId ? (byId.get(t.parentId) ?? t) : t;
+    for (let i = 0; i < 3; i++) {
+      if (cur.owner) return norm(cur.owner.root);
+      const up = cur.parentId ? byId.get(cur.parentId) : undefined;
+      if (!up) return null;
+      cur = up;
+    }
+    return null;
+  };
   const tasks = await Promise.all(
-    (await store.listTasks(boardId)).map(async (t: Task): Promise<BoardViewTask> => {
+    all.map(async (t: Task): Promise<BoardViewTask> => {
       const plan = await store.readText(store.planPath(boardId, t.id));
       return {
         id: t.id,
@@ -118,6 +136,7 @@ export async function readBoardView(
         steps: planProgress(plan),
         chats: chats.filter((c) => c.taskId === t.id),
         updatedAt: t.updatedAt,
+        ownerRoot: ownerRoot(t),
       };
     }),
   );
@@ -125,6 +144,7 @@ export async function readBoardView(
     id: board.id,
     name: board.name,
     services: (board.services ?? []).map((s) => ({ id: s.id, name: s.name })),
+    workspaces: board.roots.map((r) => ({ label: r.label, root: norm(r.path) })),
     tasks: tasks.toSorted((a, b) => b.updatedAt - a.updatedAt),
     unlinked: chats.filter((c) => c.taskId === null && c.live !== "ended"),
   };

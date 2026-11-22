@@ -12478,5 +12478,8 @@
   "b650c7e920de3716": "Tablero",
   "ddccd8926fcd56b0": "Hilos sin tarea",
   "96b25aa325b24ad3": "Todos los hilos abiertos tienen una tarea.",
-  "7ce42c13c69db41c": "Tablero"
+  "7ce42c13c69db41c": "Tablero",
+  "dedbb3b7f6ebf993": "Continúa esta tarea desde su traspaso.",
+  "70e66fd2284eb696": "No se pudo poner el hilo en {task}",
+  "5533a8bc7aa85d73": "Continuar en un hilo nuevo"
 }

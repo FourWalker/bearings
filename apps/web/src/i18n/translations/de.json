@@ -12483,5 +12483,8 @@
   "b650c7e920de3716": "Board",
   "ddccd8926fcd56b0": "Threads ohne Aufgabe",
   "96b25aa325b24ad3": "Jeder offene Thread gehört zu einer Aufgabe.",
-  "7ce42c13c69db41c": "Board"
+  "7ce42c13c69db41c": "Board",
+  "dedbb3b7f6ebf993": "Diese Aufgabe ab ihrer Übergabe fortsetzen.",
+  "70e66fd2284eb696": "Der Thread konnte nicht zu {task} hinzugefügt werden",
+  "5533a8bc7aa85d73": "In neuem Thread fortsetzen"
 }

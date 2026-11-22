@@ -1,6 +1,8 @@
+import { useAtomValue } from "@effect/atom-react";
+import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import type { BoardChat, BoardTask, BoardView, EnvironmentId } from "@t3tools/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { SquareKanbanIcon } from "lucide-react";
+import { MessageSquarePlusIcon, SquareKanbanIcon } from "lucide-react";
 import { T, useGT } from "gt-react";
 
 import { Badge } from "~/components/ui/badge";
@@ -13,20 +15,30 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "~/components/ui/empty";
-import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "~/components/ui/menu";
+import {
+  Menu,
+  MenuItem,
+  MenuPopup,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuTrigger,
+} from "~/components/ui/menu";
 import { SidebarInset } from "~/components/ui/sidebar";
 import { Skeleton } from "~/components/ui/skeleton";
+import { toastManager } from "~/components/ui/toast";
 import { WorkspaceBreadcrumb, WorkspaceBreadcrumbItem } from "~/components/WorkspaceBreadcrumb";
 import { WorkspacePageContainer } from "~/components/WorkspacePageContainer";
 import { WorkspacePageHeader } from "~/components/WorkspacePageHeader";
 import { isElectron } from "~/env";
+import { useNewThreadHandler } from "~/hooks/useHandleNewThread";
 import { boardEnvironment } from "~/state/board";
 import { useEnvironments } from "~/state/environments";
-import { useEnvironmentQuery } from "~/state/query";
+import { formatEnvironmentQueryError, useEnvironmentQuery } from "~/state/query";
+import { useAtomCommand } from "~/state/use-atom-command";
 import { buildThreadRouteParams } from "~/threadRoutes";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
 
-import { boardTaskTree } from "./board.logic";
+import { type BoardContinueTarget, boardContinueTargets, boardTaskTree } from "./board.logic";
 
 /**
  * Project Board fork: the board of the machine a connected server runs on, as the board app shows
@@ -54,6 +66,33 @@ export function BoardPage() {
       : boardEnvironment.view({ environmentId, input: { boardId } }),
   );
   const board = view.data;
+  const newThread = useNewThreadHandler();
+  const linkThread = useAtomCommand(boardEnvironment.linkThread, { reportFailure: false });
+  // A draft thread in the task's workspace, put on the task before its first turn so that turn
+  // carries the plan and handoff. Local, not a worktree: the board places a thread by its folder.
+  const continueTask = async (task: BoardTask, target: BoardContinueTarget) => {
+    if (environmentId === null || board === null) return;
+    const draft = await newThread(scopeProjectRef(environmentId, target.projectId), {
+      envMode: "local",
+      prompt: gt("Continue this task from its handoff."),
+    });
+    if (draft === null) return;
+    const result = await linkThread({
+      environmentId,
+      input: {
+        boardId: board.id,
+        taskId: task.id,
+        threadId: draft.threadId,
+        projectId: target.projectId,
+      },
+    });
+    if (result._tag === "Failure")
+      toastManager.add({
+        type: "error",
+        title: gt("Could not put the thread on {task}", { task: task.title }),
+        description: formatEnvironmentQueryError(result.cause),
+      });
+  };
   const selectBoard = (next: string) =>
     void navigate({ search: (previous) => ({ ...previous, board: next }) });
 
@@ -86,6 +125,7 @@ export function BoardPage() {
       <BoardBody
         board={board}
         environmentId={environment!.environmentId}
+        onContinue={continueTask}
         showDone={search.done === true}
         onToggleDone={() =>
           void navigate({
@@ -192,8 +232,10 @@ function BoardBody(props: {
   readonly showDone: boolean;
   readonly onToggleDone: () => void;
   readonly onOpenThread: (chat: BoardChat) => void;
+  readonly onContinue: (task: BoardTask, target: BoardContinueTarget) => void;
 }) {
   const gt = useGT();
+  const canLink = useAtomValue(boardEnvironment.linkThread.permissionAtom(props.environmentId));
   const rows = boardTaskTree(props.board.tasks, props.showDone);
   const serviceName = new Map(props.board.services.map((service) => [service.id, service.name]));
   const doneCount = props.board.tasks.filter((task) => task.status === "done").length;
@@ -222,6 +264,12 @@ function BoardBody(props: {
                   task={task}
                   serviceName={serviceName}
                   onOpenThread={props.onOpenThread}
+                  continueTargets={
+                    canLink && task.status !== "done"
+                      ? boardContinueTargets(props.board.workspaces, task)
+                      : []
+                  }
+                  onContinue={(target) => props.onContinue(task, target)}
                 />
               </div>
             ))
@@ -250,6 +298,8 @@ function BoardTaskCard(props: {
   readonly task: BoardTask;
   readonly serviceName: ReadonlyMap<string, string>;
   readonly onOpenThread: (chat: BoardChat) => void;
+  readonly continueTargets: ReadonlyArray<BoardContinueTarget>;
+  readonly onContinue: (target: BoardContinueTarget) => void;
 }) {
   const gt = useGT();
   const { task } = props;
@@ -298,6 +348,7 @@ function BoardTaskCard(props: {
           ))}
         </div>
       ) : null}
+      <BoardContinueButton targets={props.continueTargets} onContinue={props.onContinue} />
     </article>
   );
 }
@@ -330,5 +381,41 @@ function BoardChatRow(props: {
     </Button>
   ) : (
     <div className="px-2 text-sm">{label}</div>
+  );
+}
+
+function BoardContinueButton(props: {
+  readonly targets: ReadonlyArray<BoardContinueTarget>;
+  readonly onContinue: (target: BoardContinueTarget) => void;
+}) {
+  const [only, ...rest] = props.targets;
+  if (only === undefined) return null;
+  const label = (
+    <>
+      <MessageSquarePlusIcon />
+      <T>Continue in new thread</T>
+    </>
+  );
+  if (rest.length === 0)
+    return (
+      <div>
+        <Button variant="outline" size="sm" onClick={() => props.onContinue(only)}>
+          {label}
+        </Button>
+      </div>
+    );
+  return (
+    <div>
+      <Menu>
+        <MenuTrigger render={<Button variant="outline" size="sm" />}>{label}</MenuTrigger>
+        <MenuPopup align="start">
+          {props.targets.map((target) => (
+            <MenuItem key={target.projectId} onClick={() => props.onContinue(target)}>
+              {target.label}
+            </MenuItem>
+          ))}
+        </MenuPopup>
+      </Menu>
+    </div>
   );
 }

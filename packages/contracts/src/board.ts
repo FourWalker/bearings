@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 
-import { NonNegativeInt, ThreadId } from "./baseSchemas.ts";
+import { NonNegativeInt, ProjectId, ThreadId } from "./baseSchemas.ts";
 
 /**
  * The Project Board (`~/.claude-board`), shared with the Claude Code mod and the board app: its
@@ -46,6 +46,8 @@ export const BoardTask = Schema.Struct({
   steps: Schema.Struct({ done: NonNegativeInt, total: NonNegativeInt }),
   chats: Schema.Array(BoardChat),
   updatedAt: Schema.Number,
+  /** The root of the workspace copy that owns the task's module or master task, if one does. */
+  ownerRoot: Schema.NullOr(Schema.String),
 });
 export type BoardTask = typeof BoardTask.Type;
 
@@ -53,6 +55,14 @@ export const BoardView = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   services: Schema.Array(Schema.Struct({ id: Schema.String, name: Schema.String })),
+  /** Each copy of the project the board spans, with this server's project at that folder. */
+  workspaces: Schema.Array(
+    Schema.Struct({
+      label: Schema.String,
+      root: Schema.String,
+      projectId: Schema.NullOr(ProjectId),
+    }),
+  ),
   tasks: Schema.Array(BoardTask),
   unlinked: Schema.Array(BoardChat),
 });
@@ -68,4 +78,23 @@ export class BoardReadError extends Schema.TaggedError<BoardReadError>()(
     detail: Schema.String,
   },
   { httpApiStatus: 500 },
+) {}
+
+/** Links a new thread (a draft with no turn yet) to a task, so its first turn carries the task. */
+export const BoardLinkThreadInput = Schema.Struct({
+  boardId: Schema.String,
+  taskId: Schema.String,
+  threadId: ThreadId,
+  projectId: ProjectId,
+});
+export type BoardLinkThreadInput = typeof BoardLinkThreadInput.Type;
+
+export class BoardLinkError extends Schema.TaggedError<BoardLinkError>()(
+  "BoardLinkError",
+  {
+    /** `blocked`: another workspace copy owns the task's module; `started`: the thread exists. */
+    reason: Schema.Literals(["not-found", "not-on-board", "blocked", "started", "failed"]),
+    detail: Schema.String,
+  },
+  { httpApiStatus: 409 },
 ) {}

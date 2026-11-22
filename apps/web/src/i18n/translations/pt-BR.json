@@ -12483,5 +12483,8 @@
   "b650c7e920de3716": "Quadro",
   "ddccd8926fcd56b0": "Threads sem tarefa",
   "96b25aa325b24ad3": "Todas as threads abertas estão em uma tarefa.",
-  "7ce42c13c69db41c": "Quadro"
+  "7ce42c13c69db41c": "Quadro",
+  "dedbb3b7f6ebf993": "Continue esta tarefa a partir da passagem de bastão.",
+  "70e66fd2284eb696": "Não foi possível colocar a conversa em {task}",
+  "5533a8bc7aa85d73": "Continuar em nova conversa"
 }

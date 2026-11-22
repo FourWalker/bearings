@@ -168,6 +168,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.issueTrackersBindProject]: "issues",
   [WS_METHODS.boardList]: "issues",
   [WS_METHODS.boardView]: "issues",
+  [WS_METHODS.boardLinkThread]: "issues",
   [WS_METHODS.sourceControlLookupRepository]: "source-control",
   [WS_METHODS.sourceControlCloneRepository]: "source-control",
   [WS_METHODS.sourceControlPublishRepository]: "source-control",

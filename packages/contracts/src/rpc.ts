@@ -182,7 +182,14 @@ import {
   ReviewDiffPreviewResult,
 } from "./review.ts";
 import { KeybindingsConfigError } from "./keybindings.ts";
-import { BoardReadError, BoardSummary, BoardView, BoardViewInput } from "./board.ts";
+import {
+  BoardLinkError,
+  BoardLinkThreadInput,
+  BoardReadError,
+  BoardSummary,
+  BoardView,
+  BoardViewInput,
+} from "./board.ts";
 import { OrchestrationSearchThreadsError } from "./threadSearch.ts";
 import {
   ProviderMcpSignInCompleteInput,
@@ -685,6 +692,7 @@ export const WS_METHODS = {
   // Project Board fork.
   boardList: "board.list",
   boardView: "board.view",
+  boardLinkThread: "board.linkThread",
 
   sourceControlLookupRepository: "sourceControl.lookupRepository",
   sourceControlCloneRepository: "sourceControl.cloneRepository",
@@ -1494,6 +1502,13 @@ const WsBoardViewRpc = Rpc.make(WS_METHODS.boardView, {
   payload: BoardViewInput,
   success: BoardView,
   error: BoardRpcError,
+});
+
+/** Project Board fork: a new thread on a task, linked before its first turn. */
+const WsBoardLinkThreadRpc = Rpc.make(WS_METHODS.boardLinkThread, {
+  payload: BoardLinkThreadInput,
+  success: Schema.Void,
+  error: Schema.Union([BoardLinkError, EnvironmentAuthorizationError]),
 });
 
 const IssueTrackerRpcError = Schema.Union([
@@ -2407,6 +2422,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsIssueTrackersBindProjectRpc,
   WsBoardListRpc,
   WsBoardViewRpc,
+  WsBoardLinkThreadRpc,
   WsGuestShareCreateRpc,
   WsServerProbeRpc,
   WsServerGetConfigRpc,

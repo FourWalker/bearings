@@ -12492,5 +12492,8 @@
   "b650c7e920de3716": "Board",
   "ddccd8926fcd56b0": "Threads not on a task",
   "96b25aa325b24ad3": "Every open thread is on a task.",
-  "7ce42c13c69db41c": "Board"
+  "7ce42c13c69db41c": "Board",
+  "dedbb3b7f6ebf993": "Continue this task from its handoff.",
+  "70e66fd2284eb696": "Could not put the thread on {task}",
+  "5533a8bc7aa85d73": "Continue in new thread"
 }

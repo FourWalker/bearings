@@ -6,13 +6,32 @@ import * as NodePath from "node:path";
 import { expect, it } from "@effect/vitest";
 import { BoardChat, BoardStore, noGit, norm } from "@t3tools/board-core";
 import { nodeIO } from "@t3tools/board-core/node";
-import { RunId, ThreadId } from "@t3tools/contracts";
+import { type Project, ProjectId, RunId, ThreadId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 
 import { liveThreadShell } from "../mcp/McpToolAccess.testkit.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
+import * as ProjectService from "../project/ProjectService.ts";
 import * as BoardService from "./BoardService.ts";
+
+const project = (id: string, workspaceRoot: string): Project => ({
+  id: ProjectId.make(id),
+  title: id,
+  workspaceRoot,
+  defaultModelSelection: null,
+  scripts: [],
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+  deletedAt: null,
+});
+
+const projectsAt = (all: ReadonlyArray<Project>) =>
+  Layer.mock(ProjectService.ProjectService)({
+    listPage: () => Effect.succeed({ projects: all, nextCursor: null }),
+    getById: (id) => Effect.succeed(Option.fromNullishOr(all.find((p) => p.id === id))),
+  });
 
 it.effect("shows a T3 thread's own status and title, and drops threads this server lacks", () =>
   Effect.gen(function* () {
@@ -52,8 +71,8 @@ it.effect("shows a T3 thread's own status and title, and drops threads this serv
               },
         ),
     });
-    const layer = Layer.effect(BoardService.BoardService, BoardService.make(store)).pipe(
-      Layer.provide(threads),
+    const layer = Layer.effect(BoardService.BoardService, BoardService.make(store, noGit)).pipe(
+      Layer.provide(Layer.merge(threads, projectsAt([]))),
     );
 
     yield* Effect.gen(function* () {
@@ -72,4 +91,100 @@ it.effect("shows a T3 thread's own status and title, and drops threads this serv
       expect(missing.reason).toBe("not-found");
     }).pipe(Effect.provide(layer));
   }),
+);
+
+it.effect(
+  "links a new thread to a task before its first turn, and maps workspaces to projects",
+  () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.promise(() =>
+        NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "board-link-")),
+      );
+      const main = norm(NodePath.join(tmp, "nfx"));
+      const copy = norm(NodePath.join(tmp, "nfx-copy"));
+      const store = new BoardStore(NodePath.join(tmp, "board"), nodeIO);
+      const draft = ThreadId.make("thread:draft");
+      yield* Effect.promise(async () => {
+        await store.saveRegistry({
+          version: 1,
+          boards: [
+            {
+              id: "nefx",
+              name: "NEFX",
+              createdAt: 0,
+              roots: [
+                { path: main, label: "main" },
+                { path: copy, label: "copy" },
+              ],
+            },
+          ],
+        });
+        const setup = new BoardChat(store, noGit, "t3");
+        await setup.open({ sessionId: "thread:setup", cwd: main });
+        await setup.createTask({ title: "Refunds" });
+        await setup.createTask({ title: "Payouts", parentId: "refunds" });
+        const payouts = await store.loadTask("nefx", "payouts");
+        if (payouts === null) throw new Error("no task");
+        await store.saveTask("nefx", {
+          ...payouts,
+          owner: { root: copy, label: "copy", state: "owned", since: 0 },
+        });
+      });
+      const threads = Layer.mock(ThreadManagement.ThreadManagementService)({
+        getThreadShell: (threadId) =>
+          Effect.succeed(threadId === "thread:started" ? liveThreadShell(threadId) : null),
+      });
+      const layer = Layer.effect(BoardService.BoardService, BoardService.make(store, noGit)).pipe(
+        Layer.provide(
+          Layer.merge(
+            threads,
+            projectsAt([
+              project("project:main", main),
+              project("project:main-api", `${main}/api`),
+              project("project:other", norm(NodePath.join(tmp, "elsewhere"))),
+            ]),
+          ),
+        ),
+      );
+
+      yield* Effect.gen(function* () {
+        const boards = yield* BoardService.BoardService;
+        const link = (threadId: ThreadId, projectId: string, taskId: string) =>
+          boards.linkThread({
+            boardId: "nefx",
+            taskId,
+            threadId,
+            projectId: ProjectId.make(projectId),
+          });
+        // An unsent draft on a task isn't a chat there yet.
+        yield* link(draft, "project:main", "refunds");
+        const before = yield* boards.view({ boardId: "nefx" });
+        expect(before.workspaces).toEqual([
+          { label: "main", root: main, projectId: ProjectId.make("project:main") },
+          { label: "copy", root: copy, projectId: null },
+        ]);
+        expect(before.tasks.find((t) => t.id === "refunds")?.chats).toEqual([]);
+        expect(before.tasks.find((t) => t.id === "payouts")?.ownerRoot).toBe(copy);
+        // The thread's board chat, opened at its first turn, keeps the link.
+        yield* Effect.promise(async () => {
+          const first = new BoardChat(store, noGit, "t3");
+          await first.open({ sessionId: draft, cwd: main });
+          await first.turnStart("Continue the refunds work");
+        });
+        expect((yield* Effect.promise(() => store.readSession("nefx", draft)))?.taskId).toBe(
+          "refunds",
+        );
+
+        const reasons = yield* Effect.forEach(
+          [
+            link(ThreadId.make("thread:started"), "project:main", "refunds"),
+            link(ThreadId.make("thread:b"), "project:other", "refunds"),
+            link(ThreadId.make("thread:c"), "project:main", "nope"),
+            link(ThreadId.make("thread:d"), "project:main", "payouts"),
+          ],
+          (attempt) => Effect.flip(attempt).pipe(Effect.map((error) => error.reason)),
+        );
+        expect(reasons).toEqual(["started", "not-on-board", "not-found", "blocked"]);
+      }).pipe(Effect.provide(layer));
+    }),
 );

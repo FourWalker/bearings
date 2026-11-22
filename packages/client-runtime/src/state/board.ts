@@ -1,7 +1,11 @@
 import { WS_METHODS } from "@t3tools/contracts";
 import type { Atom } from "effect/reactivity";
 
-import { createEnvironmentRpcQueryAtomFamily } from "./runtime.ts";
+import {
+  createAtomCommandScheduler,
+  createEnvironmentRpcCommand,
+  createEnvironmentRpcQueryAtomFamily,
+} from "./runtime.ts";
 import type { EnvironmentRegistry } from "../connection/registry.ts";
 
 /**
@@ -20,6 +24,16 @@ export function createBoardEnvironmentAtoms<R, E>(
       label: "environment-data:board:view",
       tag: WS_METHODS.boardView,
       refreshIntervalMs: 10_000,
+    }),
+    /** Puts a new thread on a task before its first turn. */
+    linkThread: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:board:link-thread",
+      tag: WS_METHODS.boardLinkThread,
+      scheduler: createAtomCommandScheduler(),
+      concurrency: {
+        mode: "serial",
+        key: ({ environmentId }: { readonly environmentId: string }) => environmentId,
+      },
     }),
   };
 }

@@ -12483,5 +12483,8 @@
   "b650c7e920de3716": "Tableau",
   "ddccd8926fcd56b0": "Fils sans tâche",
   "96b25aa325b24ad3": "Chaque fil ouvert est rattaché à une tâche.",
-  "7ce42c13c69db41c": "Tableau"
+  "7ce42c13c69db41c": "Tableau",
+  "dedbb3b7f6ebf993": "Reprends cette tâche à partir de son passage de relais.",
+  "70e66fd2284eb696": "Impossible de rattacher le fil à {task}",
+  "5533a8bc7aa85d73": "Continuer dans un nouveau fil"
 }

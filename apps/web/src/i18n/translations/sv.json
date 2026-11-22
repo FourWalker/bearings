@@ -12490,5 +12490,8 @@
   "b650c7e920de3716": "Tavla",
   "ddccd8926fcd56b0": "Trådar utan uppgift",
   "96b25aa325b24ad3": "Alla öppna trådar hör till en uppgift.",
-  "7ce42c13c69db41c": "Tavla"
+  "7ce42c13c69db41c": "Tavla",
+  "dedbb3b7f6ebf993": "Fortsätt den här uppgiften från dess överlämning.",
+  "70e66fd2284eb696": "Det gick inte att lägga tråden på {task}",
+  "5533a8bc7aa85d73": "Fortsätt i ny tråd"
 }
