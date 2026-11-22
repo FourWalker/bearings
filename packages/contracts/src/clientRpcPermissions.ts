@@ -56,6 +56,9 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.projectsCreateFromThread]: AuthOrchestrationOperateScope,
   // Project Board fork: puts a thread on a task, whose plan and handoff its turns then carry.
   [WS_METHODS.boardLinkThread]: AuthOrchestrationOperateScope,
+  // Board edits change what every thread on the task works from, as linking one does.
+  [WS_METHODS.boardEditTask]: AuthOrchestrationOperateScope,
+  [WS_METHODS.boardCreateTask]: AuthOrchestrationOperateScope,
   [WS_METHODS.sourceControlCloneRepository]: AuthSourceControlWriteScope,
   [WS_METHODS.sourceControlPublishRepository]: AuthSourceControlWriteScope,
   [WS_METHODS.sourceControlStar]: AuthSourceControlWriteScope,

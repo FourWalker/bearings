@@ -13,6 +13,7 @@ import { useState, type ReactNode } from "react";
 import ChatMarkdown from "~/components/ChatMarkdown";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { Checkbox } from "~/components/ui/checkbox";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import { Skeleton } from "~/components/ui/skeleton";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
@@ -39,6 +40,20 @@ import {
   tagsOf,
 } from "./board.logic";
 import { BoardDotMark, BoardModuleNote, type BoardNoteActions } from "./BoardNotes";
+import {
+  AddRow,
+  BoardEditProvider,
+  ChoiceSelect,
+  DecisionAdder,
+  DocAdder,
+  EditableText,
+  ItemAdder,
+  ItemRow,
+  LinkAdder,
+  MarkdownEditor,
+  VerdictControls,
+  useBoardEdit,
+} from "./BoardTaskEditors";
 
 /**
  * Project Board fork: the board app's task views. A master task opens as a page with its
@@ -58,6 +73,8 @@ export interface BoardTaskViewProps {
   readonly onContinue: (target: BoardContinueTarget) => void;
   readonly onOpenThread: (chat: BoardChat) => void;
   readonly onClose: () => void;
+  /** Re-reads the board after an edit. */
+  readonly onChanged: () => void;
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -110,42 +127,53 @@ export function BoardTaskView(props: BoardTaskViewProps) {
     return <DecisionsTab {...props} detail={data} />;
   };
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <TaskHeader {...props} />
-      <Tabs.Root
-        value={tab}
-        onValueChange={(next) => setTab(next as Tab)}
-        className="flex min-h-0 flex-1 flex-col"
-      >
-        <Tabs.List className="flex shrink-0 gap-1 overflow-x-auto border-b px-4">
-          {tabs.map(([value, label]) => (
-            <Tabs.Tab
-              key={value}
-              value={value}
-              className="shrink-0 border-transparent border-b-2 px-2 py-2 text-muted-foreground text-sm data-active:border-primary data-active:text-foreground"
-            >
-              {label}
-            </Tabs.Tab>
-          ))}
-        </Tabs.List>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          {tab === "overview" ? (
-            body("overview")
-          ) : (
-            <div className="grid gap-4 @3xl/task:grid-cols-[minmax(0,1fr)_18rem]">
-              <div className="grid min-w-0 content-start gap-4">{body(tab)}</div>
-              <SideColumn {...props} detail={data} onTab={setTab} />
-            </div>
-          )}
-        </div>
-      </Tabs.Root>
-    </div>
+    <BoardEditProvider
+      environmentId={props.environmentId}
+      boardId={props.board.id}
+      taskId={task.id}
+      onSaved={() => {
+        detail.refresh();
+        props.onChanged();
+      }}
+    >
+      <div className="flex h-full min-h-0 flex-col">
+        <TaskHeader {...props} />
+        <Tabs.Root
+          value={tab}
+          onValueChange={(next) => setTab(next as Tab)}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <Tabs.List className="flex shrink-0 gap-1 overflow-x-auto border-b px-4">
+            {tabs.map(([value, label]) => (
+              <Tabs.Tab
+                key={value}
+                value={value}
+                className="shrink-0 border-transparent border-b-2 px-2 py-2 text-muted-foreground text-sm data-active:border-primary data-active:text-foreground"
+              >
+                {label}
+              </Tabs.Tab>
+            ))}
+          </Tabs.List>
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            {tab === "overview" ? (
+              body("overview")
+            ) : (
+              <div className="grid gap-4 @3xl/task:grid-cols-[minmax(0,1fr)_18rem]">
+                <div className="grid min-w-0 content-start gap-4">{body(tab)}</div>
+                <SideColumn {...props} detail={data} onTab={setTab} />
+              </div>
+            )}
+          </div>
+        </Tabs.Root>
+      </div>
+    </BoardEditProvider>
   );
 }
 
 function TaskHeader(props: BoardTaskViewProps) {
   const gt = useGT();
   const { index, task } = props;
+  const { canEdit, edit } = useBoardEdit();
   const levelLabel = useLevelLabel(index);
   const parents = ancestorsOf(index, task);
   return (
@@ -173,14 +201,36 @@ function TaskHeader(props: BoardTaskViewProps) {
         <Badge variant="outline">{levelLabel(task)}</Badge>
       </div>
       <div className="flex items-start gap-2">
-        <h2 className="min-w-0 flex-1 font-semibold text-lg leading-tight">{task.title}</h2>
-        <Badge variant={task.status === "done" ? "secondary" : "outline"}>
-          {task.status === "active"
-            ? gt("active")
-            : task.status === "paused"
-              ? gt("paused")
-              : gt("done")}
-        </Badge>
+        <div className="min-w-0 flex-1">
+          <EditableText
+            value={task.title}
+            label={gt("Title")}
+            onSave={(title) => void edit({ op: "update", title })}
+          >
+            <h2 className="font-semibold text-lg leading-tight">{task.title}</h2>
+          </EditableText>
+        </div>
+        {canEdit ? (
+          <ChoiceSelect
+            value={task.status}
+            width="sm"
+            label={gt("Status")}
+            choices={[
+              ["active", gt("active")],
+              ["paused", gt("paused")],
+              ["done", gt("done")],
+            ]}
+            onChange={(status) => void edit({ op: "update", status })}
+          />
+        ) : (
+          <Badge variant={task.status === "done" ? "secondary" : "outline"}>
+            {task.status === "active"
+              ? gt("active")
+              : task.status === "paused"
+                ? gt("paused")
+                : gt("done")}
+          </Badge>
+        )}
         {task.level > 1 ? (
           <Button
             variant="ghost-muted"
@@ -192,9 +242,19 @@ function TaskHeader(props: BoardTaskViewProps) {
           </Button>
         ) : null}
       </div>
-      {task.description ? (
-        <p className="text-muted-foreground text-sm">{task.description}</p>
-      ) : null}
+      <EditableText
+        value={task.description}
+        label={gt("Description")}
+        multiline
+        placeholder={gt("What is this for?")}
+        onSave={(description) => void edit({ op: "update", description })}
+      >
+        {task.description ? (
+          <p className="text-muted-foreground text-sm">{task.description}</p>
+        ) : canEdit ? (
+          <p className="text-muted-foreground text-sm italic">{gt("Add a purpose…")}</p>
+        ) : null}
+      </EditableText>
     </header>
   );
 }
@@ -298,6 +358,7 @@ function OverviewTab(props: BoardTaskViewProps & { readonly onTab: (tab: Tab) =>
         .filter((item) => item.kind === kind && !item.done)
         .map((item) => ({ item, owner })),
     );
+  const { edit } = useBoardEdit();
   const itemList = (kind: "mandatory" | "todo") => {
     const list = items(kind);
     return list.length === 0 ? (
@@ -306,8 +367,7 @@ function OverviewTab(props: BoardTaskViewProps & { readonly onTab: (tab: Tab) =>
       </Muted>
     ) : (
       list.map(({ item, owner }) => (
-        <div key={`${owner.id}:${item.id}`} className="text-sm">
-          {item.text}
+        <ItemRow key={`${owner.id}:${item.id}`} item={item} taskId={owner.id}>
           {owner.id !== task.id ? (
             <button
               type="button"
@@ -317,7 +377,7 @@ function OverviewTab(props: BoardTaskViewProps & { readonly onTab: (tab: Tab) =>
               {owner.title}
             </button>
           ) : null}
-        </div>
+        </ItemRow>
       ))
     );
   };
@@ -345,6 +405,11 @@ function OverviewTab(props: BoardTaskViewProps & { readonly onTab: (tab: Tab) =>
             ))}
           </div>
         )}
+        <AddRow
+          placeholder={gt("New module…")}
+          button={gt("Add module")}
+          onAdd={(title) => edit({ op: "createChild", title })}
+        />
         <Card title={gt("Linked tasks ({count})", { count: externalLinksOf(index, task).length })}>
           <LinkedTasks {...props} />
         </Card>
@@ -380,6 +445,7 @@ function OverviewTab(props: BoardTaskViewProps & { readonly onTab: (tab: Tab) =>
           <T>To do</T>
         </h3>
         {itemList("todo")}
+        <ItemAdder taskId={task.id} />
         {openDecisions > 0 ? (
           <button
             type="button"
@@ -534,49 +600,66 @@ function ThreadsTab(
 function SubtasksTab(props: BoardTaskViewProps) {
   const gt = useGT();
   const { index, task } = props;
+  const { edit } = useBoardEdit();
   const kids = index.kidsOf(task.id);
+  const adder =
+    task.level < 3 ? (
+      <AddRow
+        placeholder={gt("New task title…")}
+        button={gt("Add task")}
+        onAdd={(title) => edit({ op: "createChild", title })}
+      />
+    ) : null;
   if (kids.length === 0)
     return (
-      <Card>
-        <Muted>
-          {task.level === 3 ? (
-            <T>Tasks are the lowest level. Promote this task to break it down further.</T>
-          ) : (
-            <T>Nothing broken down here yet.</T>
-          )}
-        </Muted>
-      </Card>
+      <>
+        {adder}
+        <Card>
+          <Muted>
+            {task.level === 3 ? (
+              <T>Tasks are the lowest level. Promote this task to break it down further.</T>
+            ) : (
+              <T>Nothing broken down here yet.</T>
+            )}
+          </Muted>
+        </Card>
+      </>
     );
-  return kids.map((kid) => (
-    <button
-      key={kid.id}
-      type="button"
-      className="grid gap-1 rounded-lg border bg-card p-3 text-start hover:bg-accent"
-      onClick={() => props.actions.onOpenTask(kid)}
-    >
-      <span className="flex items-center gap-2">
-        <BoardDotMark dot={dotOf(index, kid)} />
-        <span className="min-w-0 flex-1 truncate font-medium text-sm">{kid.title}</span>
-        <Badge variant="outline">
-          {kid.status === "active"
-            ? gt("active")
-            : kid.status === "paused"
-              ? gt("paused")
-              : gt("done")}
-        </Badge>
-      </span>
-      {kid.description ? (
-        <span className="text-muted-foreground text-sm">{kid.description}</span>
-      ) : null}
-      <span className="text-muted-foreground text-xs">
-        {kid.next !== null
-          ? gt("Next: {id} – {text}", { id: kid.next.id, text: kid.next.text })
-          : kid.steps.total > 0
-            ? gt("All steps done")
-            : gt("No plan yet")}
-      </span>
-    </button>
-  ));
+  return (
+    <>
+      {adder}
+      {kids.map((kid) => (
+        <button
+          key={kid.id}
+          type="button"
+          className="grid gap-1 rounded-lg border bg-card p-3 text-start hover:bg-accent"
+          onClick={() => props.actions.onOpenTask(kid)}
+        >
+          <span className="flex items-center gap-2">
+            <BoardDotMark dot={dotOf(index, kid)} />
+            <span className="min-w-0 flex-1 truncate font-medium text-sm">{kid.title}</span>
+            <Badge variant="outline">
+              {kid.status === "active"
+                ? gt("active")
+                : kid.status === "paused"
+                  ? gt("paused")
+                  : gt("done")}
+            </Badge>
+          </span>
+          {kid.description ? (
+            <span className="text-muted-foreground text-sm">{kid.description}</span>
+          ) : null}
+          <span className="text-muted-foreground text-xs">
+            {kid.next !== null
+              ? gt("Next: {id} – {text}", { id: kid.next.id, text: kid.next.text })
+              : kid.steps.total > 0
+                ? gt("All steps done")
+                : gt("No plan yet")}
+          </span>
+        </button>
+      ))}
+    </>
+  );
 }
 
 function PlanTab(
@@ -588,6 +671,7 @@ function PlanTab(
   const gt = useGT();
   const { index, task, detail } = props;
   const [showMaster, setShowMaster] = useState(task.level === 1);
+  const { canEdit, edit } = useBoardEdit();
   const master = index.byId.get(detail.masterTaskId);
   const notes = new Set(detail.stepNotes.map((note) => note.step.toLowerCase()));
   const steps = detail.plan.flatMap((phase) => phase.steps);
@@ -612,68 +696,106 @@ function PlanTab(
           <Muted>
             {gt("This task is part of the master plan of {task}.", { task: master?.title ?? "" })}
           </Muted>
-        ) : detail.masterPlan ? (
-          <Markdown text={detail.masterPlan} environmentId={props.environmentId} />
         ) : (
-          <Muted>
-            <T>No master plan yet. The planning thread drafts it first with board_master_plan.</T>
-          </Muted>
+          <MarkdownEditor
+            value={detail.masterPlan}
+            label={gt("Master plan")}
+            placeholder={gt(
+              "Goal · scope · architecture · modules and their tasks · sequencing · risks",
+            )}
+            onSave={(markdown) => edit({ op: "saveMasterPlan", markdown })}
+          >
+            {detail.masterPlan ? (
+              <Markdown text={detail.masterPlan} environmentId={props.environmentId} />
+            ) : (
+              <Muted>
+                <T>
+                  No master plan yet. The planning thread drafts it first with board_master_plan.
+                </T>
+              </Muted>
+            )}
+          </MarkdownEditor>
         )}
       </Card>
       <Card title={gt("Plan · phases")}>
-        {steps.length === 0 ? (
-          <Muted>
-            <T>No phase checklist yet.</T>
-          </Muted>
-        ) : (
-          <>
-            <p className="text-sm">
-              {next !== null
-                ? gt("Next: {id} – {text}", { id: next.id, text: next.text })
-                : gt("Every step is done.")}
-            </p>
-            {detail.plan.map((phase) => (
-              <div key={phase.steps[0]?.id ?? phase.title} className="grid gap-1">
-                <h4 className="font-medium text-sm">{phase.title}</h4>
-                {phase.steps.map((step) => {
-                  const child = step.childId === null ? undefined : index.byId.get(step.childId);
-                  return (
-                    <div
-                      key={step.id}
-                      className={cn(
-                        "flex items-center gap-2 rounded px-1 py-0.5 text-sm",
-                        step.done && "text-muted-foreground line-through",
-                        next?.id === step.id && "bg-accent",
-                      )}
-                    >
-                      <span aria-hidden>{step.done ? "☑" : "☐"}</span>
-                      <span className="font-mono text-xs">{step.id}</span>
-                      <span className="min-w-0 flex-1">{step.text}</span>
-                      {child !== undefined ? (
-                        <Button
-                          variant="ghost-muted"
-                          size="xs"
-                          onClick={() => props.actions.onOpenTask(child)}
-                        >
-                          → {child.title}
-                        </Button>
-                      ) : null}
-                      {notes.has(step.id.toLowerCase()) ? (
-                        <Button
-                          variant="ghost-muted"
-                          size="xs"
-                          onClick={() => props.onTab("handoff")}
-                        >
-                          <T>note</T>
-                        </Button>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </>
-        )}
+        <MarkdownEditor
+          value={detail.planMarkdown}
+          label={gt("Plan · phases")}
+          placeholder={gt("## Phase A: Name\n- [ ] A1 First step\n- [ ] A2 Second step")}
+          onSave={(markdown) => edit({ op: "savePlan", markdown })}
+        >
+          {steps.length === 0 ? (
+            <Muted>
+              <T>No phase checklist yet.</T>
+            </Muted>
+          ) : (
+            <>
+              <p className="text-sm">
+                {next !== null
+                  ? gt("Next: {id} – {text}", { id: next.id, text: next.text })
+                  : gt("Every step is done.")}
+              </p>
+              {detail.plan.map((phase) => (
+                <div key={phase.steps[0]?.id ?? phase.title} className="grid gap-1">
+                  <h4 className="font-medium text-sm">{phase.title}</h4>
+                  {phase.steps.map((step) => {
+                    const child = step.childId === null ? undefined : index.byId.get(step.childId);
+                    return (
+                      <div
+                        key={step.id}
+                        className={cn(
+                          "flex items-center gap-2 rounded px-1 py-0.5 text-sm",
+                          step.done && "text-muted-foreground line-through",
+                          next?.id === step.id && "bg-accent",
+                        )}
+                      >
+                        {canEdit ? (
+                          <Checkbox
+                            checked={step.done}
+                            aria-label={gt("Step {id} done", { id: step.id })}
+                            onCheckedChange={() => void edit({ op: "toggleStep", step: step.id })}
+                          />
+                        ) : (
+                          <span aria-hidden>{step.done ? "☑" : "☐"}</span>
+                        )}
+                        <span className="font-mono text-xs">{step.id}</span>
+                        <span className="min-w-0 flex-1">{step.text}</span>
+                        {child !== undefined ? (
+                          <Button
+                            variant="ghost-muted"
+                            size="xs"
+                            onClick={() => props.actions.onOpenTask(child)}
+                          >
+                            → {child.title}
+                          </Button>
+                        ) : canEdit && task.level < 3 && !step.done ? (
+                          <Button
+                            variant="ghost-muted"
+                            size="xs"
+                            onClick={() =>
+                              void edit({ op: "createChild", title: step.text, fromStep: step.id })
+                            }
+                          >
+                            {task.level === 1 ? gt("→ module") : gt("→ task")}
+                          </Button>
+                        ) : null}
+                        {notes.has(step.id.toLowerCase()) ? (
+                          <Button
+                            variant="ghost-muted"
+                            size="xs"
+                            onClick={() => props.onTab("handoff")}
+                          >
+                            <T>note</T>
+                          </Button>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </>
+          )}
+        </MarkdownEditor>
       </Card>
       <Card title={gt("Docs & references")}>
         <Muted>
@@ -689,6 +811,7 @@ function PlanTab(
         ) : (
           detail.docs.map((doc) => <DocRow key={`${doc.from?.id ?? ""}:${doc.id}`} doc={doc} />)
         )}
+        <DocAdder />
       </Card>
     </>
   );
@@ -698,6 +821,7 @@ function DocRow(props: { readonly doc: BoardTaskDetail["docs"][number] }) {
   const gt = useGT();
   const { doc } = props;
   const { copyToClipboard, isCopied } = useCopyToClipboard();
+  const { canEdit, edit } = useBoardEdit();
   const url = /^https?:\/\//i.test(doc.ref);
   return (
     <div className="flex items-start gap-2">
@@ -726,6 +850,16 @@ function DocRow(props: { readonly doc: BoardTaskDetail["docs"][number] }) {
       <Button variant="ghost-muted" size="xs" onClick={() => copyToClipboard(doc.ref, undefined)}>
         {isCopied ? gt("Copied") : gt("Copy")}
       </Button>
+      {canEdit && doc.from === null ? (
+        <Button
+          variant="ghost-muted"
+          size="icon-xs"
+          aria-label={gt("Remove")}
+          onClick={() => void edit({ op: "removeDoc", docId: doc.id })}
+        >
+          <XIcon />
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -733,6 +867,7 @@ function DocRow(props: { readonly doc: BoardTaskDetail["docs"][number] }) {
 function HandoffTab(props: BoardTaskViewProps & { readonly detail: BoardTaskDetail }) {
   const gt = useGT();
   const { detail } = props;
+  const { edit } = useBoardEdit();
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   return (
     <>
@@ -743,13 +878,19 @@ function HandoffTab(props: BoardTaskViewProps & { readonly detail: BoardTaskDeta
         </T>
       </Muted>
       <Card title={gt("Living handoff")}>
-        {detail.handoff ? (
-          <Markdown text={detail.handoff} environmentId={props.environmentId} />
-        ) : (
-          <Muted>
-            <T>Not written yet. Agents rewrite it when a step finishes or at a checkpoint.</T>
-          </Muted>
-        )}
+        <MarkdownEditor
+          value={detail.handoff}
+          label={gt("Living handoff")}
+          onSave={(markdown) => edit({ op: "saveHandoff", markdown })}
+        >
+          {detail.handoff ? (
+            <Markdown text={detail.handoff} environmentId={props.environmentId} />
+          ) : (
+            <Muted>
+              <T>Not written yet. Agents rewrite it when a step finishes or at a checkpoint.</T>
+            </Muted>
+          )}
+        </MarkdownEditor>
       </Card>
       {detail.repoState.length > 0 ? (
         <Card
@@ -865,6 +1006,17 @@ function DecisionsTab(props: BoardTaskViewProps & { readonly detail: BoardTaskDe
           ))}
         </>
       ) : null}
+      <DecisionAdder
+        levels={[task, ...ancestorsOf(props.index, task).toReversed()].map(
+          (owner) =>
+            [
+              owner.level,
+              owner.id === task.id
+                ? gt("this task (L{level})", { level: owner.level })
+                : gt("{task} (L{level})", { task: owner.title, level: owner.level }),
+            ] as const,
+        )}
+      />
       {legacy.length > 0 ? (
         <>
           <h3 className="font-medium text-sm">
@@ -968,6 +1120,7 @@ function DecisionCard(
           {d.verdict || gt("no verdict recorded")}
         </p>
       ) : null}
+      <VerdictControls decisionId={d.id} status={d.status} />
     </Card>
   );
 }
@@ -985,56 +1138,92 @@ const LINK_LABELS = (gt: ReturnType<typeof useGT>): Record<BoardLinkGroup, strin
 function LinkedTasks(props: BoardTaskViewProps) {
   const gt = useGT();
   const { index, task } = props;
+  const { canEdit, edit } = useBoardEdit();
   const links = externalLinksOf(index, task);
   const labels = LINK_LABELS(gt);
+  const inside = new Set(subtreeOf(index, task).map((t) => t.id));
+  const adder = (
+    <LinkAdder
+      targets={index.tasks
+        .filter((t) => !inside.has(t.id))
+        .map((t) => ({
+          id: t.id,
+          label: [...ancestorsOf(index, t), t].map((a) => a.title).join(" › "),
+        }))
+        .toSorted((a, b) => a.label.localeCompare(b.label))}
+    />
+  );
   if (links.length === 0)
     return (
-      <Muted>
-        <T>No links to work outside this task yet.</T>
-      </Muted>
+      <>
+        <Muted>
+          <T>No links to work outside this task yet.</T>
+        </Muted>
+        {adder}
+      </>
     );
-  return LINK_GROUP_ORDER.filter((group) => links.some((link) => link.group === group)).map(
-    (group) => (
-      <div key={group} className="grid gap-1">
-        <h4
-          className={cn(
-            "font-medium text-xs uppercase",
-            group === "blockingUs" && "text-destructive",
-          )}
-        >
-          {labels[group]}
-        </h4>
-        {links
-          .filter((link) => link.group === group)
-          .map((link) => (
-            <div key={`${link.ours?.id ?? ""}:${link.otherId}`} className="grid gap-0.5">
-              {link.other === null ? (
-                <span className="text-muted-foreground text-sm">
-                  {gt("{task} (archived or missing)", { task: link.otherId })}
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  className="flex items-center gap-2 text-start text-sm hover:underline"
-                  onClick={() => link.other !== null && props.actions.onOpenTask(link.other)}
-                >
-                  <BoardDotMark dot={dotOf(index, link.other)} />
-                  <span className="min-w-0 flex-1 truncate">{link.other.title}</span>
-                </button>
+  return (
+    <>
+      {LINK_GROUP_ORDER.filter((group) => links.some((link) => link.group === group)).map(
+        (group) => (
+          <div key={group} className="grid gap-1">
+            <h4
+              className={cn(
+                "font-medium text-xs uppercase",
+                group === "blockingUs" && "text-destructive",
               )}
-              {link.other !== null ? (
-                <span className="text-muted-foreground text-xs">
-                  {ancestorsOf(index, link.other)
-                    .map((a) => a.title)
-                    .join(" › ")}
-                  {link.ours !== null && link.ours.id !== task.id ? ` · ↔ ${link.ours.title}` : ""}
-                  {link.note ? ` · ${link.note}` : ""}
-                </span>
-              ) : null}
-            </div>
-          ))}
-      </div>
-    ),
+            >
+              {labels[group]}
+            </h4>
+            {links
+              .filter((link) => link.group === group)
+              .map((link) => (
+                <div key={`${link.ours?.id ?? ""}:${link.otherId}`} className="grid gap-0.5">
+                  {link.other === null ? (
+                    <span className="text-muted-foreground text-sm">
+                      {gt("{task} (archived or missing)", { task: link.otherId })}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="flex items-center gap-2 text-start text-sm hover:underline"
+                      onClick={() => link.other !== null && props.actions.onOpenTask(link.other)}
+                    >
+                      <BoardDotMark dot={dotOf(index, link.other)} />
+                      <span className="min-w-0 flex-1 truncate">{link.other.title}</span>
+                    </button>
+                  )}
+                  {link.other !== null ? (
+                    <span className="text-muted-foreground text-xs">
+                      {ancestorsOf(index, link.other)
+                        .map((a) => a.title)
+                        .join(" › ")}
+                      {link.ours !== null && link.ours.id !== task.id
+                        ? ` · ↔ ${link.ours.title}`
+                        : ""}
+                      {link.note ? ` · ${link.note}` : ""}
+                    </span>
+                  ) : null}
+                  {canEdit ? (
+                    <div>
+                      <Button
+                        variant="ghost-muted"
+                        size="xs"
+                        onClick={() =>
+                          void edit({ op: "removeLink", to: link.to, type: link.type }, link.owner)
+                        }
+                      >
+                        <T>Remove link</T>
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+          </div>
+        ),
+      )}
+      {adder}
+    </>
   );
 }
 
@@ -1130,21 +1319,7 @@ function SideColumn(
           )}
         </Card>
       ) : null}
-      <Card title={gt("Services")}>
-        {tagsOf(task).length === 0 ? (
-          <Muted>
-            <T>No service tags yet: added when a thread edits files in a service's folder.</T>
-          </Muted>
-        ) : (
-          <div className="flex flex-wrap gap-1">
-            {tagsOf(task).map((id) => (
-              <Badge key={id} variant="info">
-                {props.serviceName(id)}
-              </Badge>
-            ))}
-          </div>
-        )}
-      </Card>
+      <ServicesCard {...props} />
       <Card title={gt("Linked tasks")}>
         <LinkedTasks {...props} />
       </Card>
@@ -1184,6 +1359,7 @@ function SideColumn(
       <Card title={gt("Important")}>
         <ItemList task={task} kind="mandatory" label={gt("Mandatory")} />
         <ItemList task={task} kind="todo" label={gt("To do")} />
+        <ItemAdder taskId={task.id} />
       </Card>
     </aside>
   );
@@ -1210,13 +1386,62 @@ function ItemList(props: {
           <T>None</T>
         </Muted>
       ) : (
-        items.map((item) => (
-          <p key={item.id} className={cn("text-sm", item.done && "line-through opacity-60")}>
-            {item.done ? "☑ " : "☐ "}
-            {item.text}
-          </p>
-        ))
+        items.map((item) => <ItemRow key={item.id} item={item} taskId={props.task.id} />)
       )}
     </div>
+  );
+}
+
+function ServicesCard(props: BoardTaskViewProps) {
+  const gt = useGT();
+  const { task, board } = props;
+  const { canEdit, edit } = useBoardEdit();
+  const untagged = board.services.filter((service) => !task.services.includes(service.id));
+  return (
+    <Card title={gt("Services")}>
+      {tagsOf(task).length === 0 ? (
+        <Muted>
+          <T>No service tags yet: added when a thread edits files in a service's folder.</T>
+        </Muted>
+      ) : (
+        <div className="flex flex-wrap gap-1">
+          {tagsOf(task).map((id) => (
+            <Badge key={id} variant="info">
+              {props.serviceName(id)}
+              {canEdit && task.services.includes(id) ? (
+                <button
+                  type="button"
+                  aria-label={gt("Remove tag {service}", { service: props.serviceName(id) })}
+                  onClick={() =>
+                    void edit({ op: "update", services: task.services.filter((s) => s !== id) })
+                  }
+                >
+                  <XIcon className="size-3" />
+                </button>
+              ) : null}
+            </Badge>
+          ))}
+        </div>
+      )}
+      {canEdit && untagged.length > 0 ? (
+        <Menu>
+          <MenuTrigger render={<Button variant="outline" size="xs" />}>
+            <T>Tag a service</T>
+          </MenuTrigger>
+          <MenuPopup align="start">
+            {untagged.map((service) => (
+              <MenuItem
+                key={service.id}
+                onClick={() =>
+                  void edit({ op: "update", services: [...task.services, service.id] })
+                }
+              >
+                {service.name}
+              </MenuItem>
+            ))}
+          </MenuPopup>
+        </Menu>
+      ) : null}
+    </Card>
   );
 }

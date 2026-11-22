@@ -183,6 +183,10 @@ import {
 } from "./review.ts";
 import { KeybindingsConfigError } from "./keybindings.ts";
 import {
+  BoardCreateTaskInput,
+  BoardEditFailure,
+  BoardEditResult,
+  BoardEditTaskInput,
   BoardLinkError,
   BoardLinkThreadInput,
   BoardReadError,
@@ -695,6 +699,8 @@ export const WS_METHODS = {
   boardList: "board.list",
   boardView: "board.view",
   boardTaskDetail: "board.taskDetail",
+  boardEditTask: "board.editTask",
+  boardCreateTask: "board.createTask",
   boardLinkThread: "board.linkThread",
 
   sourceControlLookupRepository: "sourceControl.lookupRepository",
@@ -1512,6 +1518,22 @@ const WsBoardTaskDetailRpc = Rpc.make(WS_METHODS.boardTaskDetail, {
   payload: BoardTaskDetailInput,
   success: BoardTaskDetail,
   error: BoardRpcError,
+});
+
+const BoardEditRpcError = Schema.Union([BoardEditFailure, EnvironmentAuthorizationError]);
+
+/** Project Board fork: one change to a task, made in its views. */
+const WsBoardEditTaskRpc = Rpc.make(WS_METHODS.boardEditTask, {
+  payload: BoardEditTaskInput,
+  success: BoardEditResult,
+  error: BoardEditRpcError,
+});
+
+/** Project Board fork: a new master task on a board. */
+const WsBoardCreateTaskRpc = Rpc.make(WS_METHODS.boardCreateTask, {
+  payload: BoardCreateTaskInput,
+  success: BoardEditResult,
+  error: BoardEditRpcError,
 });
 
 /** Project Board fork: a new thread on a task, linked before its first turn. */
@@ -2433,6 +2455,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsBoardListRpc,
   WsBoardViewRpc,
   WsBoardTaskDetailRpc,
+  WsBoardEditTaskRpc,
+  WsBoardCreateTaskRpc,
   WsBoardLinkThreadRpc,
   WsGuestShareCreateRpc,
   WsServerProbeRpc,

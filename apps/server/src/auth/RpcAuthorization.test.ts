@@ -82,12 +82,14 @@ describe("RPC authorization scopes", () => {
     for (const method of [WS_METHODS.boardList, WS_METHODS.boardView, WS_METHODS.boardTaskDetail]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationReadScope);
     }
-    expect(requiredScopeForRpcMethod(WS_METHODS.boardLinkThread)).toBe(
-      AuthOrchestrationOperateScope,
-    );
-    expect(clientRpcRequiredScopes(WS_METHODS.boardLinkThread, undefined)).toEqual([
-      AuthOrchestrationOperateScope,
-    ]);
+    for (const method of [
+      WS_METHODS.boardLinkThread,
+      WS_METHODS.boardEditTask,
+      WS_METHODS.boardCreateTask,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationOperateScope);
+      expect(clientRpcRequiredScopes(method, undefined)).toEqual([AuthOrchestrationOperateScope]);
+    }
   });
 
   it("lets thread readers observe and refresh checkout branches", () => {

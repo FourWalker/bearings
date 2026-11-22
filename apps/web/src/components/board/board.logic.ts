@@ -345,6 +345,10 @@ export interface BoardExternalLink {
   /** The task inside the tree the link is on. */
   readonly ours: BoardTask | null;
   readonly note: string;
+  /** Where the link is stored, to remove it: on `owner`, pointing at `to` with `type`. */
+  readonly owner: string;
+  readonly to: string;
+  readonly type: BoardTask["links"][number]["type"];
 }
 
 const GROUPS: Record<string, BoardLinkGroup> = {
@@ -377,6 +381,9 @@ export function externalLinksOf(
         otherId: fromIn ? link.to : from.id,
         ours: fromIn ? from : (index.byId.get(link.to) ?? null),
         note: link.note,
+        owner: from.id,
+        to: link.to,
+        type: link.type,
       });
     }
   return out.toSorted(

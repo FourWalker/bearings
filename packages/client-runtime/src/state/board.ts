@@ -15,6 +15,18 @@ import type { EnvironmentRegistry } from "../connection/registry.ts";
 export function createBoardEnvironmentAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
 ) {
+  // A person's edits to one board apply in order.
+  const editScheduler = createAtomCommandScheduler();
+  const serialPerBoard = {
+    mode: "serial" as const,
+    key: ({
+      environmentId,
+      input,
+    }: {
+      readonly environmentId: string;
+      readonly input: { readonly boardId: string };
+    }) => `${environmentId}\u0000${input.boardId}`,
+  };
   return {
     boards: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:board:list",
@@ -30,6 +42,19 @@ export function createBoardEnvironmentAtoms<R, E>(
       label: "environment-data:board:task-detail",
       tag: WS_METHODS.boardTaskDetail,
       refreshIntervalMs: 10_000,
+    }),
+    /** One change to a task; the open board and task view refresh once it's saved. */
+    editTask: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:board:edit-task",
+      tag: WS_METHODS.boardEditTask,
+      scheduler: editScheduler,
+      concurrency: serialPerBoard,
+    }),
+    createTask: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:board:create-task",
+      tag: WS_METHODS.boardCreateTask,
+      scheduler: editScheduler,
+      concurrency: serialPerBoard,
     }),
     /** Puts a new thread on a task before its first turn. */
     linkThread: createEnvironmentRpcCommand(runtime, {

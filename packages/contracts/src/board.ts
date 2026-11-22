@@ -148,6 +148,8 @@ export const BoardTaskDetail = Schema.Struct({
       ),
     }),
   ),
+  /** plan.md as written, for editing. */
+  planMarkdown: Schema.String,
   handoff: Schema.String,
   /** Newest first. */
   stepNotes: Schema.Array(
@@ -217,6 +219,106 @@ export const BoardTaskDetail = Schema.Struct({
   ),
 });
 export type BoardTaskDetail = typeof BoardTaskDetail.Type;
+
+const LinkKind = Schema.Literals([
+  "blocked_by",
+  "blocks",
+  "found_during",
+  "led_to",
+  "related",
+  "fixes",
+]);
+
+/** One change a person makes to a task in its views; agents make the same through board tools. */
+export const BoardTaskEdit = Schema.Union([
+  Schema.Struct({
+    op: Schema.Literal("update"),
+    title: Schema.optional(Schema.String),
+    description: Schema.optional(Schema.String),
+    status: Schema.optional(Schema.Literals(["active", "paused", "done"])),
+    kind: Schema.optional(Schema.Literals(["feature", "backlog"])),
+    mainService: Schema.optional(Schema.NullOr(Schema.String)),
+    services: Schema.optional(Schema.Array(Schema.String)),
+  }),
+  Schema.Struct({
+    op: Schema.Literal("addItem"),
+    kind: Schema.Literals(["mandatory", "todo"]),
+    text: Schema.String,
+  }),
+  Schema.Struct({ op: Schema.Literal("toggleItem"), itemId: Schema.String }),
+  Schema.Struct({ op: Schema.Literal("deleteItem"), itemId: Schema.String }),
+  Schema.Struct({ op: Schema.Literal("savePlan"), markdown: Schema.String }),
+  Schema.Struct({ op: Schema.Literal("toggleStep"), step: Schema.String }),
+  Schema.Struct({ op: Schema.Literal("saveHandoff"), markdown: Schema.String }),
+  Schema.Struct({ op: Schema.Literal("saveMasterPlan"), markdown: Schema.String }),
+  Schema.Struct({
+    op: Schema.Literal("addDoc"),
+    kind: Schema.String,
+    title: Schema.String,
+    ref: Schema.String,
+    note: Schema.String,
+  }),
+  Schema.Struct({ op: Schema.Literal("removeDoc"), docId: Schema.String }),
+  Schema.Struct({
+    op: Schema.Literal("addLink"),
+    to: Schema.String,
+    type: LinkKind,
+    note: Schema.String,
+  }),
+  Schema.Struct({ op: Schema.Literal("removeLink"), to: Schema.String, type: LinkKind }),
+  Schema.Struct({
+    op: Schema.Literal("createChild"),
+    title: Schema.String,
+    fromStep: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({
+    op: Schema.Literal("addDecision"),
+    title: Schema.String,
+    description: Schema.String,
+    options: Schema.String,
+    refs: Schema.Array(Schema.String),
+    level: Schema.Literals([1, 2, 3]),
+    recommendation: Schema.optional(Schema.Struct({ area: Schema.String })),
+  }),
+  Schema.Struct({
+    op: Schema.Literal("setDecision"),
+    decisionId: Schema.String,
+    action: Schema.Literals(["decide", "drop", "reopen"]),
+    verdict: Schema.optional(Schema.String),
+  }),
+]);
+export type BoardTaskEdit = typeof BoardTaskEdit.Type;
+
+export const BoardEditTaskInput = Schema.Struct({
+  boardId: Schema.String,
+  taskId: Schema.String,
+  edit: BoardTaskEdit,
+});
+export type BoardEditTaskInput = typeof BoardEditTaskInput.Type;
+
+export const BoardCreateTaskInput = Schema.Struct({
+  boardId: Schema.String,
+  title: Schema.String,
+  kind: Schema.optional(Schema.Literals(["feature", "backlog"])),
+});
+export type BoardCreateTaskInput = typeof BoardCreateTaskInput.Type;
+
+export const BoardEditResult = Schema.Struct({
+  message: Schema.String,
+  /** The task the edit created, if it made one. */
+  createdId: Schema.NullOr(Schema.String),
+});
+export type BoardEditResult = typeof BoardEditResult.Type;
+
+export class BoardEditFailure extends Schema.TaggedError<BoardEditFailure>()(
+  "BoardEditFailure",
+  {
+    /** `invalid`: the board refused the change; `detail` says why. */
+    reason: Schema.Literals(["not-found", "invalid", "failed"]),
+    detail: Schema.String,
+  },
+  { httpApiStatus: 409 },
+) {}
 
 export const BoardViewInput = Schema.Struct({ boardId: Schema.String });
 export type BoardViewInput = typeof BoardViewInput.Type;

@@ -8,10 +8,12 @@ import type {
   EnvironmentId,
 } from "@t3tools/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { SquareKanbanIcon, TriangleAlertIcon } from "lucide-react";
+import { PlusIcon, SquareKanbanIcon, TriangleAlertIcon } from "lucide-react";
 import { T, useGT } from "gt-react";
+import { useState } from "react";
 
 import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
 import {
   Empty,
   EmptyContent,
@@ -155,6 +157,7 @@ export function BoardPage() {
         mode={search.view ?? "tree"}
         filter={search.filter ?? "active"}
         taskId={search.task ?? null}
+        onChanged={view.refresh}
         onOpenThread={openThread}
         onContinue={(task, target) => void continueTask(task, target)}
       />
@@ -284,6 +287,8 @@ function BoardScreen(props: {
   readonly mode: BoardViewMode;
   readonly filter: BoardFilter;
   readonly taskId: string | null;
+  /** Re-reads the board after an edit. */
+  readonly onChanged: () => void;
   readonly onOpenThread: (chat: BoardChat) => void;
   readonly onContinue: (task: BoardTask, target: BoardContinueTarget) => void;
 }) {
@@ -342,6 +347,7 @@ function BoardScreen(props: {
       onContinue={(target) => props.onContinue(task, target)}
       onOpenThread={props.onOpenThread}
       onClose={() => setOpenTask(undefined)}
+      onChanged={props.onChanged}
     />
   );
 
@@ -387,6 +393,14 @@ function BoardScreen(props: {
           </span>
         ) : null}
         <div className="min-w-0 flex-1" />
+        <NewTaskButton
+          environmentId={props.environmentId}
+          boardId={board.id}
+          onCreated={(taskId) => {
+            props.onChanged();
+            setOpenTask(taskId);
+          }}
+        />
         <ToggleGroup
           aria-label={gt("Board view")}
           value={[props.mode]}
@@ -557,5 +571,66 @@ function BoardArea(props: {
         />
       ))}
     </div>
+  );
+}
+
+/** The board app's "+ New task": a new master task, opened once it's created. */
+function NewTaskButton(props: {
+  readonly environmentId: EnvironmentId;
+  readonly boardId: string;
+  readonly onCreated: (taskId: string) => void;
+}) {
+  const gt = useGT();
+  const allowed = useAtomValue(boardEnvironment.createTask.permissionAtom(props.environmentId));
+  const create = useAtomCommand(boardEnvironment.createTask, { reportFailure: false });
+  const [title, setTitle] = useState<string | null>(null);
+  if (!allowed) return null;
+  if (title === null)
+    return (
+      <Button size="sm" onClick={() => setTitle("")}>
+        <PlusIcon />
+        <T>New task</T>
+      </Button>
+    );
+  const submit = async () => {
+    if (!title.trim()) return;
+    const result = await create({
+      environmentId: props.environmentId,
+      input: { boardId: props.boardId, title },
+    });
+    if (result._tag === "Failure") {
+      toastManager.add({
+        type: "error",
+        title: gt("Could not create the task"),
+        description: formatEnvironmentQueryError(result.cause),
+      });
+      return;
+    }
+    setTitle(null);
+    if (result.value.createdId !== null) props.onCreated(result.value.createdId);
+  };
+  return (
+    <form
+      className="flex items-center gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit();
+      }}
+    >
+      <Input
+        autoFocus
+        size="sm"
+        placeholder={gt("New master task title…")}
+        aria-label={gt("New master task title")}
+        value={title}
+        onChange={(event) => setTitle(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") setTitle(null);
+        }}
+      />
+      <Button type="submit" size="sm" disabled={!title.trim()}>
+        <T>Create</T>
+      </Button>
+    </form>
   );
 }

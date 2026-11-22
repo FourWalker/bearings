@@ -6,6 +6,10 @@
  * @module board/BoardService
  */
 import {
+  type BoardCreateTaskInput,
+  BoardEditFailure,
+  type BoardEditResult,
+  type BoardEditTaskInput,
   BoardLinkError,
   type BoardLinkThreadInput,
   type BoardChat as BoardChatRow,
@@ -20,6 +24,9 @@ import {
 } from "@t3tools/contracts";
 import {
   BoardChat,
+  BoardEditError,
+  createTask as createBoardTask,
+  editTask as editBoardTask,
   type BoardGit,
   BoardStore,
   findBoard,
@@ -34,6 +41,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as KeyedLock from "@t3tools/shared/KeyedLock";
 
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as ProjectService from "../project/ProjectService.ts";
@@ -48,6 +56,12 @@ export class BoardService extends Context.Service<
     readonly taskDetail: (
       input: BoardTaskDetailInput,
     ) => Effect.Effect<BoardTaskDetail, BoardReadError>;
+    readonly editTask: (
+      input: BoardEditTaskInput,
+    ) => Effect.Effect<BoardEditResult, BoardEditFailure>;
+    readonly createTask: (
+      input: BoardCreateTaskInput,
+    ) => Effect.Effect<BoardEditResult, BoardEditFailure>;
     readonly linkThread: (input: BoardLinkThreadInput) => Effect.Effect<void, BoardLinkError>;
   }
 >()("t3/board/BoardService") {}
@@ -165,6 +179,51 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
     return detail satisfies BoardTaskDetail;
   });
 
+  // The person's edits, made in an app: one board at a time, so two quick edits to one task
+  // can't overwrite each other.
+  const editLock = yield* KeyedLock.make<string>();
+  const APP = { by: "T3 Code" };
+  const editFailed = (cause: unknown) =>
+    cause instanceof BoardEditError
+      ? new BoardEditFailure({
+          reason: cause.message.startsWith("No task") ? "not-found" : "invalid",
+          detail: cause.message,
+        })
+      : new BoardEditFailure({
+          reason: "failed",
+          detail: `The board could not be saved: ${String(cause)}`,
+        });
+  const onBoard = Effect.fn("BoardService.onBoard")(function* (boardId: string) {
+    const reg = yield* Effect.tryPromise({ try: () => store.loadRegistry(), catch: editFailed });
+    if (!reg.boards.some((b) => b.id === boardId))
+      return yield* new BoardEditFailure({ reason: "not-found", detail: "No such board." });
+  });
+
+  const editTask = Effect.fn("BoardService.editTask")(function* (input: BoardEditTaskInput) {
+    yield* onBoard(input.boardId);
+    const result = yield* editLock.withLock(
+      input.boardId,
+      Effect.tryPromise({
+        try: () => editBoardTask(store, input.boardId, input.taskId, input.edit, APP),
+        catch: editFailed,
+      }),
+    );
+    return { message: result.message, createdId: result.createdId ?? null };
+  });
+
+  const createTask = Effect.fn("BoardService.createTask")(function* (input: BoardCreateTaskInput) {
+    yield* onBoard(input.boardId);
+    const task = yield* editLock.withLock(
+      input.boardId,
+      Effect.tryPromise({
+        try: () =>
+          createBoardTask(store, input.boardId, { title: input.title, kind: input.kind }, APP),
+        catch: editFailed,
+      }),
+    );
+    return { message: `Created "${task.title}".`, createdId: task.id };
+  });
+
   // Only a thread with no turn yet: a running thread's open board chat holds its own link.
   const linkThread = Effect.fn("BoardService.linkThread")(function* (input: BoardLinkThreadInput) {
     const shell = yield* threads.getThreadShell(input.threadId).pipe(Effect.mapError(linkFailed));
@@ -203,7 +262,7 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
     }).pipe(Effect.flatMap((error) => (error === null ? Effect.void : Effect.fail(error))));
   });
 
-  return BoardService.of({ list, view, taskDetail, linkThread });
+  return BoardService.of({ list, view, taskDetail, editTask, createTask, linkThread });
 });
 
 export const layer = Layer.effect(

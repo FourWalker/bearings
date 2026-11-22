@@ -188,3 +188,45 @@ it.effect(
       }).pipe(Effect.provide(layer));
     }),
 );
+
+it.effect("creates and edits tasks for the person, and says why an edit is refused", () =>
+  Effect.gen(function* () {
+    const tmp = yield* Effect.promise(() =>
+      NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "board-edit-service-")),
+    );
+    const store = new BoardStore(NodePath.join(tmp, "board"), nodeIO);
+    yield* Effect.promise(() =>
+      store.saveRegistry({
+        version: 1,
+        boards: [
+          { id: "nefx", name: "NEFX", createdAt: 0, roots: [{ path: norm(tmp), label: "main" }] },
+        ],
+      }),
+    );
+    const threads = Layer.mock(ThreadManagement.ThreadManagementService)({
+      getThreadShell: () => Effect.succeed(null),
+    });
+    const layer = Layer.effect(BoardService.BoardService, BoardService.make(store, noGit)).pipe(
+      Layer.provide(Layer.merge(threads, projectsAt([]))),
+    );
+    yield* Effect.gen(function* () {
+      const boards = yield* BoardService.BoardService;
+      const created = yield* boards.createTask({ boardId: "nefx", title: "Billing" });
+      expect(created.createdId).toBe("billing");
+      const child = yield* boards.editTask({
+        boardId: "nefx",
+        taskId: "billing",
+        edit: { op: "createChild", title: "Retries" },
+      });
+      expect(child.createdId).toBe("retries");
+      const refused = yield* Effect.flip(
+        boards.editTask({ boardId: "nefx", taskId: "retries", edit: { op: "update", title: " " } }),
+      );
+      expect(refused).toMatchObject({ reason: "invalid", detail: "The title can't be empty." });
+      const missing = yield* Effect.flip(
+        boards.editTask({ boardId: "nope", taskId: "x", edit: { op: "toggleItem", itemId: "i" } }),
+      );
+      expect(missing.reason).toBe("not-found");
+    }).pipe(Effect.provide(layer));
+  }),
+);
