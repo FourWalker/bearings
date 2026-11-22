@@ -20,6 +20,8 @@ export class BoardChats extends Context.Service<
   {
     /** The thread's board chat, opened on first use and reopened when its folder moves. */
     readonly forThread: (threadId: ThreadId) => Effect.Effect<BoardChat, OrchestratorMcpFailure>;
+    /** Marks every open, not ended chat as alive: the board shows a chat offline without it. */
+    readonly heartbeat: Effect.Effect<void>;
   }
 >()("t3/board/BoardChats") {}
 
@@ -61,7 +63,11 @@ export const make = Effect.fn("BoardChats.make")(function* (store: BoardStore) {
     return chat;
   });
 
-  return BoardChats.of({ forThread });
+  const heartbeat = Effect.promise(() =>
+    Promise.allSettled([...open.values()].map(({ chat }) => chat.heartbeat())),
+  ).pipe(Effect.asVoid, Effect.withSpan("BoardChats.heartbeat"));
+
+  return BoardChats.of({ forThread, heartbeat });
 });
 
 export const layer = Layer.effect(

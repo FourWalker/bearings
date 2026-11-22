@@ -22,19 +22,17 @@ mapping in [RECONCILIATION.md](RECONCILIATION.md).
 | 1      | `packages/board-core`: the board's rules, storage, context and 16 tools, ported from the mod's `register.ts`                                                                                                                                                    | `4b42195`              |
 | 2      | `packages/issue-tracker-board` + `LocalIssueTrackerApi`: board tasks appear as issues for projects inside a board root                                                                                                                                          | `0616d5e`              |
 | 3      | `apps/server/src/mcp/toolkits/board` + `board/BoardChats.ts`: board tools for every provider's threads; `T3_BOARD_HOST=t3` for Claude threads                                                                                                                   | `239f5b8`              |
-| 4      | `board/BoardTurnContext.ts`: the board's context (placement, linked task's plan and handoff, Board Mode, project rules) goes inline ahead of the user's message for every provider, only when it changed, and again for a new native thread or after compaction | see `git log`          |
+| 4      | `board/BoardTurnContext.ts`: the board's context (placement, linked task's plan and handoff, Board Mode, project rules) goes inline ahead of the user's message for every provider, only when it changed, and again for a new native thread or after compaction | `81aa292`              |
+| 5      | `board/BoardReactor.ts`: from committed events, a run sets the thread working, its answer becomes the task's last action, checkpoint files tag services, archive/delete ends the chat; a 60 s heartbeat keeps open threads online                               | see `git log`          |
 | Mod    | Claude mod switched to board-core (vendored by `tools/sync-board-core.mjs`; thin `register.ts`; stands down under `T3_BOARD_HOST`)                                                                                                                              | board project, not git |
 
 Each step passed `vp run check:changed`.
 
 ## Next
 
-1. **BoardReactor.** Status (working, idle, ended), the automatic last action and service tags come from
-   orchestration events and turn file changes, not only from tool calls.
-   It can also call `BoardChat.turnStart` / `turnComplete`, which step 4 doesn't (it only rebuilds context).
-2. **Board view** in the web UI: port the board app's screens. `t3board://<board>/<task>` links
+1. **Board view** in the web UI: port the board app's screens. `t3board://<board>/<task>` links
    open it. Add "Continue in new thread" on a task, with a provider and model picker.
-3. Later: Board Mode details (ownership with T3 worktrees, the R# register UI), mobile.
+2. Later: Board Mode details (ownership with T3 worktrees, the R# register UI), mobile.
 
 ## Not verified yet
 
@@ -46,6 +44,9 @@ Each step passed `vp run check:changed`.
   set of chats (a `board_link` shows in the next turn). Check this in the first dev run.
 - On this Windows machine, 4 `ProviderTurnStartService.test.ts` cases (worktree recovery, startup
   coordination) fail with and without the board changes. They're Git worktree failures on Windows, not the board.
+- Step 5: service tags arrive with the turn's checkpoint, after the turn, so the "outside this task's
+  services" note that `fileChanged` returns isn't shown to the agent (the mod shows it mid-turn).
+  A thread left working when the server stops stays working until its heartbeat goes stale.
 - Threads in folders on no board also get the short "not on a board yet" note, as the mod does.
 - The switched Claude mod has been smoke-tested with a fake host, not yet in a real new Claude chat.
 

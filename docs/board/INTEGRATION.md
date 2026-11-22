@@ -140,6 +140,7 @@ board's face. See [RECONCILIATION.md](RECONCILIATION.md) for what changes and wh
   - `apps/server/src/orchestration-v2/ProviderTurnStartService.ts`: the board context joins the inline
     turn context, read with `serviceOption` (done)
   - `apps/server/src/orchestration-v2/runtimeLayer.ts`: provide `BoardTurnContext` to turn start (done)
+  - `apps/server/src/server.ts`: start `BoardReactor` beside the other reactors (done)
   - `packages/contracts`: `board` RPC + capability
 - Upstream is `upstream` (`https://github.com/pingdotgg/t3code`). Rebase `board/integration` on
   `upstream/main` regularly.
