@@ -35,12 +35,33 @@ Each step passed `vp run check:changed`, apart from the Windows-only failures li
 
 ## Next
 
-1. **Right panel**: must-dos, open decisions, to-dos (task `items` and `decisions`), as the board app shows.
-2. **On a thread**: a chip with its board task and link/unlink (reverse states). Also the way out for
-   "Continue in new thread": unlink, and override/take over when the task is owned by another copy
-   (today `board.linkThread` refuses with `blocked`, and the button only offers the owning copy).
-3. `t3board://<board>/<task>` deep links; the command palette entry; mobile.
-4. Later: Board Mode details (ownership with T3 worktrees, the R# register UI).
+**Goal (from the owner, 2026-11-22):** the whole board app's UI flow, built into T3 Code itself, with
+linked chats opening as T3 threads in the same app: no jumping to Claude Desktop or VS Code. The
+current `/board` page (a list of cards) is a first slice to be replaced, not the target. The board
+app (`mod/project-board/app`, screenshots in the board project's `docs/preview/`) is the reference
+for layout and behaviour; it keeps working alongside on the same `~/.claude-board`.
+
+Phases, in order:
+
+1. **Board screen.** Replace the card list with the board app's main screen, full width: header with
+   board switcher, workspace chips and two-chats-one-clone warning; Tree / Level 1 / Level 2 /
+   Level 3 / By service; Active / Paused / Done / All; a column per master task with level-coloured
+   sticky notes (next step, steps, decisions, last action, linked chats); right panel with mandatory,
+   open decisions, to-dos and unlinked chats; board picker with "chats with no board". A clear
+   top-level Board entry in the sidebar, not the small utility icon. Read-only first.
+2. **Task pages.** Master task page with Overview / Plan & Docs / Handoff / Decisions / Chats tabs;
+   module and Level 3 views; step handoff notes. Linked chats open the T3 thread; "Continue in new
+   thread" moves here.
+3. **Editing.** The board app's write actions (`actions` in its `server.js`: tasks, items, plan and
+   steps, living handoff, master plan, docs, links, services, move/promote, decisions and registers,
+   board settings and roots, Board Mode, ownership and soft release, chat link/unlink) move into
+   board-core first, so T3 and the board app share one implementation, then become typed, guarded
+   `board.*` RPCs grouped by area.
+4. **Register and the rest.** Recommendations register page, By-service view, blocked/backlog, bug
+   fix tasks, Move dialog, settings (⚙).
+5. **Thread side.** A chip on a thread with its task and link/unlink (the way out for "Continue in
+   new thread"), override/take over when another copy owns the task, deep links, command palette.
+6. Later: mobile, Board Mode with T3 worktrees.
 
 ## How to run it (dev, isolated)
 
