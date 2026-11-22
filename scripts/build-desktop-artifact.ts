@@ -3754,6 +3754,9 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
 
   const requiredBuildInputs = [
     { artifact: "desktop-dist", artifactPath: distDirs.desktopDist },
+    { artifact: "desktop-dist", artifactPath: path.join(distDirs.desktopDist, "main.cjs") },
+    { artifact: "desktop-dist", artifactPath: path.join(distDirs.desktopDist, "boot.cjs") },
+    { artifact: "desktop-dist", artifactPath: path.join(distDirs.desktopDist, "preload.cjs") },
     { artifact: "desktop-resources", artifactPath: distDirs.desktopResources },
     { artifact: "server-dist", artifactPath: distDirs.serverDist },
   ] as const;

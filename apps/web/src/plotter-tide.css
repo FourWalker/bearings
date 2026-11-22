@@ -1,0 +1,26 @@
+/* The original Plotter Tide corner scene overlays the shell, as in the VS Code theme.
+   Its center stays clear for conversation text and pointer events pass through. */
+html[data-theme-id="plotter-tide"]::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  background: url("./assets/plotter-tide/plotter-tide-day.svg") center / cover no-repeat;
+  opacity: 0.55;
+}
+
+html.dark[data-theme-id="plotter-tide"]::after {
+  background-image: url("./assets/plotter-tide/plotter-tide-night.svg");
+}
+
+html[data-theme-id="plotter-tide"]
+  :is(
+    [data-slot="dialog-popup"],
+    [data-slot="popover-popup"],
+    [data-slot="menu-popup"],
+    .surface-glass
+  ) {
+  background-color: color-mix(in srgb, var(--app-theme-surface-overlay) 88%, transparent);
+  backdrop-filter: blur(18px);
+}

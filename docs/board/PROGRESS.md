@@ -98,6 +98,15 @@ thread must agree on what's done, blocked and verified, and on the next action.
 - Windows packaging now excludes the generated server bytecode cache from the loose-file budget.
   The production payload passed its native-load and self-contained bundle probes with 66
   budgeted files and 26 sidecar native files.
+- Follow-up UI changes put New chat in a centered, full-width row immediately above the
+  threads. Plotter Tide is a built-in theme with light and night appearances, using the
+  reference repository's corner animations and matching app, sidebar, composer, terminal,
+  menu and dialog colors. Existing glass surfaces retain translucency. The mobile palette
+  and generated theme declarations include both appearances. Palette and generation tests
+  passed all 51 cases.
+- Fresh extraction caught a desktop entry-file loss during the multi-entry bundle build.
+  All secondary desktop outputs now preserve the output directory, and packaging explicitly
+  requires main.cjs, boot.cjs and preload.cjs before staging.
 - **Phase 6 remains deferred.** Mobile and Board Mode with T3-created worktrees.
 
 ## How to run it (dev, isolated)

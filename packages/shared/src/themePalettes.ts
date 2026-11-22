@@ -1,4 +1,13 @@
-export const BUILT_IN_THEME_IDS = ["t3-chat", "grove", "ocean", "ember", "iris"] as const;
+import { PLOTTER_TIDE_THEME } from "./plotterTideTheme.ts";
+
+export const BUILT_IN_THEME_IDS = [
+  "t3-chat",
+  "grove",
+  "ocean",
+  "ember",
+  "iris",
+  "plotter-tide",
+] as const;
 
 export const MOBILE_DEFAULT_THEME_ID = "t3-code";
 
@@ -911,6 +920,7 @@ export const IRIS_THEME: ThemeDefinition = {
 };
 
 export const BUILT_IN_THEMES: ReadonlyArray<ThemeDefinition> = [
+  PLOTTER_TIDE_THEME,
   T3_CHAT_THEME,
   GROVE_THEME,
   OCEAN_THEME,
