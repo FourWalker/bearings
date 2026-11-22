@@ -29,6 +29,9 @@ mapping in [RECONCILIATION.md](RECONCILIATION.md).
 | Fixes  | First dev run: Windows-safe record names, board context on plain turns, prompts of CLI/agent-started threads                                                                                                                                                                                                                              | `0b1005d`               |
 | 6a     | Board view, first slice: `board.list` / `board.view` RPCs and `projectBoard` capability; `board/BoardService.ts` (T3 threads take status and title from T3, so they are never "offline"); web `/board` page with the task tree, threads per task, threads not on a task, sidebar entry                                                    | see `git log`           |
 | 6b     | "Continue in new thread" on a task card: opens a local draft in the task's workspace project (the owning copy only, when its module is owned) with a "continue from its handoff" prompt; `board.linkThread` (guarded, operate scope) links the draft's thread id to the task before the first turn. Unsent drafts stay off the board view | see `git log`           |
+| P1     | Board screen (read-only): a column per master task with sticky notes, Level 1-3 and By service views, status filters, workspace chips and collision warning, right panel, board picker, Board row at the top of the sidebar                                                                                                               | `e03ae94`               |
+| Review | Fixes from the outside review (Astra): a finished subtask ticks the parent step it took over; `board_handoff` saves step note, living handoff and tick in one call; binding decisions lead the resume context                                                                                                                             | `6f12834`               |
+| Port   | From Codex's `codex/project-board-handoff` (`fd25e89`), rebuilt: T3 threads get a short resume summary; unlinked threads see 8 recent tasks plus board_find; worktree threads fall back to their project's board; `board.taskDetail` RPC; the board task shows on the thread as a T3 issue link, mirrored both ways by BoardReactor       | see `git log`           |
 | Mod    | Claude mod switched to board-core (vendored by `tools/sync-board-core.mjs`; thin `register.ts`; stands down under `T3_BOARD_HOST`)                                                                                                                                                                                                        | board project `e4dbb9d` |
 
 Each step passed `vp run check:changed`, apart from the Windows-only failures listed below.
@@ -41,17 +44,20 @@ current `/board` page (a list of cards) is a first slice to be replaced, not the
 app (`mod/project-board/app`, screenshots in the board project's `docs/preview/`) is the reference
 for layout and behaviour; it keeps working alongside on the same `~/.claude-board`.
 
-Phases, in order:
+**Rule (from the review):** T3 records facts (which thread is on which task, its workspace, checks
+and their exit codes, step completion); the model records judgments (why, what a check proves,
+what's still unverified).
 
-1. **Board screen.** Replace the card list with the board app's main screen, full width: header with
-   board switcher, workspace chips and two-chats-one-clone warning; Tree / Level 1 / Level 2 /
-   Level 3 / By service; Active / Paused / Done / All; a column per master task with level-coloured
-   sticky notes (next step, steps, decisions, last action, linked chats); right panel with mandatory,
-   open decisions, to-dos and unlinked chats; board picker with "chats with no board". A clear
-   top-level Board entry in the sidebar, not the small utility icon. Read-only first.
+**Acceptance test:** hand step A1 to another workspace, finish it there, interrupt the thread
+mid-completion, then open the parent and resume in a fresh thread with another provider. Board and
+thread must agree on what's done, blocked and verified, and on the next action.
+
+Phases, in order (1 is done, read-only; "chats with no board" in the picker is still missing):
+
 2. **Task pages.** Master task page with Overview / Plan & Docs / Handoff / Decisions / Chats tabs;
-   module and Level 3 views; step handoff notes. Linked chats open the T3 thread; "Continue in new
-   thread" moves here.
+   module and Level 3 views; step handoff notes, rendered with ChatMarkdown from `board.taskDetail`.
+   Linked chats open the T3 thread; "Continue in new thread" moves here. Show planned work, current
+   activity and verified results as separate things (review item 5).
 3. **Editing.** The board app's write actions (`actions` in its `server.js`: tasks, items, plan and
    steps, living handoff, master plan, docs, links, services, move/promote, decisions and registers,
    board settings and roots, Board Mode, ownership and soft release, chat link/unlink) move into
@@ -59,8 +65,9 @@ Phases, in order:
    `board.*` RPCs grouped by area.
 4. **Register and the rest.** Recommendations register page, By-service view, blocked/backlog, bug
    fix tasks, Move dialog, settings (⚙).
-5. **Thread side.** A chip on a thread with its task and link/unlink (the way out for "Continue in
-   new thread"), override/take over when another copy owns the task, deep links, command palette.
+5. **Thread side.** The task already shows as an issue link on the thread (unlink there unlinks the
+   task); still to do: override/take over when another copy owns the task, deep links, command
+   palette, and the review's "Copy handoff" brief for models outside T3.
 6. Later: mobile, Board Mode with T3 worktrees.
 
 ## How to run it (dev, isolated)
@@ -108,6 +115,17 @@ Phases, in order:
 - Windows-only test failures, with and without the board changes: 4 `ProviderTurnStartService.test.ts`
   cases (Git worktrees) and one `ServerEnvironment.test.ts` case (symlink EPERM). The mobile
   `i18n:check` step can't spawn `gt` on Windows; web catalogs pass.
+
+## Codex's branch
+
+`refs/remotes/codex/project-board-handoff` (fetched from its bundle) is kept for reference. Not
+taken: board file reads inside the Orchestrator, plan repair on every save and read, handoff parsing
+by heading patterns, its task-detail tabs (phase 2 rebuilds them to match the board app).
+
+Still open from the review: record a blocker as soon as it's found (item 6); guard the board-wide
+R# counter against two chats (item 7); T3 doesn't yet pass its checkpoint ref to board_handoff or
+board_checkpoint. The board app's own "mark done" (its `server.js`) doesn't tick a parent's
+delegated step; phase 3 moves its actions into board-core.
 
 ## After editing board-core
 

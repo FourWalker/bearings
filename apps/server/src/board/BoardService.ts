@@ -11,6 +11,8 @@ import {
   type BoardChat as BoardChatRow,
   BoardReadError,
   type BoardSummary,
+  type BoardTaskDetail,
+  type BoardTaskDetailInput,
   type BoardView,
   type Project,
   type ProjectId,
@@ -24,6 +26,7 @@ import {
   norm,
   readBoardSummaries,
   readBoardView,
+  readTaskDetail,
 } from "@t3tools/board-core";
 import { defaultBoardHome, nodeGit, nodeIO } from "@t3tools/board-core/node";
 import * as Clock from "effect/Clock";
@@ -42,6 +45,9 @@ export class BoardService extends Context.Service<
     readonly view: (input: {
       readonly boardId: string;
     }) => Effect.Effect<BoardView, BoardReadError>;
+    readonly taskDetail: (
+      input: BoardTaskDetailInput,
+    ) => Effect.Effect<BoardTaskDetail, BoardReadError>;
     readonly linkThread: (input: BoardLinkThreadInput) => Effect.Effect<void, BoardLinkError>;
   }
 >()("t3/board/BoardService") {}
@@ -149,6 +155,16 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
     return { ...raw, workspaces, tasks, unlinked } satisfies BoardView;
   });
 
+  const taskDetail = Effect.fn("BoardService.taskDetail")(function* (input: BoardTaskDetailInput) {
+    const detail = yield* Effect.tryPromise({
+      try: () => readTaskDetail(store, input.boardId, input.taskId),
+      catch: failed,
+    });
+    if (detail === null)
+      return yield* new BoardReadError({ reason: "not-found", detail: "No such task." });
+    return detail satisfies BoardTaskDetail;
+  });
+
   // Only a thread with no turn yet: a running thread's open board chat holds its own link.
   const linkThread = Effect.fn("BoardService.linkThread")(function* (input: BoardLinkThreadInput) {
     const shell = yield* threads.getThreadShell(input.threadId).pipe(Effect.mapError(linkFailed));
@@ -187,7 +203,7 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
     }).pipe(Effect.flatMap((error) => (error === null ? Effect.void : Effect.fail(error))));
   });
 
-  return BoardService.of({ list, view, linkThread });
+  return BoardService.of({ list, view, taskDetail, linkThread });
 });
 
 export const layer = Layer.effect(

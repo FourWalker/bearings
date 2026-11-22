@@ -13,7 +13,7 @@ import { boardModeProtocol } from "./protocol.ts";
 import { BoardStore } from "./store.ts";
 import { norm } from "./text.ts";
 import { BOARD_TOOL_NAMES } from "./tools.ts";
-import { OFFLINE_MS, readBoardView } from "./view.ts";
+import { OFFLINE_MS, readBoardView, readTaskDetail } from "./view.ts";
 import type { Registry, Session, Task } from "./types.ts";
 
 let home: string;
@@ -90,6 +90,12 @@ describe("BoardChat", () => {
     expect(chat.board?.id).toBe("nefx");
     expect(chat.sess).toMatchObject({ workspace: ws, workspaceLabel: "main", subfolder: "api" });
     expect(chat.context).toContain("not linked to a board task yet");
+
+    // A T3 worktree outside every root goes on its project folder's board.
+    const worktree = new BoardChat(store, noGit, "t3");
+    await worktree.open({ sessionId: "t2", cwd: `${ws}-worktrees/retry`, projectRoot: ws });
+    expect(worktree.board?.id).toBe("nefx");
+    expect(worktree.sess).toMatchObject({ workspace: ws, subfolder: "" });
   });
 
   it("writes nothing for a chat until the person speaks or links it", async () => {
@@ -205,6 +211,25 @@ describe("BoardChat", () => {
     expect(text).toContain("Retry at most 3 times");
   });
 
+  it("gives a linked T3 thread a short resume summary, and an unlinked one only recent tasks", async () => {
+    const store = await seedBoard();
+    const chat = await openChat(store, "t1", ws);
+    for (let i = 0; i < 10; i++) await chat.createTask({ title: `Task ${i}` });
+    await chat.turnStart("Hi");
+    await chat.rebuildContext();
+    expect(chat.context).toContain("…and 2 more: search them with board_find");
+    expect(chat.context.match(/^- task-/gm)).toHaveLength(8);
+
+    await chat.linkTask({ taskId: "task-0" });
+    await chat.savePlan({ markdown: "- [x] A1 Done thing\n- [ ] A2 Next thing" });
+    await chat.linkTasks({ to: "task-1", type: "blocked_by", note: "contract" });
+    await chat.checkpoint({ markdown: "Objective: ship\nNext step: an old next step" });
+    expect(chat.context).toContain("Next action: A2 – Next thing (step 2 of 2)");
+    expect(chat.context).toContain('Blocked by "Task 1"');
+    expect(chat.context).toContain("### Living handoff");
+    expect(chat.context).not.toContain("### Plan (plan.md)");
+  });
+
   it("uses the answer's first paragraph as last action unless a tool set one this turn", async () => {
     const store = await seedBoard();
     const chat = await openChat(store, "t1", ws);
@@ -307,6 +332,27 @@ describe("BoardChat", () => {
 });
 
 describe("readBoardView", () => {
+  it("reads one task's plan, handoff, master plan and the decisions raised in it", async () => {
+    const store = await seedBoard();
+    const chat = await openChat(store, "t1", ws);
+    await chat.linkTask({ newTaskTitle: "Payments" });
+    await chat.saveMasterPlan({ markdown: "Objective: payments" });
+    await chat.createTask({ title: "Gateway", parentId: "payments" });
+    await chat.linkTask({ taskId: "gateway" });
+    await chat.savePlan({ markdown: "- [ ] A1 Client" });
+    await chat.checkpoint({ markdown: "Objective: gateway" });
+    await chat.fileDecision({ title: "Which provider?", level: 1 });
+    const detail = await readTaskDetail(store, "nefx", "gateway");
+    expect(detail).toMatchObject({
+      masterTaskId: "payments",
+      masterPlan: expect.stringContaining("Objective: payments"),
+      plan: "- [ ] A1 Client",
+      handoff: expect.stringContaining("Objective: gateway"),
+      decisions: [{ title: "Which provider?", status: "open", filedOn: { id: "payments" } }],
+    });
+    expect(await readTaskDetail(store, "nefx", "nope")).toBeNull();
+  });
+
   it("shows tasks with plan progress and their chats, and chats not on a task", async () => {
     const store = await seedBoard({ services: [{ id: "api", name: "API", match: ["api"] }] });
     const linked = await openChat(store, "t1", ws);

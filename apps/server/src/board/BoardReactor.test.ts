@@ -12,12 +12,14 @@ import {
   type OrchestrationV2DomainEvent,
   RunId,
   ThreadId,
+  type ThreadIssueLink,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
+import * as ThreadIssueService from "../orchestration-v2/ThreadIssueService.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
 import { liveThreadShell } from "../mcp/McpToolAccess.testkit.ts";
 import * as ProjectService from "../project/ProjectService.ts";
@@ -84,9 +86,28 @@ it.effect("records a thread's turns, answers and changed files on its board task
     const chats = Layer.effect(BoardChats.BoardChats, BoardChats.make(store)).pipe(
       Layer.provide(Layer.merge(threads, projects)),
     );
+    // The thread's T3 issue links, as the reactor mirrors the board task onto them.
+    let issues: Array<ThreadIssueLink> = [];
+    const issueLink = (key: string) =>
+      ({ tracker: "board", host: "local", scope: "nefx", key }) as ThreadIssueLink;
+    const engine = Layer.mock(Orchestrator.OrchestratorV2)({
+      getThreadShell: () => Effect.succeed({ ...liveThreadShell(threadId), issues }),
+    });
+    const threadIssues = Layer.mock(ThreadIssueService.ThreadIssueService)({
+      link: (input) =>
+        Effect.sync(() => {
+          issues = [...issues, issueLink(input.ref.key)];
+          return { alreadyLinked: false };
+        }),
+      unlink: (input) =>
+        Effect.sync(() => {
+          issues = issues.filter((link) => link.key !== input.key.key);
+          return { wasLinked: true };
+        }),
+    });
     const layer = Layer.effect(BoardReactor.BoardReactor, BoardReactor.make).pipe(
       Layer.provideMerge(chats),
-      Layer.provide(Layer.merge(projections, Layer.mock(Orchestrator.OrchestratorV2)({}))),
+      Layer.provide(Layer.mergeAll(projections, engine, threadIssues)),
     );
 
     yield* Effect.gen(function* () {
@@ -101,6 +122,8 @@ it.effect("records a thread's turns, answers and changed files on its board task
         status: "working",
         lastPrompt: "Add the refund API",
       });
+      // The board task shows on the thread as one of its issue links.
+      expect(issues.map((link) => link.key)).toEqual(["refunds"]);
 
       yield* reactor.handle(event("checkpoint.captured", { files: [{ path: "api/refunds.ts" }] }));
       expect((yield* task())?.services).toEqual(["api"]);
@@ -115,6 +138,12 @@ it.effect("records a thread's turns, answers and changed files on its board task
       yield* reactor.handle(run("completed"));
       expect((yield* session())?.status).toBe("idle");
       expect((yield* task())?.lastAction?.text).toBe("Reviewed by hand");
+
+      // Unlinking the board issue in T3 unlinks the task; linking it again relinks it.
+      yield* reactor.handle(event("thread.issue-synced", { issues: [] }));
+      expect((yield* session())?.taskId).toBeNull();
+      yield* reactor.handle(event("thread.issue-synced", { issues: [issueLink("refunds")] }));
+      expect((yield* session())?.taskId).toBe("refunds");
 
       yield* reactor.handle(event("thread.archived", {}));
       expect((yield* session())?.status).toBe("ended");

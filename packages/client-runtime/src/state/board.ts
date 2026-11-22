@@ -25,6 +25,12 @@ export function createBoardEnvironmentAtoms<R, E>(
       tag: WS_METHODS.boardView,
       refreshIntervalMs: 10_000,
     }),
+    /** One task's plan, handoff and decisions, read while its task view is open. */
+    taskDetail: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:board:task-detail",
+      tag: WS_METHODS.boardTaskDetail,
+      refreshIntervalMs: 10_000,
+    }),
     /** Puts a new thread on a task before its first turn. */
     linkThread: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:board:link-thread",

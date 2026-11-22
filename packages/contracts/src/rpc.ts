@@ -187,6 +187,8 @@ import {
   BoardLinkThreadInput,
   BoardReadError,
   BoardSummary,
+  BoardTaskDetail,
+  BoardTaskDetailInput,
   BoardView,
   BoardViewInput,
 } from "./board.ts";
@@ -692,6 +694,7 @@ export const WS_METHODS = {
   // Project Board fork.
   boardList: "board.list",
   boardView: "board.view",
+  boardTaskDetail: "board.taskDetail",
   boardLinkThread: "board.linkThread",
 
   sourceControlLookupRepository: "sourceControl.lookupRepository",
@@ -1501,6 +1504,13 @@ const WsBoardListRpc = Rpc.make(WS_METHODS.boardList, {
 const WsBoardViewRpc = Rpc.make(WS_METHODS.boardView, {
   payload: BoardViewInput,
   success: BoardView,
+  error: BoardRpcError,
+});
+
+/** Project Board fork: one task's plan, handoff, master plan, docs and decisions. */
+const WsBoardTaskDetailRpc = Rpc.make(WS_METHODS.boardTaskDetail, {
+  payload: BoardTaskDetailInput,
+  success: BoardTaskDetail,
   error: BoardRpcError,
 });
 
@@ -2422,6 +2432,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsIssueTrackersBindProjectRpc,
   WsBoardListRpc,
   WsBoardViewRpc,
+  WsBoardTaskDetailRpc,
   WsBoardLinkThreadRpc,
   WsGuestShareCreateRpc,
   WsServerProbeRpc,

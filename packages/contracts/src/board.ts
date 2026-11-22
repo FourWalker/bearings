@@ -121,6 +121,46 @@ export const BoardView = Schema.Struct({
 });
 export type BoardView = typeof BoardView.Type;
 
+export const BoardTaskDetailInput = Schema.Struct({
+  boardId: Schema.String,
+  taskId: Schema.String,
+});
+export type BoardTaskDetailInput = typeof BoardTaskDetailInput.Type;
+
+/** One task's documents, read when its task view opens: the texts the board screen leaves out. */
+export const BoardTaskDetail = Schema.Struct({
+  /** The master implementation plan of the task's master task (its own, for a master task). */
+  masterPlan: Schema.String,
+  masterTaskId: Schema.String,
+  plan: Schema.String,
+  handoff: Schema.String,
+  latestNote: Schema.NullOr(Schema.Struct({ step: Schema.String, text: Schema.String })),
+  docs: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      kind: Schema.String,
+      title: Schema.String,
+      ref: Schema.String,
+      note: Schema.String,
+    }),
+  ),
+  /** Decisions filed on this task, and on its parents when raised here. */
+  decisions: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      title: Schema.String,
+      description: Schema.String,
+      options: Schema.String,
+      verdict: Schema.String,
+      status: Schema.Literals(["open", "decided", "dropped"]),
+      level: Schema.Literals([1, 2, 3]),
+      r: Schema.NullOr(Schema.String),
+      filedOn: Schema.Struct({ id: Schema.String, title: Schema.String }),
+    }),
+  ),
+});
+export type BoardTaskDetail = typeof BoardTaskDetail.Type;
+
 export const BoardViewInput = Schema.Struct({ boardId: Schema.String });
 export type BoardViewInput = typeof BoardViewInput.Type;
 

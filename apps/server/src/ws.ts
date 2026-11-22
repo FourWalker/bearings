@@ -2007,6 +2007,7 @@ export const layerWsRpc = (
         // Project Board fork.
         [WS_METHODS.boardList]: () => boards.list,
         [WS_METHODS.boardView]: (input) => boards.view(input),
+        [WS_METHODS.boardTaskDetail]: (input) => boards.taskDetail(input),
         [WS_METHODS.boardLinkThread]: (input) => boards.linkThread(input),
         [ORCHESTRATION_V2_WS_METHODS.dispatchCommand]: (command) =>
           Effect.annotateCurrentSpan({

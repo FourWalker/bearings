@@ -41,7 +41,8 @@ export const make = Effect.fn("BoardChats.make")(function* (store: BoardStore) {
     const project = yield* projects
       .getById(shell.projectId)
       .pipe(Effect.mapError(() => failure("The thread's project could not be read.")));
-    const cwd = shell.worktreePath ?? Option.getOrUndefined(project)?.workspaceRoot;
+    const projectRoot = Option.getOrUndefined(project)?.workspaceRoot;
+    const cwd = shell.worktreePath ?? projectRoot;
     if (cwd === undefined) return yield* failure("The thread has no folder.");
     const known = open.get(threadId);
     if (known !== undefined && known.cwd === cwd) return known.chat;
@@ -50,6 +51,7 @@ export const make = Effect.fn("BoardChats.make")(function* (store: BoardStore) {
       chat.open({
         sessionId: threadId,
         cwd,
+        projectRoot,
         source: {
           kind: "t3-thread",
           threadId,

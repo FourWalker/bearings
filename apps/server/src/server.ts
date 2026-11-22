@@ -759,7 +759,11 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
       const service = yield* BoardReactor.BoardReactor;
       yield* service.start();
     }),
-  ).pipe(Layer.provide(BoardReactor.layer), Layer.provide(ProjectionStoreV2.layer)),
+  ).pipe(
+    Layer.provide(BoardReactor.layer),
+    Layer.provide(layerThreadIssueService),
+    Layer.provide(ProjectionStoreV2.layer),
+  ),
   ProviderUsageLimitsIngestion.layer,
   layerProviderInstallationRefresh,
   ProviderInstallation.layer,

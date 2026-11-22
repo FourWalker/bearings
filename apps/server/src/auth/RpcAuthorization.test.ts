@@ -79,7 +79,7 @@ describe("RPC authorization scopes", () => {
   });
 
   it("lets thread readers see the board, and only operators put threads on its tasks", () => {
-    for (const method of [WS_METHODS.boardList, WS_METHODS.boardView]) {
+    for (const method of [WS_METHODS.boardList, WS_METHODS.boardView, WS_METHODS.boardTaskDetail]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationReadScope);
     }
     expect(requiredScopeForRpcMethod(WS_METHODS.boardLinkThread)).toBe(
