@@ -6,6 +6,7 @@ import type {
   BoardView,
   EnvironmentId,
 } from "@t3tools/contracts";
+import { promptLinkDeepLink } from "@t3tools/shared/promptLinks";
 import { T, useGT } from "gt-react";
 import { ArrowLeftIcon, MessageSquarePlusIcon, XIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -17,6 +18,7 @@ import { Checkbox } from "~/components/ui/checkbox";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import { Skeleton } from "~/components/ui/skeleton";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
+import { isElectron } from "~/env";
 import { cn } from "~/lib/utils";
 import { boardEnvironment } from "~/state/board";
 import { useEnvironmentQuery } from "~/state/query";
@@ -198,14 +200,17 @@ function TaskHeader(props: BoardTaskViewProps & { readonly detail: BoardTaskDeta
   const parents = ancestorsOf(index, task);
   const clipboard = useCopyToClipboard();
   const copyLink = () => {
-    const url = new URL("/board", window.location.origin);
+    const url = new URL("/board", window.location.href);
     url.search = new URLSearchParams({
       env: props.environmentId,
       board: props.board.id,
       [task.level === 1 ? "task" : "open"]: task.id,
       ...(props.tab ? { tab: props.tab } : {}),
     }).toString();
-    clipboard.copyToClipboard(url.href, undefined);
+    const link = isElectron
+      ? promptLinkDeepLink(`${url.pathname}${url.search}`, window.location.protocol.slice(0, -1))
+      : url.href;
+    clipboard.copyToClipboard(link, undefined);
   };
   return (
     <header className="grid shrink-0 gap-1.5 border-b px-4 pt-3 pb-3">
