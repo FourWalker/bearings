@@ -182,6 +182,7 @@ import {
   ReviewDiffPreviewResult,
 } from "./review.ts";
 import { KeybindingsConfigError } from "./keybindings.ts";
+import { BoardReadError, BoardSummary, BoardView, BoardViewInput } from "./board.ts";
 import { OrchestrationSearchThreadsError } from "./threadSearch.ts";
 import {
   ProviderMcpSignInCompleteInput,
@@ -681,6 +682,9 @@ export const WS_METHODS = {
   issueTrackersList: "issueTrackers.list",
   issueTrackersConnect: "issueTrackers.connect",
   issueTrackersBindProject: "issueTrackers.bindProject",
+  // Project Board fork.
+  boardList: "board.list",
+  boardView: "board.view",
 
   sourceControlLookupRepository: "sourceControl.lookupRepository",
   sourceControlCloneRepository: "sourceControl.cloneRepository",
@@ -1474,6 +1478,22 @@ const WsIssuesReactRpc = Rpc.make(WS_METHODS.issuesReact, {
   payload: IssueReactionInput,
   success: Schema.Void,
   error: IssueRpcError,
+});
+
+const BoardRpcError = Schema.Union([BoardReadError, EnvironmentAuthorizationError]);
+
+/** Project Board fork: the boards on this machine's ~/.claude-board. */
+const WsBoardListRpc = Rpc.make(WS_METHODS.boardList, {
+  payload: Schema.Struct({}),
+  success: Schema.Array(BoardSummary),
+  error: BoardRpcError,
+});
+
+/** Project Board fork: one board's tasks and the chats on them. */
+const WsBoardViewRpc = Rpc.make(WS_METHODS.boardView, {
+  payload: BoardViewInput,
+  success: BoardView,
+  error: BoardRpcError,
 });
 
 const IssueTrackerRpcError = Schema.Union([
@@ -2385,6 +2405,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsIssueTrackersListRpc,
   WsIssueTrackersConnectRpc,
   WsIssueTrackersBindProjectRpc,
+  WsBoardListRpc,
+  WsBoardViewRpc,
   WsGuestShareCreateRpc,
   WsServerProbeRpc,
   WsServerGetConfigRpc,

@@ -141,7 +141,11 @@ board's face. See [RECONCILIATION.md](RECONCILIATION.md) for what changes and wh
     turn context, read with `serviceOption` (done)
   - `apps/server/src/orchestration-v2/runtimeLayer.ts`: provide `BoardTurnContext` to turn start (done)
   - `apps/server/src/server.ts`: start `BoardReactor` beside the other reactors (done)
-  - `packages/contracts`: `board` RPC + capability
+  - `packages/contracts`: `board.list` / `board.view` RPCs and the `projectBoard` capability (done)
+  - `apps/server/src/ws.ts`, `auth/RpcAuthorization.ts`, `observability/RpcInstrumentation.ts`,
+    `environment/ServerEnvironment.ts`: serve and advertise them (done)
+  - `packages/client-runtime/src/state/presentation.ts`: `projectBoardSupportedAtom` (done)
+  - `apps/web`: sidebar Board entry, `/board` utility path, i18n catalogs (done)
 - Upstream is `upstream` (`https://github.com/pingdotgg/t3code`). Rebase `board/integration` on
   `upstream/main` regularly.
 

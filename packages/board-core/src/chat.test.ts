@@ -13,6 +13,7 @@ import { boardModeProtocol } from "./protocol.ts";
 import { BoardStore } from "./store.ts";
 import { norm } from "./text.ts";
 import { BOARD_TOOL_NAMES } from "./tools.ts";
+import { OFFLINE_MS, readBoardView } from "./view.ts";
 import type { Registry, Session, Task } from "./types.ts";
 
 let home: string;
@@ -236,5 +237,42 @@ describe("BoardChat", () => {
     const chat = new BoardChat(new BoardStore(home, nodeIO), noGit, "t3");
     for (const name of BOARD_TOOL_NAMES) expect(chat.runTool(name, {})).not.toBeNull();
     expect(chat.runTool("not_a_tool", {})).toBeNull();
+  });
+});
+
+describe("readBoardView", () => {
+  it("shows tasks with plan progress and their chats, and chats not on a task", async () => {
+    const store = await seedBoard({ services: [{ id: "api", name: "API", match: ["api"] }] });
+    const linked = await openChat(store, "t1", ws);
+    await linked.turnStart("Build the SFTP client");
+    await linked.linkTask({ newTaskTitle: "SFTP" });
+    await linked.savePlan({ markdown: "## Phase A\n- [x] A1 Client\n- [ ] A2 Retry" });
+    const loose = await openChat(store, "t2", ws);
+    await loose.turnStart("A quick question");
+    const gone = await openChat(store, "t3", ws, "claude-code");
+    await gone.turnStart("Old chat");
+
+    const t2 = (await store.readSession("nefx", "t2")) as Session;
+    const view = await readBoardView(store, "nefx", t2.heartbeatAt + OFFLINE_MS / 2);
+    expect(view?.services).toEqual([{ id: "api", name: "API" }]);
+    expect(view?.tasks).toMatchObject([
+      {
+        id: "sftp",
+        title: "SFTP",
+        level: 1,
+        next: { id: "A2", text: "Retry" },
+        steps: { done: 1, total: 2 },
+        chats: [{ sessionId: "t1", threadId: "t1", provider: "codex", live: "working" }],
+      },
+    ]);
+    expect(view?.unlinked.map((c) => [c.sessionId, c.title, c.threadId])).toEqual([
+      ["t3", "Old chat", "t3"],
+      ["t2", "A quick question", "t2"],
+    ]);
+    // Past the heartbeat window a chat is offline.
+    const later = await readBoardView(store, "nefx", t2.heartbeatAt + OFFLINE_MS * 2);
+    expect(later?.tasks[0]?.chats[0]?.live).toBe("offline");
+    expect(later?.unlinked.map((c) => c.live)).toEqual(["offline", "offline"]);
+    expect(await readBoardView(store, "nope", 0)).toBeNull();
   });
 });

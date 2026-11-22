@@ -5,81 +5,82 @@ mapping in [RECONCILIATION.md](RECONCILIATION.md).
 
 ## Repos and folders
 
-- **Fork:** `C:\Claude Works\t3code-board`, branch `board/integration`.
+- **Fork:** `C:\Claude Works\t3code-board`, branch `board/integration` (local commits, not pushed).
   - `origin` = github.com/FourWalker/t3code-board (public fork)
   - `upstream` = pingdotgg/t3code
 - **Board project (not a git repo):** `C:\Claude Works\Claude Project Board`.
-  - The Claude mod is in `mod/project-board/`.
+  - The Claude mod is in `mod/project-board/`; the board app is `mod/project-board/app/server.js`.
   - Its previous `register.ts` is kept in `backup/`.
 - **Board data:** `%USERPROFILE%\.claude-board`. Boards today: NEFX (3 workspaces) and Claude Project Board.
-- **Tools:** gh, glab and vp are installed. In PowerShell, reload PATH from the User and Machine environment first.
+- **Tools:** gh, glab, vp and Codex CLI (signed in with ChatGPT) are installed; no Claude CLI on PATH.
+  In PowerShell, reload PATH from the User and Machine environment first.
 
 ## Done
 
-| Step   | What                                                                                                                                                                                                                                                            | Commit                 |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| Design | INTEGRATION.md, RECONCILIATION.md                                                                                                                                                                                                                               | `1434c5f`              |
-| 1      | `packages/board-core`: the board's rules, storage, context and 16 tools, ported from the mod's `register.ts`                                                                                                                                                    | `4b42195`              |
-| 2      | `packages/issue-tracker-board` + `LocalIssueTrackerApi`: board tasks appear as issues for projects inside a board root                                                                                                                                          | `0616d5e`              |
-| 3      | `apps/server/src/mcp/toolkits/board` + `board/BoardChats.ts`: board tools for every provider's threads; `T3_BOARD_HOST=t3` for Claude threads                                                                                                                   | `239f5b8`              |
-| 4      | `board/BoardTurnContext.ts`: the board's context (placement, linked task's plan and handoff, Board Mode, project rules) goes inline ahead of the user's message for every provider, only when it changed, and again for a new native thread or after compaction | `81aa292`              |
-| 5      | `board/BoardReactor.ts`: from committed events, a run sets the thread working, its answer becomes the task's last action, checkpoint files tag services, archive/delete ends the chat; a 60 s heartbeat keeps open threads online                               | see `git log`          |
-| Mod    | Claude mod switched to board-core (vendored by `tools/sync-board-core.mjs`; thin `register.ts`; stands down under `T3_BOARD_HOST`)                                                                                                                              | board project, not git |
+| Step   | What                                                                                                                                                                                                                                                                                   | Commit                 |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| Design | INTEGRATION.md, RECONCILIATION.md                                                                                                                                                                                                                                                      | `1434c5f`              |
+| 1      | `packages/board-core`: the board's rules, storage, context and 16 tools, ported from the mod's `register.ts`                                                                                                                                                                           | `4b42195`              |
+| 2      | `packages/issue-tracker-board` + `LocalIssueTrackerApi`: board tasks appear as issues for projects inside a board root                                                                                                                                                                 | `0616d5e`              |
+| 3      | `apps/server/src/mcp/toolkits/board` + `board/BoardChats.ts`: board tools for every provider's threads; `T3_BOARD_HOST=t3` for Claude threads                                                                                                                                          | `239f5b8`              |
+| 4      | `board/BoardTurnContext.ts`: the board's context (placement, linked task's plan and handoff, Board Mode, project rules) goes inline ahead of the user's message for every provider, only when it changed, and again for a new native thread or after compaction                        | `81aa292`              |
+| 5      | `board/BoardReactor.ts`: from committed events, a run sets the thread working, its answer becomes the task's last action, checkpoint files tag services, archive/delete ends the chat; a 60 s heartbeat keeps open threads online                                                      | `e20a6e1`              |
+| Fixes  | First dev run: Windows-safe record names, board context on plain turns, prompts of CLI/agent-started threads                                                                                                                                                                           | `0b1005d`              |
+| 6a     | Board view, first slice: `board.list` / `board.view` RPCs and `projectBoard` capability; `board/BoardService.ts` (T3 threads take status and title from T3, so they are never "offline"); web `/board` page with the task tree, threads per task, threads not on a task, sidebar entry | see `git log`          |
+| Mod    | Claude mod switched to board-core (vendored by `tools/sync-board-core.mjs`; thin `register.ts`; stands down under `T3_BOARD_HOST`)                                                                                                                                                     | board project, not git |
 
-Each step passed `vp run check:changed`.
+Each step passed `vp run check:changed`, apart from the Windows-only failures listed below.
 
 ## Next
 
-1. **Board view** in the web UI: port the board app's screens. `t3board://<board>/<task>` links
-   open it. Add "Continue in new thread" on a task, with a provider and model picker.
-2. Later: Board Mode details (ownership with T3 worktrees, the R# register UI), mobile.
+1. **"Continue in new thread" on a task** (Board view, slice 2): a button on a task card with a
+   provider/model picker. Server: start a thread in the project whose folder is the task's workspace,
+   and link its board record to the task before the first turn (so the turn context carries the plan
+   and handoff). Needs a `board.startThread` RPC (a protected method: add it to
+   `CLIENT_GUARDED_RPC_SCOPES` and use `createEnvironmentRpcCommand`).
+2. **Right panel**: must-dos, open decisions, to-dos (task `items` and `decisions`), as the board app shows.
+3. **On a thread**: a chip with its board task and link/unlink (reverse states).
+4. `t3board://<board>/<task>` deep links; the command palette entry; mobile.
+5. Later: Board Mode details (ownership with T3 worktrees, the R# register UI).
 
-## First dev run (2026-11-22)
+## How to run it (dev, isolated)
 
-How: `.t3/claude-board` is a copy of `~/.claude-board` plus a throwaway "Dev Board" rooted at
-`.t3/board-ws` (a small git repo). With `T3_BOARD_HOME` set to it, `vp run dev --home-dir .t3`, then
-`t3 project add` that folder and `t3 thread start --provider devReplay --model showcase` (free).
-This machine has no `~/.t3`, so there was no live database to migrate or protect.
+`.t3/` in the clone is gitignored and holds the dev state:
 
-It found and fixed three bugs:
+- `.t3/claude-board`: a copy of `~/.claude-board` plus a throwaway "Dev Board" rooted at
+  `.t3/board-ws` (a small git repo with a linked task `refund-api` from a Codex run).
+- Start: in PowerShell, `$env:T3_BOARD_HOME = "<clone>\.t3\claude-board"`, then
+  `vp run dev --home-dir <clone>\.t3`. Open the `pairingUrl` from the log, then `/board`.
+- Free turns: `node apps/server/src/bin.ts thread start --base-dir .t3 --provider devReplay
+  --model showcase <folder> "go"`. Real cheap turns: `--provider codex --model gpt-6-luna`.
+- Board app on the copy: `BOARD_ROOT=<copy> BOARD_PORT=4318 node server.js` in the mod's `app/`.
+- This machine has no `~/.t3`, so there is no live T3 database to protect.
 
-- T3 thread ids hold colons; on Windows the record went into an NTFS stream (`sessions/mcp`).
-  board-core now names records with the board app's `safe()` rule.
-- A plain turn (no handoff) never went through the inline-context path, so the board context was
-  never sent. Turn start now uses that path whenever the board is present.
-- The reactor dropped the prompt of CLI- and agent-started threads (`createdBy: "agent"`), so their
-  records were never written. It now skips only server wakes (`creationSource: "server"`).
+## Verified
 
-Verified: the thread's record lands on the right board with title, prompt, idle status and answer;
-the turn context is built for the turn. One `BoardChats` is shared by every user of
-`BoardChats.layer` in a build (checked against Effect directly).
+- First dev run fixed three bugs: T3 thread ids hold colons (Windows NTFS streams), so board-core
+  names records with the board app's `safe()` rule; plain turns now carry the board context; CLI- and
+  agent-started threads' prompts are recorded (only server wakes are skipped).
+- Codex `gpt-6-luna` read the board context (named the board, workspace and project rule) and used
+  the board tools: created and linked a task, saved a plan, ticked a step, wrote handoffs. The board
+  app showed it.
+- `/board` in the dev web app: shows the Dev Board and the copied NEFX board (tree, steps, services,
+  paused module, offline Claude Code chat not clickable); the Codex thread shows idle after a restart;
+  clicking it opens the T3 thread; the sidebar Board entry opens the page.
+- One `BoardChats` is shared by every user of `BoardChats.layer` in a build (checked against Effect).
 
-### Real provider: Codex `gpt-6-luna` (two turns)
+## Not verified yet / known gaps
 
-- Asked only "which board and workspace, and what does the project rule say", Codex answered
-  "Dev Board", "main" and the rule's BOARD-DEV-OK: the board context reaches a non-Claude provider.
-- Asked to track the work, it called the board tools: created and linked `refund-api`, saved a
-  two-step plan, ticked A1 after creating `api/refunds.ts`, wrote the living handoff and `A1.md`.
-  The last action it set was kept; the checkpoint tagged the task `api`; the thread's record is idle
-  and linked.
-- The board app (`BOARD_ROOT=<copy> BOARD_PORT=4318 node server.js`) shows the task card with next
-  step, 1/2 progress, the API tag, the last action and "Idle · 1 chat open".
-
-## Not verified yet
-
-- After a server restart, a T3 thread nobody has used since shows "offline" in the board app: only
-  chats opened in this process get the heartbeat, but a T3 thread is available whenever the server
-  runs. Decide in the Board view step what "live" means for T3 threads.
-- Clicking a T3 thread in the board app uses `jumpUrl` (`claude://…`), which is wrong for T3
-  threads; the `t3board://` links of the Board view step replace it.
-- Claude threads in T3 (`T3_BOARD_HOST=t3`): this machine has no Claude CLI on PATH, so untested.
-- On this Windows machine, 4 `ProviderTurnStartService.test.ts` cases (worktree recovery, startup
-  coordination) fail with and without the board changes. They're Git worktree failures on Windows, not the board.
-- Step 5: service tags arrive with the turn's checkpoint, after the turn, so the "outside this task's
-  services" note that `fileChanged` returns isn't shown to the agent (the mod shows it mid-turn).
-  A thread left working when the server stops stays working until its heartbeat goes stale.
-- Threads in folders on no board also get the short "not on a board yet" note, as the mod does.
+- The board app still shows T3 threads unused since a restart as "offline", and its jump link
+  (`claude://…`) is wrong for T3 threads. T3's own Board page has neither problem.
+- Claude threads in T3 (`T3_BOARD_HOST=t3`): untested here (no Claude CLI).
+- Service tags arrive with the turn's checkpoint, after the turn, so the "outside this task's
+  services" note isn't shown to the agent (the mod shows it mid-turn).
+- Threads in folders on no board get the short "not on a board yet" note, as the mod does.
 - The switched Claude mod has been smoke-tested with a fake host, not yet in a real new Claude chat.
+- Windows-only test failures, with and without the board changes: 4 `ProviderTurnStartService.test.ts`
+  cases (Git worktrees) and one `ServerEnvironment.test.ts` case (symlink EPERM). The mobile
+  `i18n:check` step can't spawn `gt` on Windows; web catalogs pass.
 
 ## After editing board-core
 

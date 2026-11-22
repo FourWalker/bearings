@@ -130,6 +130,11 @@ export function useIssuesSupported() {
   return useAtomValue(environmentSummaries.issuesSupportedAtom);
 }
 
+/** Project Board fork. */
+export function useProjectBoardSupported() {
+  return useAtomValue(environmentSummaries.projectBoardSupportedAtom);
+}
+
 export function useEnvironmentMachines() {
   return useAtomValue(environmentSummaries.machineByIdAtom);
 }

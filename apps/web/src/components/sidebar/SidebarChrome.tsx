@@ -1,4 +1,10 @@
-import { ArrowLeftIcon, ArrowRightIcon, ChartNoAxesColumnIcon, SettingsIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  ChartNoAxesColumnIcon,
+  SettingsIcon,
+  SquareKanbanIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { T, useGT } from "gt-react";
 import { memo } from "react";
@@ -14,7 +20,11 @@ import {
 } from "../../navigationHistory";
 import { primaryServerKeybindingsAtom } from "../../state/server";
 import { cn } from "../../lib/utils";
-import { useIssuesSupported, usePullRequestsSupported } from "../../state/environments";
+import {
+  useIssuesSupported,
+  useProjectBoardSupported,
+  usePullRequestsSupported,
+} from "../../state/environments";
 import { T3Wordmark } from "../T3Wordmark";
 import {
   resolveEnvironmentIdentificationPillLabel,
@@ -235,6 +245,7 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   });
   const pullRequestsSupported = usePullRequestsSupported();
   const issuesSupported = useIssuesSupported();
+  const boardSupported = useProjectBoardSupported();
   const closeMobileSidebar = () => {
     if (isMobile) {
       setOpenMobile(false);
@@ -250,6 +261,10 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   const handleIssuesClick = () => {
     closeMobileSidebar();
     void navigate({ to: "/issues", search: readIssueListPreferences() });
+  };
+  const handleBoardClick = () => {
+    closeMobileSidebar();
+    void navigate({ to: "/board" });
   };
   const handleSettingsClick = () => {
     closeMobileSidebar();
@@ -298,6 +313,13 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
               icon={<IssueGlyph.issue />}
               label={gt("Issues", { $context: "sidebar link to the list of issues" })}
               onClick={handleIssuesClick}
+            />
+          ) : null}
+          {boardSupported ? (
+            <SidebarUtilityItem
+              icon={<SquareKanbanIcon />}
+              label={gt("Board", { $context: "sidebar link to the Project Board" })}
+              onClick={handleBoardClick}
             />
           ) : null}
           <SidebarUtilityItem

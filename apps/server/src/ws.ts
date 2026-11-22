@@ -259,6 +259,7 @@ import * as PullRequestService from "./pullRequest/PullRequestService.ts";
 import * as IssueService from "./issue/IssueService.ts";
 import * as ThreadIssueService from "./orchestration-v2/ThreadIssueService.ts";
 import * as IssueTrackerConnections from "./issue/IssueTrackerConnections.ts";
+import * as BoardService from "./board/BoardService.ts";
 import * as PullRequestReviewGuideService from "./pullRequest/PullRequestReviewGuideService.ts";
 import { listLinkedPullRequestThreads } from "./pullRequest/linkedThreads.ts";
 import { pullRequestSyncKey } from "./pullRequest/pullRequestSyncKey.ts";
@@ -1496,6 +1497,7 @@ export const layerWsRpc = (
       const issues = yield* IssueService.IssueService;
       const threadIssues = yield* ThreadIssueService.ThreadIssueService;
       const issueTrackers = yield* IssueTrackerConnections.IssueTrackerConnections;
+      const boards = yield* BoardService.BoardService;
       const reviewGuides = yield* PullRequestReviewGuideService.PullRequestReviewGuideService;
       const pullRequestSync = yield* PullRequestSyncReactor.PullRequestSyncReactor;
       const deviceService = yield* DeviceService.DeviceService;
@@ -2002,6 +2004,9 @@ export const layerWsRpc = (
         [WS_METHODS.issueTrackersList]: () => issueTrackers.list,
         [WS_METHODS.issueTrackersConnect]: (input) => issueTrackers.connect(input),
         [WS_METHODS.issueTrackersBindProject]: (input) => issueTrackers.bindProject(input),
+        // Project Board fork.
+        [WS_METHODS.boardList]: () => boards.list,
+        [WS_METHODS.boardView]: (input) => boards.view(input),
         [ORCHESTRATION_V2_WS_METHODS.dispatchCommand]: (command) =>
           Effect.annotateCurrentSpan({
             "orchestration_v2.command_id": command.commandId,
@@ -3786,6 +3791,8 @@ export const layer = Layer.unwrap(
                 Layer.succeed(IssueTrackerConnections.IssueTrackerConnections, issueTrackers),
               ),
               Layer.provide(OtlpEndpointCheck.layer),
+              // Project Board fork.
+              Layer.provide(BoardService.layer),
               Layer.provide(
                 Layer.succeed(
                   PullRequestReviewGuideService.PullRequestReviewGuideService,
