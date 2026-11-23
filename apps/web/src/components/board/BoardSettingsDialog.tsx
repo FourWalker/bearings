@@ -31,6 +31,7 @@ export function BoardSettingsButton(props: {
   return (
     <>
       <Button
+        data-board-settings
         variant="ghost-muted"
         size="icon-sm"
         aria-label={gt("Board settings")}
@@ -123,7 +124,10 @@ type Save = (edit: BoardSettingsEdit) => Promise<boolean>;
 function Section(props: { readonly title: string; readonly children: ReactNode }) {
   return (
     <section className="grid gap-2">
-      <h3 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+      <h3
+        data-board-card-title
+        className="font-medium text-muted-foreground text-xs uppercase tracking-wide"
+      >
         {props.title}
       </h3>
       {props.children}

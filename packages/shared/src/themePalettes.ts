@@ -1,3 +1,4 @@
+import { CLAY_POST_THEME } from "./clayPostTheme.ts";
 import { PLOTTER_TIDE_THEME } from "./plotterTideTheme.ts";
 
 export const BUILT_IN_THEME_IDS = [
@@ -7,6 +8,7 @@ export const BUILT_IN_THEME_IDS = [
   "ember",
   "iris",
   "plotter-tide",
+  "clay-post",
 ] as const;
 
 export const MOBILE_DEFAULT_THEME_ID = "t3-code";
@@ -920,6 +922,7 @@ export const IRIS_THEME: ThemeDefinition = {
 };
 
 export const BUILT_IN_THEMES: ReadonlyArray<ThemeDefinition> = [
+  CLAY_POST_THEME,
   PLOTTER_TIDE_THEME,
   T3_CHAT_THEME,
   GROVE_THEME,

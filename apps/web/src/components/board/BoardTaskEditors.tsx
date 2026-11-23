@@ -488,7 +488,10 @@ export function DecisionAdder(props: {
         });
       }}
     >
-      <h3 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+      <h3
+        data-board-card-title
+        className="font-medium text-muted-foreground text-xs uppercase tracking-wide"
+      >
         <T>New decision</T>
       </h3>
       <Input

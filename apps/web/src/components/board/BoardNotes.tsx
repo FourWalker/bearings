@@ -37,7 +37,7 @@ function hash(text: string): number {
   return Math.abs(h);
 }
 
-const colourOf = (id: string) => NOTE_COLOURS[hash(id) % NOTE_COLOURS.length];
+const colourIndexOf = (id: string) => hash(id) % NOTE_COLOURS.length;
 const iso = (ms: number) => new Date(ms).toISOString();
 
 export interface BoardNoteActions {
@@ -98,7 +98,7 @@ function NoteFlags(props: { readonly index: BoardIndex; readonly task: BoardTask
   return (
     <>
       {firstBlocker !== undefined ? (
-        <div className="font-medium text-destructive text-xs">
+        <div data-board-stamp="blocked" className="font-medium text-destructive text-xs">
           {moreBlockers.length > 0
             ? gt("⛔ Blocked by {task} +{more}", {
                 task: firstBlocker.title,
@@ -167,7 +167,7 @@ function PlanLine(props: { readonly task: BoardTask; readonly showEmpty: boolean
           ? gt("Next: {id} – {text}", { id: next.id, text: next.text })
           : gt("All steps done")}
       </div>
-      <div className="h-1 overflow-hidden rounded-full bg-foreground/15">
+      <div data-board-progress className="h-1 overflow-hidden rounded-full bg-foreground/15">
         <div
           className="h-full rounded-full bg-foreground/60"
           style={{ width: `${Math.round((steps.done / steps.total) * 100)}%` }}
@@ -201,6 +201,7 @@ function StatusStrip(props: { readonly index: BoardIndex; readonly task: BoardTa
           : gt("No chats linked yet");
   return (
     <div
+      data-board-note-strip
       className={cn(
         "-mx-3 -mb-3 mt-1 flex h-7 items-center gap-2 rounded-b-lg bg-foreground/8 px-3 text-xs",
         status.kind === "working" && "bg-success/25 font-medium",
@@ -231,7 +232,7 @@ function LastAction(props: { readonly task: BoardTask; readonly actions: BoardNo
         </span>
         {canOpen ? <span>{gt("Open thread ↗")}</span> : null}
       </div>
-      <div className="line-clamp-3 text-start text-sm">
+      <div data-board-note-quote className="line-clamp-3 text-start text-sm">
         {last !== null ? last.text : <span className="opacity-60">{gt("Nothing yet")}</span>}
       </div>
     </>
@@ -241,6 +242,7 @@ function LastAction(props: { readonly task: BoardTask; readonly actions: BoardNo
   return canOpen ? (
     <button
       type="button"
+      data-board-note-stub
       className={cn(frame, "bg-foreground/4 hover:bg-foreground/10")}
       onClick={(event) => {
         event.stopPropagation();
@@ -250,13 +252,16 @@ function LastAction(props: { readonly task: BoardTask; readonly actions: BoardNo
       {body}
     </button>
   ) : (
-    <div className={cn(frame, "bg-foreground/4")}>{body}</div>
+    <div data-board-note-stub className={cn(frame, "bg-foreground/4")}>
+      {body}
+    </div>
   );
 }
 
 /** Shared frame: a clickable note that opens its task. */
 function NoteFrame(props: {
   readonly task: BoardTask;
+  readonly kind: "note" | "module";
   readonly onOpen: () => void;
   readonly className?: string;
   readonly children: React.ReactNode;
@@ -265,6 +270,9 @@ function NoteFrame(props: {
     <div
       role="button"
       tabIndex={0}
+      data-board-note={props.kind}
+      data-note-status={props.task.status}
+      data-note-colour={colourIndexOf(props.task.id) + 1}
       onClick={props.onOpen}
       onKeyDown={(event) => {
         if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
@@ -274,7 +282,7 @@ function NoteFrame(props: {
       }}
       className={cn(
         "grid min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)] gap-1.5 rounded-lg p-3 text-board-note-ink shadow-sm outline-none ring-ring wrap-anywhere focus-visible:ring-2 focus-visible:ring-inset",
-        colourOf(props.task.id),
+        NOTE_COLOURS[colourIndexOf(props.task.id)],
         props.task.status === "done" && "opacity-60",
         props.className,
       )}
@@ -315,8 +323,8 @@ export function BoardNote(props: {
         : gt(" · {tasks} tasks", { tasks: kids.length });
   const parents = props.showParents === true ? ancestorsOf(index, task) : [];
   return (
-    <NoteFrame task={task} onOpen={() => props.actions.onOpenTask(task)}>
-      <div className="text-3xs uppercase tracking-wide opacity-70">
+    <NoteFrame kind="note" task={task} onOpen={() => props.actions.onOpenTask(task)}>
+      <div data-board-note-label className="text-3xs uppercase tracking-wide opacity-70">
         {levelLabel(task)}
         {task.kind === "backlog" && task.mainService !== null
           ? ` · ${props.serviceName(task.mainService)}`
@@ -325,7 +333,9 @@ export function BoardNote(props: {
         {task.status !== "active" ? ` · ${statusLabel(task.status)}` : ""}
       </div>
       <NoteFlags index={index} task={task} />
-      <h3 className="font-semibold text-base leading-tight">{task.title}</h3>
+      <h3 data-board-note-title className="font-semibold text-base leading-tight">
+        {task.title}
+      </h3>
       {task.description ? (
         <p className="line-clamp-2 text-xs opacity-80">{task.description}</p>
       ) : null}
@@ -355,7 +365,7 @@ export function BoardNote(props: {
             </span>
           ))}
         {workspaces.map((label) => (
-          <span key={label} className="rounded-full bg-foreground/10 px-2 py-px">
+          <span key={label} data-board-tag className="rounded-full bg-foreground/10 px-2 py-px">
             {label}
           </span>
         ))}
@@ -437,8 +447,8 @@ export function BoardModuleNote(props: {
   const statusLabel = useStatusLabel();
   const kids = index.kidsOf(task.id);
   return (
-    <NoteFrame task={task} onOpen={() => props.actions.onOpenTask(task)}>
-      <div className="text-3xs uppercase tracking-wide opacity-70">
+    <NoteFrame kind="module" task={task} onOpen={() => props.actions.onOpenTask(task)}>
+      <div data-board-note-label className="text-3xs uppercase tracking-wide opacity-70">
         {levelLabel(task)}
         {task.status !== "active" ? ` · ${statusLabel(task.status)}` : ""}
       </div>
@@ -446,7 +456,9 @@ export function BoardModuleNote(props: {
       <div className="flex flex-wrap">
         <OwnerChip index={index} task={task} />
       </div>
-      <h3 className="font-semibold leading-tight">{task.title}</h3>
+      <h3 data-board-note-title className="font-semibold leading-tight">
+        {task.title}
+      </h3>
       <PlanLine task={task} showEmpty={false} />
       {kids.length > 0 ? (
         <div className="grid grid-cols-[minmax(0,1fr)] gap-0.5">

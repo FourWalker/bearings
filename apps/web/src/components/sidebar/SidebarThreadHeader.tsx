@@ -114,6 +114,7 @@ export function SidebarThreadHeader({
         <TooltipTrigger
           render={
             <Button
+              data-sidebar-new-chat
               variant="outline"
               size="sm"
               className="w-full"
@@ -142,6 +143,10 @@ export function SidebarThreadHeader({
           )}
         </TooltipPopup>
       </Tooltip>
+      {/* Shown by themes that label the list, as Clay Post does. */}
+      <span data-sidebar-section-label className="hidden">
+        {gt("Threads")}
+      </span>
     </div>
   );
 }

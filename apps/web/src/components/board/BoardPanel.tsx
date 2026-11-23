@@ -19,9 +19,20 @@ export function BoardPanel(props: {
   const gt = useGT();
   const { panel } = props;
   return (
-    <div className="grid content-start gap-5">
+    <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-5">
+      {/* Shown by themes that head the panel, as Clay Post's ledger does. */}
+      <div data-board-panel-masthead className="hidden">
+        <span data-board-panel-kicker>
+          <T context="heading of the board's summary panel, styled like an account ledger">
+            The ledger
+          </T>
+        </span>
+        <span data-board-panel-heading-title>
+          <T context="subheading of the board's summary panel">Where things stand</T>
+        </span>
+      </div>
       {panel.blocked.length > 0 ? (
-        <PanelSection title={gt("Blocked")} count={panel.blocked.length}>
+        <PanelSection title={gt("Blocked")} count={panel.blocked.length} tone="blocked">
           {panel.blocked.map(({ task, by }) => (
             <PanelRow
               key={task.id}
@@ -53,7 +64,7 @@ export function BoardPanel(props: {
       />
       <PanelSection title={gt("Unlinked chats")} count={panel.unlinked.length}>
         {panel.unlinked.length === 0 ? (
-          <PanelNone>
+          <PanelNone tidy>
             <T>Every open chat is on a task.</T>
           </PanelNone>
         ) : (
@@ -119,21 +130,37 @@ function EntrySection(props: {
 function PanelSection(props: {
   readonly title: string;
   readonly count: number;
+  readonly tone?: "blocked";
   readonly children: ReactNode;
 }) {
   return (
-    <section className="grid gap-1">
-      <h2 className="flex items-center justify-between font-medium text-muted-foreground text-xs uppercase tracking-wide">
+    <section
+      data-board-panel-section={props.tone ?? ""}
+      className="grid grid-cols-[minmax(0,1fr)] gap-1"
+    >
+      <h2
+        data-board-panel-heading
+        className="flex items-center justify-between font-medium text-muted-foreground text-xs uppercase tracking-wide"
+      >
         {props.title}
-        <span className="rounded-full bg-muted px-2 text-2xs">{props.count}</span>
+        <span data-board-panel-count={props.count} className="rounded-full bg-muted px-2 text-2xs">
+          {props.count}
+        </span>
       </h2>
       {props.children}
     </section>
   );
 }
 
-function PanelNone(props: { readonly children: ReactNode }) {
-  return <p className="px-2 text-muted-foreground text-sm">{props.children}</p>;
+function PanelNone(props: { readonly children: ReactNode; readonly tidy?: boolean }) {
+  return (
+    <p
+      data-board-panel-none={props.tidy ? "tidy" : ""}
+      className="px-2 text-muted-foreground text-sm"
+    >
+      {props.children}
+    </p>
+  );
 }
 
 function PanelRow(props: {
@@ -147,6 +174,7 @@ function PanelRow(props: {
     <button
       type="button"
       onClick={props.onClick}
+      data-board-panel-row={props.tone}
       className="flex w-full gap-2 rounded-md px-2 py-1.5 text-start text-sm hover:bg-accent"
     >
       <span

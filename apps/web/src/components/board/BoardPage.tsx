@@ -479,104 +479,109 @@ function BoardScreen(props: {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {board.workspaces.map((workspace) => (
-            <Tooltip key={workspace.root}>
-              <TooltipTrigger
-                render={
-                  <span
-                    className={
-                      working.has(workspace.label)
-                        ? "rounded-full border border-success/50 bg-success/15 px-2 py-0.5 text-xs"
-                        : "rounded-full border px-2 py-0.5 text-muted-foreground text-xs"
-                    }
-                  />
-                }
-              >
-                {workspace.label}
-                {working.has(workspace.label) ? " ●" : ""}
-              </TooltipTrigger>
-              <TooltipPopup>{workspace.root}</TooltipPopup>
-            </Tooltip>
-          ))}
-        </div>
-        {collisions.length > 0 ? (
-          <span className="flex items-center gap-1 text-warning-foreground text-xs">
-            <TriangleAlertIcon className="size-3.5" />
-            {collisions
-              .map((collision) =>
-                gt("{count} chats working in {workspace}", {
-                  count: collision.count,
-                  workspace: collision.workspace,
+      <header data-board-masthead className="grid gap-2 border-b px-4 py-2">
+        <BoardMastheadTitle name={board.name} />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {board.workspaces.map((workspace) => (
+              <Tooltip key={workspace.root}>
+                <TooltipTrigger
+                  render={
+                    <span
+                      data-board-tag
+                      className={
+                        working.has(workspace.label)
+                          ? "rounded-full border border-success/50 bg-success/15 px-2 py-0.5 text-xs"
+                          : "rounded-full border px-2 py-0.5 text-muted-foreground text-xs"
+                      }
+                    />
+                  }
+                >
+                  {workspace.label}
+                  {working.has(workspace.label) ? " ●" : ""}
+                </TooltipTrigger>
+                <TooltipPopup>{workspace.root}</TooltipPopup>
+              </Tooltip>
+            ))}
+          </div>
+          {collisions.length > 0 ? (
+            <span className="flex items-center gap-1 text-warning-foreground text-xs">
+              <TriangleAlertIcon className="size-3.5" />
+              {collisions
+                .map((collision) =>
+                  gt("{count} chats working in {workspace}", {
+                    count: collision.count,
+                    workspace: collision.workspace,
+                  }),
+                )
+                .join(" · ")}
+            </span>
+          ) : null}
+          <div className="min-w-0 flex-1" />
+          <BoardSettingsButton
+            environmentId={props.environmentId}
+            boardId={board.id}
+            onChanged={props.onChanged}
+          />
+          <NewTaskButton
+            environmentId={props.environmentId}
+            boardId={board.id}
+            onCreated={(taskId) => {
+              props.onChanged();
+              void navigate({
+                search: (previous) => ({
+                  ...previous,
+                  task: taskId,
+                  open: undefined,
+                  tab: undefined,
                 }),
-              )
-              .join(" · ")}
-          </span>
-        ) : null}
-        <div className="min-w-0 flex-1" />
-        <BoardSettingsButton
-          environmentId={props.environmentId}
-          boardId={board.id}
-          onChanged={props.onChanged}
-        />
-        <NewTaskButton
-          environmentId={props.environmentId}
-          boardId={board.id}
-          onCreated={(taskId) => {
-            props.onChanged();
-            void navigate({
-              search: (previous) => ({
-                ...previous,
-                task: taskId,
-                open: undefined,
-                tab: undefined,
-              }),
-            });
-          }}
-        />
-        <ToggleGroup
-          aria-label={gt("Board view")}
-          value={[props.mode]}
-          onValueChange={(next) => {
-            const value = next[0];
-            if (
-              value === "tree" ||
-              value === "1" ||
-              value === "2" ||
-              value === "3" ||
-              value === "svc" ||
-              value === "register"
-            )
-              setSearch({ view: value });
-          }}
-        >
-          <Toggle value="tree">{gt("Tree")}</Toggle>
-          <Toggle value="1">{gt("Level 1")}</Toggle>
-          <Toggle value="2">{gt("Level 2")}</Toggle>
-          <Toggle value="3">{gt("Level 3")}</Toggle>
-          <Toggle value="svc">{gt("By service")}</Toggle>
-          <Toggle value="register">{gt("Register")}</Toggle>
-        </ToggleGroup>
-        {props.mode !== "register" ? (
+              });
+            }}
+          />
           <ToggleGroup
-            aria-label={gt("Task status")}
-            value={[props.filter]}
+            aria-label={gt("Board view")}
+            value={[props.mode]}
             onValueChange={(next) => {
               const value = next[0];
-              if (value === "active" || value === "paused" || value === "done" || value === "all")
-                setSearch({ filter: value });
+              if (
+                value === "tree" ||
+                value === "1" ||
+                value === "2" ||
+                value === "3" ||
+                value === "svc" ||
+                value === "register"
+              )
+                setSearch({ view: value });
             }}
           >
-            <Toggle value="active">{gt("Active")}</Toggle>
-            <Toggle value="paused">{gt("Paused")}</Toggle>
-            <Toggle value="done">{gt("Done")}</Toggle>
-            <Toggle value="all">{gt("All")}</Toggle>
+            <Toggle value="tree">{gt("Tree")}</Toggle>
+            <Toggle value="1">{gt("Level 1")}</Toggle>
+            <Toggle value="2">{gt("Level 2")}</Toggle>
+            <Toggle value="3">{gt("Level 3")}</Toggle>
+            <Toggle value="svc">{gt("By service")}</Toggle>
+            <Toggle value="register">{gt("Register")}</Toggle>
           </ToggleGroup>
-        ) : null}
-      </div>
+          {props.mode !== "register" ? (
+            <ToggleGroup
+              data-board-status-filter
+              aria-label={gt("Task status")}
+              value={[props.filter]}
+              onValueChange={(next) => {
+                const value = next[0];
+                if (value === "active" || value === "paused" || value === "done" || value === "all")
+                  setSearch({ filter: value });
+              }}
+            >
+              <Toggle value="active">{gt("Active")}</Toggle>
+              <Toggle value="paused">{gt("Paused")}</Toggle>
+              <Toggle value="done">{gt("Done")}</Toggle>
+              <Toggle value="all">{gt("All")}</Toggle>
+            </ToggleGroup>
+          ) : null}
+        </div>
+      </header>
       <div className="flex min-h-0 flex-1 flex-col @container/board lg:flex-row">
-        <div className="min-h-0 min-w-0 flex-1 overflow-auto p-4">
+        <div data-board-surface className="min-h-0 min-w-0 flex-1 overflow-auto p-4">
           {props.mode === "register" ? (
             <BoardRecommendations
               key={board.id}
@@ -602,6 +607,7 @@ function BoardScreen(props: {
           )}
         </div>
         <aside
+          data-board-panel
           aria-label={gt("Board panel")}
           className="shrink-0 overflow-y-auto border-t bg-card/40 p-4 lg:w-80 lg:border-t-0 lg:border-l"
         >
@@ -688,7 +694,7 @@ function BoardArea(props: {
               actions={props.actions}
             />
             {index.kidsOf(root.id).map((module) => (
-              <div key={module.id} className="ms-3">
+              <div key={module.id} data-board-module className="ms-3">
                 <BoardModuleNote index={index} task={module} actions={props.actions} />
               </div>
             ))}
@@ -716,6 +722,28 @@ function BoardArea(props: {
   );
 }
 
+/** "Board / name", the name's last word set apart so a theme can accent it. */
+function BoardMastheadTitle(props: { readonly name: string }) {
+  const name = props.name.trim();
+  const split = name.lastIndexOf(" ");
+  return (
+    <div className="flex min-w-0 flex-wrap items-baseline gap-2">
+      <span className="text-muted-foreground text-sm">
+        <T context="page title, the Project Board">Board</T>
+      </span>
+      <span aria-hidden className="text-muted-foreground/60">
+        /
+      </span>
+      <h2 data-board-masthead-title className="min-w-0 truncate font-semibold text-lg">
+        {split > 0 ? `${name.slice(0, split)} ` : null}
+        <em data-board-masthead-accent className="not-italic">
+          {split > 0 ? name.slice(split + 1) : name}
+        </em>
+      </h2>
+    </div>
+  );
+}
+
 /** The board app's "+ New task": a new master task, opened once it's created. */
 function NewTaskButton(props: {
   readonly environmentId: EnvironmentId;
@@ -730,7 +758,7 @@ function NewTaskButton(props: {
   if (!allowed) return null;
   if (title === null)
     return (
-      <Button size="sm" onClick={() => setTitle("")}>
+      <Button data-board-new-task size="sm" onClick={() => setTitle("")}>
         <PlusIcon />
         <T>New task</T>
       </Button>

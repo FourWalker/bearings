@@ -16,6 +16,7 @@ export function SidebarBoardEntry() {
   return (
     <button
       type="button"
+      data-sidebar-board-entry
       aria-current={onBoard ? "page" : undefined}
       onClick={() => {
         if (isMobile) setOpenMobile(false);

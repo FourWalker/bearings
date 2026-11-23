@@ -158,14 +158,17 @@ export function BoardTaskView(props: BoardTaskViewProps) {
         if (createdId && change.op === "reportBug") props.onOpenCreated(createdId);
       }}
     >
-      <div className="flex h-full min-h-0 flex-col">
+      <div data-board-task-view className="flex h-full min-h-0 flex-col">
         <TaskHeader {...props} detail={data} tab={tab} />
         <Tabs.Root
           value={tab}
           onValueChange={(next) => setTab(next as Tab)}
           className="flex min-h-0 flex-1 flex-col"
         >
-          <Tabs.List className="flex shrink-0 gap-1 overflow-x-auto border-b px-4">
+          <Tabs.List
+            data-board-task-tabs
+            className="flex shrink-0 gap-1 overflow-x-auto border-b px-4"
+          >
             {tabs.map(([value, label]) => (
               <Tabs.Tab
                 key={value}
@@ -213,7 +216,7 @@ function TaskHeader(props: BoardTaskViewProps & { readonly detail: BoardTaskDeta
     clipboard.copyToClipboard(link, undefined);
   };
   return (
-    <header className="grid shrink-0 gap-1.5 border-b px-4 pt-3 pb-3">
+    <header data-board-task-header className="grid shrink-0 gap-1.5 border-b px-4 pt-3 pb-3">
       <div className="flex flex-wrap items-center gap-1 text-muted-foreground text-xs">
         {task.level === 1 ? (
           <Button variant="ghost-muted" size="xs" onClick={props.onClose}>
@@ -243,7 +246,9 @@ function TaskHeader(props: BoardTaskViewProps & { readonly detail: BoardTaskDeta
             label={gt("Title")}
             onSave={(title) => void edit({ op: "update", title })}
           >
-            <h2 className="font-semibold text-lg leading-tight">{task.title}</h2>
+            <h2 data-board-task-title className="font-semibold text-lg leading-tight">
+              {task.title}
+            </h2>
           </EditableText>
         </div>
         {canEdit && task.level > 1 ? (
@@ -346,9 +351,15 @@ function Card(props: {
   readonly children: ReactNode;
 }) {
   return (
-    <section className={cn("grid gap-2 rounded-lg border bg-card p-3", props.className)}>
+    <section
+      data-board-card
+      className={cn("grid gap-2 rounded-lg border bg-card p-3", props.className)}
+    >
       {props.title !== undefined ? (
-        <h3 className="flex items-center justify-between gap-2 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+        <h3
+          data-board-card-title
+          className="flex items-center justify-between gap-2 font-medium text-muted-foreground text-xs uppercase tracking-wide"
+        >
           <span>{props.title}</span>
           {props.actions}
         </h3>

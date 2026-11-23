@@ -1555,6 +1555,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               aria-label={accessibility.label}
               aria-current={accessibility.current}
               data-testid="sidebar-row-card"
+              data-row-state={props.isActive ? "active" : isSelected ? "selected" : undefined}
               aria-busy={isRegeneratingTitle || undefined}
               className={rowSurfaceClassName}
               onClick={handleClick}
@@ -1727,7 +1728,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               )}
               {props.sweepAction !== null ? dragDestination : null}
             </div>
-            <div className="mt-1 flex min-w-0 items-center gap-1.5">
+            <div data-sidebar-row-title className="mt-1 flex min-w-0 items-center gap-1.5">
               {title}
               {isRegeneratingTitle ? (
                 <span role="status" className="sr-only">
