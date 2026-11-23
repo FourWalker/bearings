@@ -443,6 +443,8 @@ export type BoardLinkGroup =
   | "fixes"
   | "cameFrom"
   | "spunOff"
+  | "replacedBy"
+  | "replaces"
   | "related";
 
 export const LINK_GROUP_ORDER: ReadonlyArray<BoardLinkGroup> = [
@@ -452,6 +454,8 @@ export const LINK_GROUP_ORDER: ReadonlyArray<BoardLinkGroup> = [
   "fixes",
   "cameFrom",
   "spunOff",
+  "replacedBy",
+  "replaces",
   "related",
 ];
 
@@ -476,6 +480,8 @@ const GROUPS: Record<string, BoardLinkGroup> = {
   "in:blocked_by": "weBlock",
   "out:found_during": "cameFrom",
   "in:found_during": "spunOff",
+  "out:superseded_by": "replacedBy",
+  "in:superseded_by": "replaces",
   "out:related": "related",
   "in:related": "related",
 };

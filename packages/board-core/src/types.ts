@@ -9,7 +9,7 @@
 export type ItemKind = "decision" | "todo" | "mandatory";
 export type Level = 1 | 2 | 3;
 export type TaskStatus = "active" | "paused" | "done";
-export type LinkType = "blocked_by" | "found_during" | "related" | "fixes";
+export type LinkType = "blocked_by" | "found_during" | "related" | "fixes" | "superseded_by";
 
 export interface Implemented {
   problem?: string | undefined;
@@ -162,6 +162,8 @@ export interface Task {
   doneEvidence?: DoneEvidence | undefined;
   /** A fix for a bug found in finished work (linked with "fixes" to the original task). */
   bug?: boolean | undefined;
+  /** Other words people use for this item; search treats them like its title. */
+  aliases?: string[] | undefined;
 }
 
 export interface Service {

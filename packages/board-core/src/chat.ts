@@ -50,7 +50,7 @@ import {
   toolRules,
 } from "./protocol.ts";
 import { BoardStore, LEVEL_NAME, findBoard, levelOf } from "./store.ts";
-import { queryWords, searchTasks } from "./search.ts";
+import { namedTask, queryWords, type SearchHit, searchTasks } from "./search.ts";
 import { type DoneCheck, doneEvidence, evidenceLine, verifyDone } from "./verify.ts";
 import { checksForTask } from "./view.ts";
 import {
@@ -70,6 +70,7 @@ import type {
   CheckResult,
   Decision,
   ItemKind,
+  Level,
   LinkType,
   RepoState,
   Service,
@@ -143,6 +144,10 @@ export class BoardChat {
   /** T3 threads: what the agent last got in a tool's reply, so it isn't sent again. */
   contextSeen = "";
   rulesSeen = "";
+  /** One line naming the task an unlinked thread's first prompt plainly mentions. */
+  private related = "";
+  /** The way to save another name for an item is explained at a thread's first missed search. */
+  private aliasTold = false;
   private readonly told = new Set<T3OnDemandRule>();
   private readonly doneChecks = new Map<
     string,
@@ -373,6 +378,18 @@ export class BoardChat {
     if (!this.board) await this.resolve().catch(() => {}); // a board may have been created meanwhile
     const isNotice = /^<[a-z][\w-]*[\s>]/i.test(t);
     if (!isNotice && t) this.reported = true;
+    // Only the first prompt is matched, and only against whole titles and aliases.
+    if (
+      this.host === "t3" &&
+      this.board &&
+      !this.sess.taskId &&
+      !isNotice &&
+      t &&
+      !this.sess.lastPrompt
+    ) {
+      const named = namedTask(await this.listTasks(), t);
+      if (named) this.related = `Possibly related: ${named.id} "${named.title}".`;
+    }
     const title = this.sess.title;
     await this.save(
       isNotice
@@ -796,7 +813,12 @@ Before creating any task, ask the person ONE question: create a new board (ask f
 This ${chat} is not linked to a board task yet.${recent.length ? `\nRecently active tasks on the board:\n${recent.join("\n")}${more}` : " The board has no active tasks."}
 Use the standard conversation workflow for questions, debugging and planning. Keep this ${chat} unlinked until the person asks you to take or work on a board task. Do not prompt them to link just because the discussion involves multi-step work.
 When the person asks to create board items, use board_create_task to create features, modules, tasks or bugs with the requested parent hierarchy. Creating items keeps this conversation unlinked. When they ask you to take a task, call board_link with its taskId and continue from its plan and handoff.
-When linked, the tool returns the task's plan and handoff: continue from them.`;
+When linked, the tool returns the task's plan and handoff: continue from them.${
+      this.related
+        ? `
+${this.related}`
+        : ""
+    }`;
   }
 
   /**
@@ -1866,6 +1888,7 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
   private async searchBoard(
     query: string,
     service = "",
+    level?: Level,
   ): Promise<{ lines: string[]; all: Task[] }> {
     const all = await this.listTasks();
     const byId = new Map(all.map((x) => [x.id, x]));
@@ -1878,8 +1901,12 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
       }
       return p.join(" › ");
     };
-    const line = (x: Task, steps: ReadonlyArray<{ id: string; text: string }> = []) =>
-      `- ${x.id} [L${levelOf(x)}${levelOf(x) === 1 ? ` ${x.kind ?? "feature"}` : ""}, ${x.status === "done" ? "done: reference only" : x.status}] ${pathOf(x)}${x.services?.length ? ` · services: ${x.services.join(", ")}` : ""}${steps.length ? ` · planned as ${steps.map((step) => `${step.id} – ${clip(step.text, 60)}`).join("; ")}` : ""}`;
+    const line = (
+      x: Task,
+      steps: ReadonlyArray<{ id: string; text: string }> = [],
+      more: Partial<Pick<SearchHit, "files" | "replaces" | "below">> = {},
+    ) =>
+      `- ${x.id} [L${levelOf(x)}${levelOf(x) === 1 ? ` ${x.kind ?? "feature"}` : ""}, ${x.status === "done" ? "done: reference only" : x.status}] ${pathOf(x)}${x.services?.length ? ` · services: ${x.services.join(", ")}` : ""}${steps.length ? ` · planned as ${steps.map((step) => `${step.id} – ${clip(step.text, 60)}`).join("; ")}` : ""}${more.files?.length ? ` · touched ${more.files.slice(0, 3).map(base).join(", ")}` : ""}${more.replaces?.length ? ` · replaces ${more.replaces.join(", ")} (superseded)` : ""}${more.below?.length ? ` · ${more.below.length} matching tasks below: ${more.below.slice(0, 5).join(", ")}` : ""}`;
     const inService = all.filter(
       (x) => !service || (x.services ?? []).includes(service) || x.mainService === service,
     );
@@ -1887,20 +1914,39 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
     const docs = await Promise.all(
       inService.map(async (task) => ({ task, plan: await this.readPlan(task.id) })),
     );
-    return { lines: searchTasks(docs, query).map((hit) => line(hit.task, hit.steps)), all };
+    return {
+      lines: searchTasks(docs, query, level).map((hit) => line(hit.task, hit.steps, hit)),
+      all,
+    };
   }
 
   async findTasks(a: Record<string, unknown>): Promise<BoardReply> {
     if (!this.board) return reply(await this.unassignedHelp());
+    const alias = str(a.alias).trim().toLowerCase();
+    if (alias) {
+      const item = a.taskId ? await this.loadTask(slug(str(a.taskId))) : null;
+      if (!item) return reply("An alias needs the taskId of the item it names.");
+      item.aliases = [...new Set([...(item.aliases ?? []), alias])];
+      await this.saveTask(item);
+      return reply(`Saved "${alias}" as another name for "${item.title}" (${item.id}).`);
+    }
     const query = str(a.query);
-    const { lines } = await this.searchBoard(query, a.service ? str(a.service).toLowerCase() : "");
+    const level = a.level === 1 || a.level === 2 || a.level === 3 ? a.level : undefined;
+    const { lines } = await this.searchBoard(
+      query,
+      a.service ? str(a.service).toLowerCase() : "",
+      level,
+    );
     // A listing keeps to open work unless asked; a search shows finished work as reference.
     const listing = queryWords(query).length === 0;
     const shown = listing && !a.includeDone ? lines.filter((l) => !l.includes(", done: ")) : lines;
     const limit = listing ? 25 : SEARCH_HITS;
     const found = shown.length
       ? `${shown.slice(0, limit).join("\n")}${shown.length > limit ? `\n…and ${shown.length - limit} more: add a word to narrow it. board_read shows a task in full.` : ""}`
-      : "No matching tasks.";
+      : listing || this.host !== "t3" || this.aliasTold
+        ? "No matching tasks."
+        : "No matching tasks. If the person points at the item this should have found, offer to save their word as another name for it; once they agree, call board_find with alias and taskId.";
+    if (shown.length === 0 && !listing) this.aliasTold = true;
     return reply(this.boardModeOn ? this.once("outOfScope", found) : found);
   }
 

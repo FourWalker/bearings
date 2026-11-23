@@ -63,7 +63,7 @@ export type BoardDecision = typeof BoardDecision.Type;
 
 export const BoardTaskLink = Schema.Struct({
   to: Schema.String,
-  type: Schema.Literals(["blocked_by", "found_during", "related", "fixes"]),
+  type: Schema.Literals(["blocked_by", "found_during", "related", "fixes", "superseded_by"]),
   note: Schema.String,
 });
 export type BoardTaskLink = typeof BoardTaskLink.Type;
@@ -304,6 +304,7 @@ const LinkKind = Schema.Literals([
   "led_to",
   "related",
   "fixes",
+  "superseded_by",
 ]);
 
 /** One change a person makes to a task in its views; agents make the same through board tools. */

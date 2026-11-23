@@ -1,18 +1,23 @@
 /**
- * Finding existing work on a board from a question's words: titles, plan step names, decisions,
- * docs and purposes, ranked, so a question needn't use a task's exact wording.
+ * Finding existing work on a board from a question's words: titles, aliases, plan step names,
+ * decisions, docs, purposes and touched files, ranked, so a question needn't use a task's exact
+ * wording.
  *
  * @module board-core/search
  */
 import { planPhases } from "./plan.ts";
-import type { Task } from "./types.ts";
+import { levelOf } from "./store.ts";
+import type { Level, Task } from "./types.ts";
 
 // Words of the question itself, not of what it asks about.
 const STOP = new Set(
-  "a an and any are do does for have in is it of on our plan plans task tasks the there to we with".split(
+  "a an and any are do does for have in is it of on our plan plans task tasks the there to touched we which with".split(
     " ",
   ),
 );
+
+/** Matching tasks under one parent, from this many up, come back as the parent. */
+const ROLL_UP = 3;
 
 export interface SearchDoc {
   readonly task: Task;
@@ -26,6 +31,12 @@ export interface SearchHit {
   readonly matched: number;
   /** Plan steps that matched: work planned here but maybe not yet a task of its own. */
   readonly steps: ReadonlyArray<{ readonly id: string; readonly text: string }>;
+  /** Files of the task that matched a path in the query. */
+  readonly files: ReadonlyArray<string>;
+  /** Superseded tasks that matched; this task replaced them. */
+  readonly replaces: ReadonlyArray<string>;
+  /** Matching tasks below this one, when they were rolled up into it. */
+  readonly below: ReadonlyArray<string>;
 }
 
 export function queryWords(query: string): string[] {
@@ -38,14 +49,54 @@ export function queryWords(query: string): string[] {
   return [...new Set(kept.length > 0 ? kept : words)];
 }
 
-/** Ranked matches: most words matched first, then open before done, then where they matched. */
-export function searchTasks(docs: ReadonlyArray<SearchDoc>, query: string): SearchHit[] {
-  const words = queryWords(query);
-  if (words.length === 0) return [];
-  const need = Math.ceil(words.length / 2);
-  const hits: SearchHit[] = [];
+/** File paths and names in a query ("src/refund.ts", "refund.ts"), lower-cased with forward slashes. */
+export function queryPaths(query: string): string[] {
+  return [
+    ...new Set(
+      query
+        .split(/\s+/)
+        .map((token) =>
+          token
+            .replace(/^[`'"(]+|[`'"),;:!?]+$/g, "")
+            .replace(/\.$/, "")
+            .replace(/\\/g, "/")
+            .toLowerCase(),
+        )
+        .filter((token) => /\//.test(token) || /[^./]\.[a-z0-9]{1,5}$/.test(token)),
+    ),
+  ];
+}
+
+const filesOf = (task: Task): string[] => [
+  ...new Set([...(task.files ?? []), ...(task.doneEvidence?.files ?? [])]),
+];
+
+const replacementOf = (task: Task): string | undefined =>
+  task.links?.find((link) => link.type === "superseded_by")?.to;
+
+/**
+ * Ranked matches: most words matched first, then open before done, then where they matched. A
+ * superseded task is answered with its replacement, and several matches under one parent with the
+ * parent, unless `level` asks for one level only.
+ */
+export function searchTasks(
+  docs: ReadonlyArray<SearchDoc>,
+  query: string,
+  level?: Level,
+): SearchHit[] {
+  const paths = queryPaths(query);
+  const pathWords = new Set(paths.flatMap((path) => queryWords(path)));
+  const all = queryWords(query);
+  // A path counts once, as a path, not as the words inside it.
+  const words = paths.length > 0 ? all.filter((word) => !pathWords.has(word)) : all;
+  const terms = words.length + paths.length;
+  if (terms === 0) return [];
+  const need = Math.ceil(terms / 2);
+  const byId = new Map(docs.map((doc) => [doc.task.id, doc.task]));
+  const hits = new Map<string, SearchHit>();
   for (const { task, plan } of docs) {
-    const title = `${task.title} ${task.id}`.toLowerCase();
+    if (level !== undefined && levelOf(task) !== level) continue;
+    const title = `${task.title} ${task.id} ${(task.aliases ?? []).join(" ")}`.toLowerCase();
     const steps = planPhases(plan).flatMap((phase) => phase.steps);
     const notes = [
       ...(task.decisions ?? []).map((decision) => decision.title),
@@ -71,14 +122,94 @@ export function searchTasks(docs: ReadonlyArray<SearchDoc>, query: string): Sear
       score += weight;
       if (weight === 2) for (const step of inSteps) stepHits.set(step.id, step);
     }
-    if (matched >= need) hits.push({ task, score, matched, steps: [...stepHits.values()] });
+    const files = filesOf(task);
+    const fileHits = new Set<string>();
+    for (const path of paths) {
+      const found = files.filter((file) => {
+        const lower = file.toLowerCase();
+        return lower === path || lower.endsWith(`/${path}`);
+      });
+      if (found.length === 0) continue;
+      matched += 1;
+      score += 3;
+      for (const file of found) fileHits.add(file);
+    }
+    if (matched < need) continue;
+    const hit = { task, score, matched, steps: [...stepHits.values()], files: [...fileHits] };
+    const replacement = byId.get(replacementOf(task) ?? "");
+    if (!replacement) {
+      const had = hits.get(task.id);
+      hits.set(task.id, { ...hit, replaces: had?.replaces ?? [], below: [] });
+      continue;
+    }
+    const had = hits.get(replacement.id);
+    hits.set(replacement.id, {
+      ...(had ?? { ...hit, task: replacement, steps: [], files: [] }),
+      replaces: [...(had?.replaces ?? []), task.id],
+      below: [],
+    });
   }
+  const rolled = level === undefined ? rollUp([...hits.values()], byId) : [...hits.values()];
   const open = (hit: SearchHit) => (hit.task.status === "done" ? 1 : 0);
-  return hits.toSorted(
+  return rolled.toSorted(
     (a, b) =>
       b.matched - a.matched ||
       open(a) - open(b) ||
       b.score - a.score ||
       b.task.updatedAt - a.task.updatedAt,
   );
+}
+
+function rollUp(hits: ReadonlyArray<SearchHit>, byId: ReadonlyMap<string, Task>): SearchHit[] {
+  const kids = new Map<string, SearchHit[]>();
+  for (const hit of hits) {
+    const parentId = hit.task.parentId;
+    if (parentId && byId.has(parentId)) kids.set(parentId, [...(kids.get(parentId) ?? []), hit]);
+  }
+  const out = new Map(hits.map((hit) => [hit.task.id, hit]));
+  for (const [parentId, group] of kids) {
+    const parent = byId.get(parentId);
+    if (group.length < ROLL_UP || !parent) continue;
+    for (const hit of group) out.delete(hit.task.id);
+    const own = out.get(parentId);
+    out.set(parentId, {
+      task: parent,
+      score: Math.max(own?.score ?? 0, ...group.map((hit) => hit.score)),
+      matched: Math.max(own?.matched ?? 0, ...group.map((hit) => hit.matched)),
+      steps: own?.steps ?? [],
+      files: own?.files ?? [],
+      replaces: own?.replaces ?? [],
+      below: group.map((hit) => hit.task.id),
+    });
+  }
+  return [...out.values()];
+}
+
+/**
+ * The open task a prompt most plainly names: its whole title or one of its aliases appears in
+ * the prompt as words. One-word titles are too common to count; aliases are chosen, so they do.
+ */
+export function namedTask(tasks: ReadonlyArray<Task>, prompt: string): Task | null {
+  const text = ` ${prompt
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}_-]+/u)
+    .filter(Boolean)
+    .join(" ")} `;
+  const phrase = (value: string) =>
+    value
+      .toLowerCase()
+      .split(/[^\p{L}\p{N}_-]+/u)
+      .filter(Boolean);
+  let best: { readonly task: Task; readonly length: number } | null = null;
+  for (const task of tasks) {
+    if (task.status === "done" || replacementOf(task)) continue;
+    const title = phrase(task.title);
+    const names = [...(title.length > 1 ? [title] : []), ...(task.aliases ?? []).map(phrase)];
+    for (const name of names) {
+      if (name.length === 0 || !text.includes(` ${name.join(" ")} `)) continue;
+      const length = name.join(" ").length;
+      if (!best || length > best.length) best = { task, length };
+    }
+  }
+  return best?.task ?? null;
 }

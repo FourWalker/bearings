@@ -1299,6 +1299,8 @@ const LINK_LABELS = (gt: ReturnType<typeof useGT>): Record<BoardLinkGroup, strin
   fixes: gt("Fixes"),
   cameFrom: gt("Came from"),
   spunOff: gt("Spun off from our work"),
+  replacedBy: gt("Replaced by"),
+  replaces: gt("Replaces"),
   related: gt("Related"),
 });
 

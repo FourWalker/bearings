@@ -388,7 +388,14 @@ export function DocAdder() {
   );
 }
 
-type LinkKind = "blocked_by" | "blocks" | "found_during" | "led_to" | "related" | "fixes";
+type LinkKind =
+  | "blocked_by"
+  | "blocks"
+  | "found_during"
+  | "led_to"
+  | "related"
+  | "fixes"
+  | "superseded_by";
 
 /** Links the task to one outside its tree. */
 export function LinkAdder(props: {
@@ -419,6 +426,7 @@ export function LinkAdder(props: {
           ["led_to", gt("led to")],
           ["related", gt("is related to")],
           ["fixes", gt("fixes (bug in)")],
+          ["superseded_by", gt("was replaced by")],
         ]}
         onChange={setType}
       />

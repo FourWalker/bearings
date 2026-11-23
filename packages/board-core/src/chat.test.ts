@@ -383,12 +383,55 @@ describe("BoardChat", () => {
     expect((await chat.findTasks({ query: "do we have a plan for seller checkout" })).text).toBe(
       "- catalog [L2, active] Marketplace › Catalog · planned as B2 – Seller checkout flow",
     );
-    expect((await chat.findTasks({ query: "refunds" })).text).toBe("No matching tasks.");
+    // A miss is where another name for an item is learned, once the person agrees.
+    expect((await chat.findTasks({ query: "storefront" })).text).toMatch(
+      /^No matching tasks\. If the person points at the item/,
+    );
+    expect((await chat.findTasks({ alias: "Storefront", taskId: "marketplace" })).text).toBe(
+      'Saved "storefront" as another name for "Marketplace" (marketplace).',
+    );
+    expect((await chat.findTasks({ query: "storefront" })).text).toBe(
+      "- marketplace [L1 feature, active] Marketplace",
+    );
     const again = { title: "Checkout flow", parentId: "marketplace" };
     expect((await chat.createTask(again)).text).toMatch(/^Not created: .*\n- catalog /s);
     expect((await chat.createTask({ ...again, createAnyway: true })).text).toMatch(
       /^Created Level 2/,
     );
+
+    // Three matches under one module come back as the module, unless one level is asked for.
+    for (const title of ["Refund api", "Refund emails", "Refund report"])
+      await chat.createTask({ title, parentId: "catalog", createAnyway: true });
+    expect((await chat.findTasks({ query: "refund" })).text).toBe(
+      "- catalog [L2, active] Marketplace › Catalog · 3 matching tasks below: refund-api, refund-emails, refund-report",
+    );
+    expect((await chat.findTasks({ query: "refund", level: 3 })).text.split("\n")).toHaveLength(3);
+
+    // A file path finds the task that touched it.
+    const api = (await store.loadTask("nefx", "refund-api")) as Task;
+    await store.saveTask("nefx", { ...api, files: [`${ws}/api/src/refund.ts`] });
+    expect((await chat.findTasks({ query: "which task touched `src/refund.ts`?" })).text).toBe(
+      "- refund-api [L3, active] Marketplace › Catalog › Refund api · touched refund.ts",
+    );
+
+    // A superseded task is answered with the task that replaced it.
+    await chat.runTool("board_link_task", {
+      taskId: "refund-emails",
+      to: "refund-report",
+      type: "superseded_by",
+    });
+    expect((await chat.findTasks({ query: "refund emails", level: 3 })).text).toContain(
+      "- refund-report [L3, active] Marketplace › Catalog › Refund report · replaces refund-emails (superseded)",
+    );
+
+    // Only a new thread's first prompt is matched, against whole titles and other names.
+    const plain = await openChat(store, "t2", ws, "t3");
+    await plain.turnStart("Can we speed up the storefront search?");
+    expect(plain.context).toContain('Possibly related: marketplace "Marketplace".');
+    const other = await openChat(store, "t3", ws, "t3");
+    await other.turnStart("Fix the flaky test");
+    await other.turnStart("It is in the storefront");
+    expect(other.context).not.toContain("Possibly related");
   });
 
   it("records evidence when a task is done and checks it cheapest first", async () => {

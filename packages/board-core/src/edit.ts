@@ -447,9 +447,15 @@ export async function setTaskLink(
   const flipped = LINK_FLIP[input.type];
   const type = flipped ?? input.type;
   const [from, to] = flipped ? [other, task] : [task, other];
-  if (type !== "blocked_by" && type !== "found_during" && type !== "related" && type !== "fixes")
+  if (
+    type !== "blocked_by" &&
+    type !== "found_during" &&
+    type !== "related" &&
+    type !== "fixes" &&
+    type !== "superseded_by"
+  )
     throw new BoardEditError(
-      "type must be blocked_by, blocks, found_during, led_to, related or fixes.",
+      "type must be blocked_by, blocks, found_during, led_to, related, fixes or superseded_by.",
     );
   if (from.id === to.id) throw new BoardEditError("A task cannot link to itself.");
   from.links = (from.links ?? []).filter((l) => !(l.to === to.id && l.type === type));

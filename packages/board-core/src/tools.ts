@@ -182,9 +182,17 @@ export const SCHEMA = {
       to: { type: "string", description: "The other task's id." },
       type: {
         type: "string",
-        enum: ["blocked_by", "blocks", "found_during", "led_to", "related", "fixes"],
+        enum: [
+          "blocked_by",
+          "blocks",
+          "found_during",
+          "led_to",
+          "related",
+          "fixes",
+          "superseded_by",
+        ],
         description:
-          "From this task's side: it is blocked_by / blocks / was found_during / led_to / is related to the other.",
+          "From this task's side: it is blocked_by / blocks / was found_during / led_to / is related to / was superseded_by (replaced by) the other.",
       },
       note: { type: "string" },
       taskId: { type: "string", description: "Defaults to the linked task." },
@@ -240,8 +248,20 @@ export const SCHEMA = {
       query: {
         type: "string",
         description:
-          "What you are looking for, in plain words. Matches titles, plan step names, decisions, docs and purposes.",
+          "What you are looking for, in plain words or as a file path. Matches titles, plan step names, decisions, docs, purposes and the files tasks touched.",
       },
+      level: {
+        type: "number",
+        enum: [1, 2, 3],
+        description:
+          "Only this level (1 feature, 2 module, 3 task). Without it, several matches under one parent come back as the parent.",
+      },
+      alias: {
+        type: "string",
+        description:
+          "With taskId: save this word as another name for that item, after the person confirmed it.",
+      },
+      taskId: { type: "string", description: "The item an alias is for." },
       service: { type: "string", description: "Only tasks tagged with this service id." },
       includeDone: { type: "boolean" },
     },
