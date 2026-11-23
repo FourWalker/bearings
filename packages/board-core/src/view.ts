@@ -303,7 +303,11 @@ export async function readBoardView(
     services: (board.services ?? []).map((s) => ({ id: s.id, name: s.name, match: s.match })),
     workspaces: board.roots.map((r) => ({ label: r.label, root: norm(r.path) })),
     tasks: tasks.toSorted((a, b) => b.updatedAt - a.updatedAt),
-    unlinked: chats.filter((c) => c.taskId === null && c.live !== "ended"),
+    // The Assistant is on no task by design: it is not a chat waiting to be put on one.
+    unlinked: sessions
+      .filter((s) => s.taskId === null && !s.assistant)
+      .map((s) => chatOf(s, now))
+      .filter((c) => c.live !== "ended"),
     goals: openGoals.toSorted((a, b) => b.id.localeCompare(a.id)),
   };
 }

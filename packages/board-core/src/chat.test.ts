@@ -638,6 +638,8 @@ describe("BoardChat", () => {
     await assistant.becomeAssistant();
     await assistant.turnStart("Do we have anything on the marketplace?");
     expect(assistant.rules).toContain("## Board Assistant");
+    // On no task by design, so not listed with the chats still waiting for one.
+    expect((await readBoardView(store, "nefx", 0))?.unlinked).toEqual([]);
     expect(assistant.context).toContain("is the board's Assistant. The board has 1 open item(s)");
     expect((await assistant.runTool("board_find", { query: "marketplace" }))?.text).toContain(
       "- marketplace [L1 feature, active] Marketplace",

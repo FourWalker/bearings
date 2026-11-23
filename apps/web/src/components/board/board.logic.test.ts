@@ -2,6 +2,8 @@ import { type BoardChat, type BoardTask, ProjectId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  assistantBubbles,
+  latestExchange,
   boardPickupTargets,
   boardSearchFromUrl,
   boardSearchOfIntent,
@@ -58,6 +60,36 @@ const chat = (sessionId: string, patch: Partial<BoardChat> = {}): BoardChat => (
   provider: null,
   turnStartedAt: 0,
   ...patch,
+});
+
+it("shows only what was said and answered in the Assistant chat", () => {
+  const message = (id: string, role: string, text: string, streaming = false) => ({
+    id,
+    role,
+    text,
+    streaming,
+  });
+  expect(
+    assistantBubbles([
+      message("1", "user", "What is blocked?"),
+      message("2", "system", "MCP client failed to start"),
+      message("3", "assistant", "  "),
+      message("4", "assistant", "Nothing is blocked.", true),
+    ]),
+  ).toEqual([
+    { id: "1", role: "user", text: "What is blocked?", streaming: false },
+    { id: "4", role: "assistant", text: "Nothing is blocked.", streaming: true },
+  ]);
+  // The small chat keeps the question and the last thing said back, not the notes between.
+  const said = assistantBubbles([
+    message("1", "user", "Old question"),
+    message("2", "assistant", "Old answer"),
+    message("3", "user", "What is blocked?"),
+    message("4", "assistant", "I will check the board."),
+    message("5", "assistant", "Nothing is blocked."),
+  ]);
+  expect(latestExchange(said).map((bubble) => bubble.id)).toEqual(["3", "5"]);
+  expect(latestExchange(said.slice(0, 3)).map((bubble) => bubble.id)).toEqual(["3"]);
 });
 
 it("turns an open intent into the board address, naming only what was asked", () => {

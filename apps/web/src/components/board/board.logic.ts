@@ -377,6 +377,52 @@ export function boardSearchOfIntent(
   };
 }
 
+export interface BoardAssistantBubble {
+  readonly id: string;
+  readonly role: "user" | "assistant";
+  readonly text: string;
+  readonly streaming: boolean;
+}
+
+/**
+ * What the floating Assistant chat shows of its thread: what the person said and what it
+ * answered, oldest first. Tool calls, system notes and empty replies stay in the full thread.
+ */
+export function assistantBubbles(
+  messages: ReadonlyArray<{
+    readonly id: string;
+    readonly role: string;
+    readonly text: string;
+    readonly streaming: boolean;
+  }>,
+): ReadonlyArray<BoardAssistantBubble> {
+  return messages.flatMap((message) =>
+    (message.role === "user" || message.role === "assistant") && message.text.trim().length > 0
+      ? [{ id: message.id, role: message.role, text: message.text, streaming: message.streaming }]
+      : [],
+  );
+}
+
+/**
+ * The small chat shows one exchange: the person's last message and the latest thing said back.
+ * Notes the Assistant made on the way to its answer are in the history.
+ */
+export function latestExchange(
+  bubbles: ReadonlyArray<BoardAssistantBubble>,
+): ReadonlyArray<BoardAssistantBubble> {
+  const asked = bubbles.findLastIndex((bubble) => bubble.role === "user");
+  if (asked < 0) return bubbles.slice(-1);
+  const answer = bubbles.length - 1 > asked ? [bubbles[bubbles.length - 1]!] : [];
+  return [bubbles[asked]!, ...answer];
+}
+
+/** Whether the Assistant's thread is working on an answer right now. */
+export function isAssistantBusy(status: string | undefined): boolean {
+  return (
+    status === "preparing" || status === "queued" || status === "starting" || status === "running"
+  );
+}
+
 export interface BoardGoalProgress {
   readonly goal: BoardGoal;
   readonly done: number;
