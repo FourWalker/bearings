@@ -94,7 +94,27 @@ const git = (dir: string, args: ReadonlyArray<string>, timeoutMs = 8000): Promis
     );
   });
 
+/** Like `git`, for commands whose answer is their exit code. */
+const gitOk = (dir: string, args: ReadonlyArray<string>): Promise<boolean | null> =>
+  new Promise((resolve) => {
+    NodeChildProcess.execFile(
+      "git",
+      ["-C", dir, ...args],
+      { timeout: 8000, windowsHide: true },
+      (error) => resolve(!error ? true : typeof error.code === "number" ? false : null),
+    );
+  });
+
 export const nodeGit: BoardGit = {
+  since: async (dir, head, files) => {
+    if (!(await gitOk(dir, ["cat-file", "-e", `${head}^{commit}`]))) return "unreachable";
+    const merged = await gitOk(dir, ["merge-base", "--is-ancestor", head, "HEAD"]);
+    if (merged === null) return null;
+    if (!merged) return "unreachable";
+    // Windows caps a command line near 32k characters.
+    const same = await gitOk(dir, ["diff", "--quiet", head, "--", ...files.slice(0, 150)]);
+    return same === null ? null : same ? "same" : "changed";
+  },
   root: async (dir) => {
     const top = await git(dir, ["rev-parse", "--show-toplevel"]);
     return top ? norm(top) : null;

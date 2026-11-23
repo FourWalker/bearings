@@ -7,4 +7,5 @@ export * from "./protocol.ts";
 export * from "./tools.ts";
 export * from "./view.ts";
 export * from "./edit.ts";
+export * from "./verify.ts";
 export { BoardChat, repoLine, type BoardReply, type OpenChatInput } from "./chat.ts";

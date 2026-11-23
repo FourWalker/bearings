@@ -37,6 +37,15 @@ export interface BoardGit {
   readonly branch: (dir: string) => Promise<string>;
   /** The top folder of the repo containing `dir`, or null. */
   readonly root: (dir: string) => Promise<string | null>;
+  /**
+   * How `files` differ between commit `head` and the working tree at `dir`: "unreachable" when
+   * `head` is not in the checked-out history, null when git can't say.
+   */
+  readonly since?: (
+    dir: string,
+    head: string,
+    files: ReadonlyArray<string>,
+  ) => Promise<"same" | "changed" | "unreachable" | null>;
 }
 
 export interface BoardClock {

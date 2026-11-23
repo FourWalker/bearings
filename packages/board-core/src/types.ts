@@ -108,6 +108,14 @@ export interface CheckResult {
   at: number;
 }
 
+/** What was on record when a task was finished; a task done without it is "done, unverified". */
+export interface DoneEvidence {
+  repos: { repo: string; name: string; branch: string; head: string; dirty: number }[];
+  files: string[];
+  check?: CheckResult | undefined;
+  at: number;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -149,6 +157,9 @@ export interface Task {
   /** Each repo's branch / HEAD / push / clean state, recorded at every checkpoint. */
   repoState?: RepoState[] | undefined;
   checks?: CheckResult[] | undefined;
+  /** Files changed by threads working on this task (most recent kept), for done evidence. */
+  files?: string[] | undefined;
+  doneEvidence?: DoneEvidence | undefined;
   /** A fix for a bug found in finished work (linked with "fixes" to the original task). */
   bug?: boolean | undefined;
 }

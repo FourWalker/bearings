@@ -180,6 +180,7 @@ export const make = Effect.gen(function* () {
             yield* Effect.promise(() =>
               chat.attachCheckpoint(runId, status === "ready" ? ref : null),
             );
+          yield* Effect.promise(() => chat.filesChanged(files.map((file) => file.path)));
           for (const file of files) {
             yield* Effect.promise(() => chat.fileChanged(file.path));
           }

@@ -32,6 +32,7 @@ import {
 } from "./protocol.ts";
 import { BoardStore, LEVEL_NAME, findBoard, levelOf } from "./store.ts";
 import { queryWords, searchTasks } from "./search.ts";
+import { type DoneCheck, doneEvidence, evidenceLine, verifyDone } from "./verify.ts";
 import { checksForTask } from "./view.ts";
 import {
   base,
@@ -88,6 +89,8 @@ const UNLINKED_TASKS = 8;
 const RESUME_HANDOFF_CHARS = 3000;
 /** How many matches a search shows; the rest are a narrower query away. */
 const SEARCH_HITS = 5;
+/** How many changed files a task keeps as done evidence. */
+const TASK_FILES = 200;
 
 const reply = (text: string, toast?: string): BoardReply => (toast ? { text, toast } : { text });
 const str = (v: unknown, fallback = ""): string =>
@@ -122,6 +125,10 @@ export class BoardChat {
   contextSeen = "";
   rulesSeen = "";
   private readonly told = new Set<T3OnDemandRule>();
+  private readonly doneChecks = new Map<
+    string,
+    { readonly at: number; readonly evidenceAt: number | undefined; readonly check: DoneCheck }
+  >();
   /** A chat is written only once the person has spoken in it (or it was linked or set up). */
   reported = false;
   lastActionSetThisTurn = false;
@@ -417,6 +424,37 @@ export class BoardChat {
    * A file the agent changed: tag the linked task with its service. Returns a note for the agent
    * the first time the work reaches a service outside the task's services so far.
    */
+  /** Records the files a turn changed on the linked task: the evidence a later "done" rests on. */
+  async filesChanged(files: ReadonlyArray<string>): Promise<void> {
+    if (!this.board || !this.sess?.taskId || this.ignored || files.length === 0) return;
+    const t = await this.loadTask(this.sess.taskId);
+    if (!t) return;
+    const s = this.sess;
+    const copy = !isInside(s.cwd, s.workspace) ? s.cwd : s.workspace;
+    const paths = files.map((file) =>
+      norm(/^([A-Za-z]:)?[/\\]/.test(file) ? file : `${copy}/${file}`),
+    );
+    const had = t.files ?? [];
+    if (paths.every((path) => had.includes(path))) return;
+    t.files = [...new Set([...paths, ...had])].slice(0, TASK_FILES);
+    await this.saveTask(t);
+  }
+
+  /** Whether a finished task can be relied on from this workspace; cached briefly, as it runs git. */
+  async doneCheck(t: Task): Promise<DoneCheck> {
+    const cached = this.doneChecks.get(t.id);
+    if (cached && cached.evidenceAt === t.doneEvidence?.at && this.now() - cached.at < 60_000)
+      return cached.check;
+    const repos = await this.reposFor(t);
+    const check = await verifyDone(
+      this.git,
+      t,
+      (name, recorded) => repos.find((r) => r.name === name)?.repo ?? recorded,
+    );
+    this.doneChecks.set(t.id, { at: this.now(), evidenceAt: t.doneEvidence?.at, check });
+    return check;
+  }
+
   async fileChanged(file: string): Promise<string | null> {
     if (!this.board || !this.sess?.taskId || this.ignored) return null;
     const svc = this.serviceOfPath(file);
@@ -749,7 +787,13 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
           .filter((l) => l.type === "blocked_by")
           .map(async (l) => {
             const o = await this.loadTask(l.to);
-            if (o?.status === "done") return null;
+            if (o?.status === "done") {
+              // A finished dependency still blocks when its work isn't here, or changed since.
+              const check = await this.doneCheck(o);
+              return check.state === "verified"
+                ? null
+                : `- Depends on "${o.title}" (${l.to}): ${check.text}`;
+            }
             const ws = o ? (await this.ownerHolder(o))?.owner?.label : undefined;
             return `- Blocked by "${o?.title ?? l.to}" (${l.to}${ws ? `, workspace ${ws}` : ""})${l.note ? ` — ${clip(l.note, 120)}` : ""}`;
           }),
@@ -1076,6 +1120,11 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
     if (a.title) t.title = str(a.title);
     const wasDone = t.status === "done";
     if (a.status === "active" || a.status === "paused" || a.status === "done") t.status = a.status;
+    let evidence = "";
+    if (!wasDone && t.status === "done") {
+      t.doneEvidence = doneEvidence(t, await this.reposFor(t), this.now());
+      evidence = evidenceLine(t.doneEvidence);
+    } else if (wasDone && t.status !== "done") delete t.doneEvidence;
     const delegated =
       wasDone !== (t.status === "done")
         ? await syncDelegatedSteps(this.store, this.boardId, t)
@@ -1123,7 +1172,7 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
     await this.saveTask(t);
     await this.rebuildContext();
     return reply(
-      `Board updated for "${t.title}". Open items: ${t.items.filter((i) => !i.done).length}.${delegated.length ? ` ${t.status === "done" ? "Ticked" : "Reopened"} the parent step it took over (${delegated.join(", ")}).` : ""}`,
+      `Board updated for "${t.title}". Open items: ${t.items.filter((i) => !i.done).length}.${delegated.length ? ` ${t.status === "done" ? "Ticked" : "Reopened"} the parent step it took over (${delegated.join(", ")}).` : ""}${evidence ? ` ${evidence}` : ""}`,
     );
   }
 
@@ -1604,6 +1653,7 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
     const t = await this.requireTask(a);
     if (typeof t === "string") return reply(t);
     let text = await this.describeTask(t, true);
+    if (t.status === "done") text += `\n\n### Done check\n${(await this.doneCheck(t)).text}`;
     if (a.step) {
       const h = await this.store.readText(
         this.store.stepHandoffPath(this.boardId, t.id, safeFileName(str(a.step))),

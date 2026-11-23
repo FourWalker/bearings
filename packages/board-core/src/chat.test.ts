@@ -388,6 +388,46 @@ describe("BoardChat", () => {
     );
   });
 
+  it("records evidence when a task is done and checks it cheapest first", async () => {
+    let since: "same" | "changed" | "unreachable" = "same";
+    const git: BoardGit = {
+      ...noGit,
+      state: async () => ({
+        repo: ws,
+        name: "nfx",
+        branch: "main",
+        head: "abc1234",
+        upstream: null,
+        ahead: null,
+        behind: null,
+        dirty: 0,
+        lastCommitAt: 0,
+        at: 0,
+      }),
+      since: async () => since,
+    };
+    const store = await seedBoard();
+    const chat = await openChat(store, "t1", ws, "t3", git);
+    await chat.linkTask({ newTaskTitle: "Task" });
+    await chat.filesChanged(["api/a.ts"]);
+    const finish = async () => {
+      await chat.updateTask({ status: "active" });
+      const done = (await chat.updateTask({ status: "done" })).text;
+      return `${done}\n${(await chat.readTask({})).text}`;
+    };
+    // Nothing proves it works: a later reader has to look for itself.
+    expect(await finish()).toContain("done, unverified (no passing check)");
+    await chat.recordCheck({ id: "c1", command: "npm test", exitCode: 0, at: 1 });
+    const verified = await finish();
+    expect(verified).toContain("nfx main @ abc1234, 1 file(s), npm test exited 0");
+    expect(verified).toContain("files unchanged since; npm test passed");
+    expect((await store.loadTask("nefx", "task"))?.doneEvidence?.files).toEqual([`${ws}/api/a.ts`]);
+    since = "changed";
+    expect(await finish()).toContain("re-run `npm test` before building on it");
+    since = "unreachable";
+    expect(await finish()).toContain("done elsewhere, not merged here");
+  });
+
   it("creates a board on request and moves an unassigned record into it", async () => {
     const store = new BoardStore(home, nodeIO, clock());
     const chat = await openChat(store, "t1", ws);
