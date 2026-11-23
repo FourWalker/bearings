@@ -15,6 +15,12 @@ export interface GoalGroup {
   taskIds: string[];
   /** Groups whose tasks must be finished first. */
   dependsOn: string[];
+  /** Handed to a child thread: the executor leaves its tasks alone until that thread reports. */
+  delegated?: boolean | undefined;
+  /** The child thread working the group. */
+  worker?: string | undefined;
+  /** What the last worker reported, in its words. Progress is still read from the tasks. */
+  report?: string | undefined;
 }
 
 export interface GoalDecision {
@@ -179,6 +185,7 @@ export function nextGoalTask(goal: Goal, all: ReadonlyArray<Task>): Task | null 
   const byId = new Map(all.map((task) => [task.id, task]));
   const finished = new Set(goal.groups.filter((group) => done(group, byId)).map((g) => g.id));
   for (const group of goal.groups) {
+    if (group.delegated) continue;
     if (finished.has(group.id) || !group.dependsOn.every((id) => finished.has(id))) continue;
     for (const id of group.taskIds) {
       const task = byId.get(id);
@@ -188,6 +195,14 @@ export function nextGoalTask(goal: Goal, all: ReadonlyArray<Task>): Task | null 
   return null;
 }
 
+/** A worker's next task: the first open one in the group it was given. */
+export function nextGroupTask(group: GoalGroup, all: ReadonlyArray<Task>): Task | null {
+  const byId = new Map(all.map((task) => [task.id, task]));
+  return (
+    group.taskIds.map((id) => byId.get(id)).find((task) => task && task.status !== "done") ?? null
+  );
+}
+
 /** The Goal as its executor reads it: groups, the current group's tasks, decisions, what's next. */
 export function goalLedger(goal: Goal, all: ReadonlyArray<Task>): string {
   const byId = new Map(all.map((task) => [task.id, task]));
@@ -195,7 +210,12 @@ export function goalLedger(goal: Goal, all: ReadonlyArray<Task>): string {
   const groups = goal.groups.map((group) => {
     const tasks = group.taskIds.map((id) => byId.get(id)).filter((task) => task !== undefined);
     const count = tasks.filter((task) => task.status === "done").length;
-    const head = `- ${group.id}. ${group.title} [${count}/${tasks.length} done]${group.dependsOn.length ? ` · after ${group.dependsOn.join(", ")}` : ""}`;
+    const head = `- ${group.id}. ${group.title} [${count}/${tasks.length} done]${group.dependsOn.length ? ` · after ${group.dependsOn.join(", ")}` : ""}${group.delegated ? " · with a child thread" : ""}${
+      group.report
+        ? `
+  Child thread reported: ${group.report}`
+        : ""
+    }`;
     // Only the group in hand is listed task by task.
     if (!next || !group.taskIds.includes(next.id)) return head;
     return `${head}\n${tasks.map((task) => `  - [${task.status === "done" ? "x" : " "}] ${task.id} "${task.title}"`).join("\n")}`;
@@ -215,8 +235,10 @@ export function goalLedger(goal: Goal, all: ReadonlyArray<Task>): string {
     next
       ? `Next task: ${next.id} "${next.title}". Take it with board_goal {action: "task", taskId: "${next.id}"}.`
       : goal.groups.every((group) => done(group, byId))
-        ? "Every task is done. Run the full checks, then report to the person."
-        : "No task is ready: the remaining groups wait on others. Pause with the reason.",
+        ? 'Every task is done. Run the full checks, call board_goal {action: "finish"}, then report to the person.'
+        : goal.groups.some((group) => group.delegated)
+          ? 'No task is ready for this thread: child threads hold the open groups. End your turn; you are woken when one finishes, then read board_goal {action: "status"}.'
+          : "No task is ready: the remaining groups wait on others. Pause with the reason.",
   ]
     .filter(Boolean)
     .join("\n");

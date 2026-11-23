@@ -22,11 +22,13 @@ import {
 import type { BoardGit } from "./io.ts";
 import {
   type Goal,
+  type GoalGroup,
   goalDrift,
   goalLedger,
   listGoals,
   loadGoal,
   nextGoalTask,
+  nextGroupTask,
   planGroups,
   saveGoal,
   scopeTasks,
@@ -45,6 +47,7 @@ import {
   resumeHint,
   type T3OnDemandRule,
   t3GoalRules,
+  t3GoalWorkerRules,
   t3OnDemandRule,
   t3Rules,
   toolRules,
@@ -780,6 +783,27 @@ Before creating any task, ask the person ONE question: create a new board (ask f
       this.context = `${head}\nThis ${chat} is the executor of a Goal.\n\n${goalLedger(goal, await this.listTasks())}${t && t.status !== "done" ? `\n\nTask in hand:\n${await this.resumeSummary(t)}` : ""}`;
       return;
     }
+    const work = await this.myWork();
+    if (work) {
+      const tasks = await this.listTasks();
+      const byId = new Map(tasks.map((task) => [task.id, task]));
+      const t = s.taskId ? byId.get(s.taskId) : undefined;
+      const next = nextGroupTask(work.group, tasks);
+      const settled = work.goal.decisions.filter((decision) => decision.settled);
+      this.context = [
+        `${head}\nThis ${chat} works group ${work.group.id} of Goal ${work.goal.id} ("${work.goal.title}") for its executor.`,
+        `Group ${work.group.id}. ${work.group.title}:\n${work.group.taskIds.map((id) => `- [${byId.get(id)?.status === "done" ? "x" : " "}] ${id} "${byId.get(id)?.title ?? id}"`).join("\n")}`,
+        settled.length > 0 &&
+          `Decisions of the Goal to respect:\n${settled.map((d) => `- ${d.id} ${d.title} → ${d.settled}`).join("\n")}`,
+        next
+          ? `Next task: ${next.id} "${next.title}". Take it with board_goal {action: "task", taskId: "${next.id}"}.`
+          : 'The group is finished: call board_goal {action: "report", note}.',
+        t && t.status !== "done" && `Task in hand:\n${await this.resumeSummary(t)}`,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+      return;
+    }
     if (s.taskId) {
       const t = await this.loadTask(s.taskId);
       if (t) {
@@ -878,6 +902,7 @@ ${this.related}`
         : plan
           ? "Next action: every plan step is done; confirm with the person what's left."
           : !(await this.myGoal()) &&
+            !(await this.myWork()) &&
             "No plan yet: write one with board_plan before starting multi-step work.",
       delegated.length > 0 &&
         `Completed delegated steps:\n${delegated.map((step) => `- ${step.id} – ${step.text} (task ${step.childId})`).join("\n")}`,
@@ -925,6 +950,10 @@ ${this.related}`
         this.rules = `${t3GoalRules(goal.mode)}${extras()}`;
         return;
       }
+      if ((await this.myWork()) && this.context) {
+        this.rules = `${t3GoalWorkerRules()}${extras()}`;
+        return;
+      }
       this.rules = this.context
         ? `${t3Rules({ linked: !!t, boardMode: this.boardModeOn, planning: !!t && levelOf(t) <= 2 })}${this.boardModeOn ? extras() : ""}`
         : "";
@@ -940,6 +969,15 @@ ${this.related}`
     if (!id || !this.board || this.host !== "t3") return null;
     const goal = await loadGoal(this.store, this.boardId, id);
     return goal?.executor === this.sess?.sessionId ? goal : null;
+  }
+
+  /** The group this thread works for a Goal's executor, while it is still the group's worker. */
+  private async myWork(): Promise<{ goal: Goal; group: GoalGroup } | null> {
+    const s = this.sess;
+    if (!s?.goalId || !s.goalGroup || !this.board || this.host !== "t3") return null;
+    const goal = await loadGoal(this.store, this.boardId, s.goalId);
+    const group = goal?.groups.find((g) => g.id === s.goalGroup);
+    return goal && group?.delegated && group.worker === s.sessionId ? { goal, group } : null;
   }
 
   async goalTool(a: Record<string, unknown>): Promise<BoardReply> {
@@ -1052,18 +1090,115 @@ ${this.related}`
       return reply(`Resumed Goal ${goal.id}. ${summary}\n\n${withRules()}`);
     }
 
-    const goal = await this.myGoal();
+    if (action === "work") {
+      const found = await loadGoal(this.store, this.boardId, str(a.goalId));
+      const group = found?.groups.find((g) => g.id === str(a.group));
+      if (!found || !group || !group.delegated || found.status !== "running")
+        return reply("That group is not waiting for a child thread.");
+      if (found.executor === s.sessionId)
+        return reply("The executor hands a group to a child thread; it doesn't work it as one.");
+      const holder =
+        group.worker && group.worker !== s.sessionId
+          ? await this.store.readSession(this.boardId, group.worker)
+          : null;
+      if (holder?.status === "working")
+        return reply(`Group ${group.id} is already being worked in "${holder.title}".`);
+      group.worker = s.sessionId;
+      found.executors = [...new Set([...found.executors, s.sessionId])];
+      await saveGoal(this.store, this.boardId, found);
+      this.reported = true;
+      await this.save({ goalId: found.id, goalGroup: group.id });
+      await this.rebuildContext();
+      return reply(`Working group ${group.id} of Goal ${found.id}.\n\n${withRules()}`);
+    }
+
+    const work = await this.myWork();
+    const goal = (await this.myGoal()) ?? work?.goal;
     if (!goal)
       return reply(
         'This thread is not running a Goal. Start one with board_goal {action: "start", scope: [...]}, or take one over with {action: "resume", goalId}.',
       );
-    const inGoal = (id: string) => goal.groups.some((group) => group.taskIds.includes(id));
+    if (work && action !== "task" && action !== "done" && action !== "report")
+      return reply(
+        'A worker takes its group\'s tasks, finishes them and reports once: board_goal {action: "task" | "done" | "report"}. Questions and anything outside the group go in the report.',
+      );
+    const inGoal = (id: string) =>
+      (work ? [work.group] : goal.groups).some((group) => group.taskIds.includes(id));
     const nextLine = (tasks: ReadonlyArray<Task>) => {
-      const next = nextGoalTask(goal, tasks);
+      const next = work ? nextGroupTask(work.group, tasks) : nextGoalTask(goal, tasks);
       return next
         ? `Next task: ${next.id} "${next.title}". Take it with board_goal {action: "task", taskId: "${next.id}"}.`
-        : "No task is ready.";
+        : work
+          ? 'The group is finished: call board_goal {action: "report", note}.'
+          : "No task is ready.";
     };
+
+    if (action === "report") {
+      if (!work)
+        return reply("Only a Goal's child thread reports; the executor pauses or finishes.");
+      const note = str(a.note).trim();
+      if (!note) return reply("Say in `note` what was done, what is left and why.");
+      // The executor may have written the Goal meanwhile: change only this group, on a fresh copy.
+      const fresh = (await loadGoal(this.store, this.boardId, goal.id)) ?? goal;
+      const group = fresh.groups.find((g) => g.id === work.group.id);
+      if (group) {
+        group.report = clip(note, 600);
+        group.delegated = false;
+        delete group.worker;
+        await saveGoal(this.store, this.boardId, fresh);
+      }
+      const inHand = s.taskId ? byId.get(s.taskId) : undefined;
+      await this.save({ goalId: undefined, goalGroup: undefined });
+      await this.rebuildContext();
+      return reply(
+        `Reported to Goal ${goal.id}. End your turn now with one line; the executor reads the board.${inHand && inHand.status !== "done" ? ` ${inHand.id} is unfinished: write its living handoff with board_checkpoint first.` : ""}`,
+      );
+    }
+
+    if (action === "delegate") {
+      const group = goal.groups.find((g) => g.id === str(a.group));
+      const open = group?.taskIds.filter((id) => byId.get(id)?.status !== "done") ?? [];
+      if (!group || open.length === 0)
+        return reply(
+          `No open group "${str(a.group)}". Groups: ${goal.groups.map((g) => g.id).join(", ")}.`,
+        );
+      const waits = group.dependsOn.filter((id) =>
+        goal.groups
+          .find((g) => g.id === id)
+          ?.taskIds.some((taskId) => byId.get(taskId)?.status !== "done"),
+      );
+      if (waits.length > 0)
+        return reply(`Group ${group.id} waits on ${waits.join(", ")}: finish those first.`);
+      if (s.taskId && open.includes(s.taskId))
+        return reply(
+          `${s.taskId} is in your hands: finish it, or checkpoint it, before handing the group over.`,
+        );
+      group.delegated = true;
+      delete group.report;
+      delete group.worker;
+      await saveGoal(this.store, this.boardId, goal);
+      await this.rebuildContext();
+      const others = goal.groups.filter((g) => g.delegated && g.id !== group.id).length;
+      return reply(
+        `Group ${group.id} waits for a child thread. Start it with delegate_task${others > 0 ? ', isolation "worktree" since another group is out too' : ""}, and this as its task:\n\nYou work one group of a Goal on the ${this.board.name} board. First call board_goal {action: "work", goalId: "${goal.id}", group: "${group.id}"}: it gives you the tasks and the rules. Tasks: ${open.join(", ")}.\n\nCarry on with groups that don't rest on it, or end your turn: you are woken when the child finishes.`,
+      );
+    }
+
+    if (action === "finish") {
+      const left = goal.groups
+        .flatMap((group) => group.taskIds)
+        .filter((id) => byId.get(id)?.status !== "done");
+      if (left.length > 0) return reply(`Not finished: ${left.join(", ")} still open.`);
+      goal.status = "done";
+      goal.executor = null;
+      await this.releaseGoalHolds(goal);
+      await saveGoal(this.store, this.boardId, goal);
+      await this.save({ goalId: undefined });
+      await this.rebuildContext();
+      return reply(
+        `Goal ${goal.id} is finished. Report to the person with the decisions you settled.`,
+      );
+    }
 
     if (action === "task") {
       const id = str(a.taskId);
@@ -1094,8 +1229,11 @@ ${this.related}`
         if (!heldBefore || heldBefore.state === "soft")
           goal.claimed = [...new Set([...(goal.claimed ?? []), holder.id])];
       }
-      goal.baseline[id] = { status: task.status, at: this.now() };
-      await saveGoal(this.store, this.boardId, goal);
+      // A worker leaves the Goal record to its executor, which may be writing it now.
+      if (!work) {
+        goal.baseline[id] = { status: task.status, at: this.now() };
+        await saveGoal(this.store, this.boardId, goal);
+      }
       await this.rebuildContext();
       return reply(`Working on ${id} for Goal ${goal.id}.\n\n${await this.resumeSummary(task)}`);
     }
@@ -1116,8 +1254,12 @@ ${this.related}`
         status: "done",
         lastAction: str(a.note, "Finished in the Goal."),
       });
-      goal.baseline[id] = { status: "done", at: this.now() };
       const tasks = await this.listTasks();
+      if (work) {
+        await this.rebuildContext();
+        return reply(`${updated.text}\n${nextLine(tasks)}`);
+      }
+      goal.baseline[id] = { status: "done", at: this.now() };
       const left = goal.groups
         .flatMap((group) => group.taskIds)
         .filter((taskId) => tasks.find((task) => task.id === taskId)?.status !== "done");

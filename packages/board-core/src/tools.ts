@@ -214,11 +214,29 @@ export const SCHEMA = {
     properties: {
       action: {
         type: "string",
-        enum: ["start", "resume", "status", "task", "done", "decide", "include", "pause"],
+        enum: [
+          "start",
+          "resume",
+          "status",
+          "task",
+          "done",
+          "decide",
+          "include",
+          "delegate",
+          "finish",
+          "pause",
+          "work",
+          "report",
+        ],
         description:
-          "start: begin a Goal over `scope` with this thread as its executor. resume: take over a paused Goal (`goalId`) and see what changed meanwhile. status: read a Goal. task: start working on one of its tasks (`taskId`). done: finish the task in hand (`note`). decide: record a decision or an open question. include: add tasks. pause: stop with a `reason`.",
+          "start: begin a Goal over `scope` with this thread as its executor. resume: take over a paused Goal (`goalId`) and see what changed meanwhile. status: read a Goal. task: start working on one of its tasks (`taskId`). done: finish the task in hand (`note`). decide: record a decision or an open question. include: add tasks. delegate: hand a `group` to a child thread. finish: close a Goal whose tasks are all done. pause: stop with a `reason`. work / report: for a child thread given a group.",
       },
       goalId: { type: "string" },
+      group: {
+        type: "string",
+        description:
+          "delegate: the group to hand to a child thread; it answers with the brief for delegate_task. work: the group a child thread was given.",
+      },
       title: { type: "string", description: "start: the Goal's name. decide: the question." },
       scope: {
         type: "array",
@@ -233,7 +251,11 @@ export const SCHEMA = {
       },
       taskId: { type: "string" },
       taskIds: { type: "array", items: { type: "string" } },
-      note: { type: "string", description: "done: one line on what was done." },
+      note: {
+        type: "string",
+        description:
+          "done: one line on what was done. report: a child thread's one report to the executor.",
+      },
       settled: {
         type: "string",
         description: "decide: how it was settled. Omit to leave it as an open question.",

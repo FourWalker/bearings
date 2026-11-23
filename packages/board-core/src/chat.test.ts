@@ -568,6 +568,59 @@ describe("BoardChat", () => {
     expect((await readBoardView(store, "nefx", 0))?.goals).toEqual([]);
   });
 
+  it("hands a Goal's group to a child thread, which works it and reports once", async () => {
+    const store = await seedBoard({ boardMode: true });
+    const exec = await openChat(store, "t1", ws, "t3");
+    await exec.createTask({ title: "Feature", topLevel: true });
+    for (const module of ["Api", "Web"]) {
+      await exec.createTask({ title: module, parentId: "feature", createAnyway: true });
+      await exec.createTask({
+        title: `${module} one`,
+        parentId: module.toLowerCase(),
+        createAnyway: true,
+      });
+    }
+    await exec.goalTool({ action: "start", scope: ["feature"], title: "Ship" });
+    const brief = (await exec.goalTool({ action: "delegate", group: "B" })).text;
+    expect(brief).toContain('board_goal {action: "work", goalId: "g-ship", group: "B"}');
+    // The executor leaves a group that is out alone.
+    expect(exec.context).toContain("B. Web [0/1 done] · with a child thread");
+    expect(exec.context).toContain('Next task: api-one "Api one"');
+
+    const child = await openChat(store, "t2", ws, "t3");
+    const started = (await child.goalTool({ action: "work", goalId: "g-ship", group: "B" })).text;
+    expect(started).toContain("## Goal worker");
+    expect(started).toContain('Next task: web-one "Web one"');
+    expect(child.rules).not.toContain("## Goal Mode");
+    // A worker stays inside its group and decides nothing for the Goal.
+    expect((await child.goalTool({ action: "task", taskId: "api-one" })).text).toContain(
+      "is not in this Goal",
+    );
+    expect(
+      (await child.goalTool({ action: "decide", title: "Port", settled: "8080" })).text,
+    ).toMatch(/^A worker takes its group's tasks/);
+    expect((await child.goalTool({ action: "task", taskId: "web-one" })).text).not.toContain(
+      "No plan yet",
+    );
+    expect((await child.goalTool({ action: "done", note: "Built web" })).text).toContain(
+      'The group is finished: call board_goal {action: "report", note}.',
+    );
+    await child.goalTool({ action: "report", note: "Web one built; nothing left." });
+    expect(child.rules).not.toContain("## Goal worker");
+
+    // The child's work is the Goal's own, not something that happened outside it.
+    const status = (await exec.goalTool({ action: "status" })).text;
+    expect(status).toContain(
+      "B. Web [1/1 done]\n  Child thread reported: Web one built; nothing left.",
+    );
+    expect(status).not.toContain("Changed outside the Goal");
+    expect((await exec.goalTool({ action: "finish" })).text).toBe(
+      "Not finished: api-one still open.",
+    );
+    await exec.goalTool({ action: "task", taskId: "api-one" });
+    expect((await exec.goalTool({ action: "done" })).text).toContain("Goal g-ship is finished");
+  });
+
   it("creates a board on request and moves an unassigned record into it", async () => {
     const store = new BoardStore(home, nodeIO, clock());
     const chat = await openChat(store, "t1", ws);

@@ -158,7 +158,17 @@ You finish the Goal's tasks one after another in this thread, without stopping b
   }
 - Work outside the Goal's tasks: if it belongs to the Goal, add it with board_goal {action: "include"}; otherwise create a task for later with board_create_task and continue.
 - A dependency reported "not merged here" or "re-run" comes first: resolve it before the tasks that rest on it.
+- A group that needs its own context, or can run beside others, goes to a child thread: board_goal {action: "delegate", group} gives you the brief to pass to delegate_task. Hand over only groups whose dependencies are finished. Several at once only when they touch different files, each started with isolation "worktree"; merge each branch when its child finishes, before the groups that rest on it. You are woken when a child finishes: read board_goal {action: "status"} then, since the board and not the child's message says what is done.
 - Stop only when blocked: board_goal {action: "pause", reason}. A paused Goal resumes in any thread with board_goal {action: "resume", goalId}.
+- ${HYGIENE}`;
+}
+
+/** What a child thread working one group of a Goal is told: do the group, report once. */
+export function t3GoalWorkerRules(): string {
+  return `## Goal worker (you work one group of a Goal for its executor)
+- Take each task with board_goal {action: "task", taskId}; its reply is what that task needs. Do the work, run its checks as one single command so the result is recorded, commit, then call board_goal {action: "done", note: "<one line: what was done>"}. The board records the commit, files and check itself.
+- When the group is finished, or you are blocked, call board_goal {action: "report", note} once: what was done, what is left and why, and any question or out-of-scope find. Then end your turn with one line. Write a living handoff (board_checkpoint) first for a task you leave unfinished.
+- Questions and work outside your group go in the report. Never ask the person, decide for the Goal, create or link other tasks, change ownership or suggest a new thread.
 - ${HYGIENE}`;
 }
 

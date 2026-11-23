@@ -236,5 +236,7 @@ export interface Session {
   pickupNote?: string | undefined;
   /** The Goal this chat is the executor of. */
   goalId?: string | undefined;
+  /** Set with `goalId` on a Goal's worker: the group it was given. */
+  goalGroup?: string | undefined;
   source?: SessionSource | undefined;
 }
