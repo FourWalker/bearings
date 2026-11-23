@@ -581,7 +581,7 @@ describe("BoardChat", () => {
       });
     }
     await exec.goalTool({ action: "start", scope: ["feature"], title: "Ship" });
-    const brief = (await exec.goalTool({ action: "delegate", group: "B" })).text;
+    const brief = (await exec.goalTool({ action: "delegate", group: "web" })).text;
     expect(brief).toContain('board_goal {action: "work", goalId: "g-ship", group: "B"}');
     // The executor leaves a group that is out alone.
     expect(exec.context).toContain("B. Web [0/1 done] · with a child thread");
@@ -619,6 +619,9 @@ describe("BoardChat", () => {
     );
     await exec.goalTool({ action: "task", taskId: "api-one" });
     expect((await exec.goalTool({ action: "done" })).text).toContain("Goal g-ship is finished");
+    expect((await exec.goalTool({ action: "finish", goalId: "g-ship" })).text).toBe(
+      "Goal g-ship is already finished.",
+    );
   });
 
   it("creates a board on request and moves an unassigned record into it", async () => {

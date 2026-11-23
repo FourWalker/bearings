@@ -1114,6 +1114,10 @@ ${this.related}`
 
     const work = await this.myWork();
     const goal = (await this.myGoal()) ?? work?.goal;
+    if (!goal && action === "finish") {
+      const closed = a.goalId ? await loadGoal(this.store, this.boardId, str(a.goalId)) : null;
+      if (closed?.status === "done") return reply(`Goal ${closed.id} is already finished.`);
+    }
     if (!goal)
       return reply(
         'This thread is not running a Goal. Start one with board_goal {action: "start", scope: [...]}, or take one over with {action: "resume", goalId}.',
@@ -1156,11 +1160,14 @@ ${this.related}`
     }
 
     if (action === "delegate") {
-      const group = goal.groups.find((g) => g.id === str(a.group));
+      const wanted = str(a.group).trim().toLowerCase();
+      const group = goal.groups.find(
+        (g) => g.id.toLowerCase() === wanted || g.title.toLowerCase() === wanted,
+      );
       const open = group?.taskIds.filter((id) => byId.get(id)?.status !== "done") ?? [];
       if (!group || open.length === 0)
         return reply(
-          `No open group "${str(a.group)}". Groups: ${goal.groups.map((g) => g.id).join(", ")}.`,
+          `No open group "${str(a.group)}". Groups: ${goal.groups.map((g) => `${g.id} (${g.title})`).join(", ")}.`,
         );
       const waits = group.dependsOn.filter((id) =>
         goal.groups
