@@ -191,6 +191,19 @@ it.effect(
           "refunds",
         );
 
+        // With no task, a new thread becomes the board's Assistant, which is on no task.
+        const helper = ThreadId.make("thread:assistant");
+        yield* boards.linkThread({
+          boardId: "nefx",
+          taskId: null,
+          threadId: helper,
+          projectId: ProjectId.make("project:main"),
+        });
+        expect(yield* Effect.promise(() => store.readSession("nefx", helper))).toMatchObject({
+          assistant: true,
+          taskId: null,
+        });
+
         const reasons = yield* Effect.forEach(
           [
             link(ThreadId.make("thread:started"), "project:main", "refunds"),

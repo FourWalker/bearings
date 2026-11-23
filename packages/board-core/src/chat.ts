@@ -46,6 +46,7 @@ import {
   boardModeProtocol,
   resumeHint,
   type T3OnDemandRule,
+  t3AssistantRules,
   t3GoalRules,
   t3GoalWorkerRules,
   t3OnDemandRule,
@@ -53,6 +54,7 @@ import {
   toolRules,
 } from "./protocol.ts";
 import { BoardStore, LEVEL_NAME, findBoard, levelOf } from "./store.ts";
+import { BOARD_TOOL_NAMES } from "./tools.ts";
 import { findOnBoard, namedTask, queryWords } from "./search.ts";
 import { type DoneCheck, doneEvidence, evidenceLine, verifyDone } from "./verify.ts";
 import { checksForTask } from "./view.ts";
@@ -367,6 +369,12 @@ export class BoardChat {
         lastAnswer: prev.lastAnswer ?? "",
         boardModeOff: prev.boardModeOff,
         pickupNote: prev.pickupNote,
+        // What the thread is on the board outlives the server process that opened it.
+        goalId: prev.goalId,
+        goalGroup: prev.goalGroup,
+        assistant: prev.assistant,
+        pendingWrite: prev.pendingWrite,
+        turnStartedAt: prev.turnStartedAt ?? 0,
       };
     await this.save({});
     await this.rebuildContext();
@@ -815,6 +823,12 @@ Before creating any task, ask the person ONE question: create a new board (ask f
         return;
       }
     }
+    if (s.assistant && this.host === "t3") {
+      const open = (await this.listTasks()).filter((t) => t.status !== "done");
+      const goals = (await listGoals(this.store, this.boardId)).filter((g) => g.status !== "done");
+      this.context = `${head}\nThis ${chat} is the board's Assistant. The board has ${open.length} open item(s)${goals.length > 0 ? ` and ${goals.length} open Goal(s): ${goals.map((g) => `${g.id} (${g.status})`).join(", ")}` : ""}.`;
+      return;
+    }
     if (s.linkDeclined) {
       this.context = `${head}\nThis ${chat} is not linked to a board task (the person chose not to). Don't ask about linking again; board_link is there if they ask.`;
       return;
@@ -950,6 +964,10 @@ ${this.related}`
         this.rules = `${t3GoalRules(goal.mode)}${extras()}`;
         return;
       }
+      if (this.sess?.assistant && this.context) {
+        this.rules = t3AssistantRules();
+        return;
+      }
       if ((await this.myWork()) && this.context) {
         this.rules = `${t3GoalWorkerRules()}${extras()}`;
         return;
@@ -961,6 +979,35 @@ ${this.related}`
     }
     if (this.context && b && this.boardModeOn)
       this.context += `\n\n${boardModeProtocol(this.host)}${extras()}`;
+  }
+
+  /** Makes this thread the board's Assistant, before its first turn. */
+  async becomeAssistant(): Promise<void> {
+    this.reported = true;
+    await this.save({ assistant: true });
+    await this.rebuildContext();
+  }
+
+  /**
+   * The Assistant's writes wait for the person. One goes through when this turn began with the
+   * person agreeing, or when the same call was refused in an earlier turn and they have written
+   * since; otherwise it is recorded and refused.
+   */
+  private async confirmedByPerson(name: string, args: Record<string, unknown>): Promise<boolean> {
+    const s = this.sess;
+    if (!s) return false;
+    const key = `${name}:${JSON.stringify(Object.entries(args).toSorted(([a], [b]) => a.localeCompare(b)))}`;
+    const pending = s.pendingWrite;
+    const agreed =
+      /^\s*(yes|yep|yeah|y|ok|okay|sure|confirm(ed)?|go ahead|do it|create it|please do)\b/i.test(
+        s.lastPrompt,
+      );
+    if (agreed || (pending?.key === key && s.turnStartedAt > pending.turnAt)) {
+      await this.save({ pendingWrite: undefined });
+      return true;
+    }
+    await this.save({ pendingWrite: { key, turnAt: s.turnStartedAt } });
+    return false;
   }
 
   /** The Goal this thread is running, if it is still its executor. */
@@ -1722,7 +1769,8 @@ ${this.related}`
       );
     // A step handed to a subtask matches its own step; anything else is checked for a duplicate.
     if (!a.createAnyway && !a.fromStep) {
-      const { lines } = await this.searchBoard(str(a.title));
+      // Every word of the title has to be there: "Add mode()" is not "Add max()".
+      const { lines } = await findOnBoard(this.store, this.boardId, str(a.title), { every: true });
       const similar = lines.slice(0, 3);
       if (similar.length > 0)
         return reply(
@@ -2193,6 +2241,22 @@ ${this.related}`
     args: Record<string, unknown>,
     extra?: { readonly t3Checkpoint?: string | undefined; readonly t3RunId?: string | undefined },
   ): Promise<BoardReply> | null {
+    if (this.sess?.assistant && this.host === "t3") {
+      if (name === "board_create_task")
+        return this.confirmedByPerson(name, args).then((yes) =>
+          yes
+            ? this.createTask(args)
+            : reply(
+                `Not created yet: the person has to agree first. Ask them to confirm creating "${str(args.title)}"${args.parentId ? ` under ${str(args.parentId)}` : " as a new feature"}, and call board_create_task again with the same arguments after they say yes.`,
+              ),
+        );
+      if (name !== "board_find" && name !== "board_read" && BOARD_TOOL_NAMES.includes(name))
+        return Promise.resolve(
+          reply(
+            "The Board Assistant finds, reads and shows; it takes no task and changes nothing else. Show the person the task and let them start a thread on it.",
+          ),
+        );
+    }
     switch (name) {
       case "board_setup":
         return this.setupBoard(args);

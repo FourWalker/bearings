@@ -534,7 +534,8 @@ export class BoardReadError extends Schema.TaggedError<BoardReadError>()(
 /** Links a new thread (a draft with no turn yet) to a task, so its first turn carries the task. */
 export const BoardLinkThreadInput = Schema.Struct({
   boardId: Schema.String,
-  taskId: Schema.String,
+  /** The task the thread works on; null makes it the board's Assistant, which is on no task. */
+  taskId: Schema.NullOr(Schema.String),
   threadId: ThreadId,
   projectId: ProjectId,
   override: Schema.optional(Schema.Literals(["once", "takeover"])),

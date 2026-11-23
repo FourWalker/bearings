@@ -236,6 +236,10 @@ export interface Session {
   pickupNote?: string | undefined;
   /** The Goal this chat is the executor of. */
   goalId?: string | undefined;
+  /** The board's Assistant: answers for the whole board and is never on a task. */
+  assistant?: boolean | undefined;
+  /** A write the Assistant asked for, waiting for the person's yes in a later message. */
+  pendingWrite?: { key: string; turnAt: number } | undefined;
   /** Set with `goalId` on a Goal's worker: the group it was given. */
   goalGroup?: string | undefined;
   source?: SessionSource | undefined;

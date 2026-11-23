@@ -399,6 +399,10 @@ describe("BoardChat", () => {
       /^Created Level 2/,
     );
 
+    // Sharing one word with existing work is not being a duplicate of it.
+    expect((await chat.createTask({ title: "Checkout emails", parentId: "catalog" })).text).toMatch(
+      /^Created Level 3/,
+    );
     // Three matches under one module come back as the module, unless one level is asked for.
     for (const title of ["Refund api", "Refund emails", "Refund report"])
       await chat.createTask({ title, parentId: "catalog", createAnyway: true });
@@ -581,6 +585,8 @@ describe("BoardChat", () => {
       });
     }
     await exec.goalTool({ action: "start", scope: ["feature"], title: "Ship" });
+    // A Goal's executor is still its executor when the server opens its record again.
+    expect((await openChat(store, "t1", ws, "t3")).rules).toContain("## Goal Mode");
     const brief = (await exec.goalTool({ action: "delegate", group: "web" })).text;
     expect(brief).toContain('board_goal {action: "work", goalId: "g-ship", group: "B"}');
     // The executor leaves a group that is out alone.
@@ -622,6 +628,49 @@ describe("BoardChat", () => {
     expect((await exec.goalTool({ action: "finish", goalId: "g-ship" })).text).toBe(
       "Goal g-ship is already finished.",
     );
+  });
+
+  it("lets the board's Assistant find and read, and write only after the person's yes", async () => {
+    const store = await seedBoard({ boardMode: true });
+    const setup = await openChat(store, "t1", ws, "t3");
+    await setup.createTask({ title: "Marketplace", topLevel: true });
+    const assistant = await openChat(store, "t2", ws, "t3");
+    await assistant.becomeAssistant();
+    await assistant.turnStart("Do we have anything on the marketplace?");
+    expect(assistant.rules).toContain("## Board Assistant");
+    expect(assistant.context).toContain("is the board's Assistant. The board has 1 open item(s)");
+    expect((await assistant.runTool("board_find", { query: "marketplace" }))?.text).toContain(
+      "- marketplace [L1 feature, active] Marketplace",
+    );
+    // It is on no task and runs no Goal, whatever a task's text or the model says.
+    for (const tool of ["board_link", "board_update", "board_goal"])
+      expect((await assistant.runTool(tool, { taskId: "marketplace" }))?.text).toMatch(
+        /^The Board Assistant finds, reads and shows/,
+      );
+
+    const draft = { title: "Seller payouts", parentId: "marketplace" };
+    // The thread stays the Assistant when the server opens its record again.
+    const reopened = await openChat(store, "t2", ws, "t3");
+    expect(reopened.rules).toContain("## Board Assistant");
+    const asked = (await assistant.runTool("board_create_task", draft))?.text;
+    expect(asked).toMatch(/^Not created yet: the person has to agree first/);
+    // Saying it again in the same turn is the model agreeing with itself.
+    expect((await assistant.runTool("board_create_task", draft))?.text).toMatch(/^Not created yet/);
+    expect(await store.loadTask("nefx", "seller-payouts")).toBeNull();
+    // A message that is not a yes lets through only the write that was already refused.
+    await assistant.turnStart("what would that contain?");
+    expect(
+      (await assistant.runTool("board_create_task", { ...draft, title: "Refunds" }))?.text,
+    ).toMatch(/^Not created yet/);
+    await assistant.turnStart("the payouts one, as you said");
+    expect((await assistant.runTool("board_create_task", draft))?.text).toMatch(/^Not created yet/);
+    await assistant.turnStart("Yes, go ahead");
+    expect((await assistant.runTool("board_create_task", draft))?.text).toMatch(/^Created Level 2/);
+    // Agreeing once covers that turn, not the ones after it.
+    await assistant.turnStart("and what else is open?");
+    expect(
+      (await assistant.runTool("board_create_task", { ...draft, title: "Seller fees" }))?.text,
+    ).toMatch(/^Not created yet/);
   });
 
   it("creates a board on request and moves an unassigned record into it", async () => {

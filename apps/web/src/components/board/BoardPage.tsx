@@ -8,7 +8,12 @@ import type {
   EnvironmentId,
 } from "@t3tools/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { PlusIcon, SquareKanbanIcon, TriangleAlertIcon } from "lucide-react";
+import {
+  MessageCircleQuestionIcon,
+  PlusIcon,
+  SquareKanbanIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
 import { T, useGT } from "gt-react";
 import { useState } from "react";
 
@@ -32,6 +37,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { WorkspaceBreadcrumb, WorkspaceBreadcrumbItem } from "~/components/WorkspaceBreadcrumb";
 import { WorkspacePageHeader } from "~/components/WorkspacePageHeader";
 import { isElectron } from "~/env";
+import { useComposerDraftStore } from "~/composerDraftStore";
 import { useNewThreadHandler } from "~/hooks/useHandleNewThread";
 import { boardEnvironment } from "~/state/board";
 import { useEnvironments } from "~/state/environments";
@@ -137,6 +143,33 @@ export function BoardPage() {
       },
     });
   };
+  // The board's Assistant is a thread of its own, marked before its first turn so that turn
+  // gets the Assistant's rules. It asks before provider actions: it is there to answer, not to work.
+  const assistantProjectId =
+    board?.workspaces.find((workspace) => workspace.projectId !== null)?.projectId ?? null;
+  const askBoard = async () => {
+    if (environmentId === null || board === null || assistantProjectId === null) return;
+    const created = await newThread(scopeProjectRef(environmentId, assistantProjectId), {
+      envMode: "local",
+      prepareNewDraft: async (threadId) => {
+        const result = await linkThread({
+          environmentId,
+          input: { boardId: board.id, taskId: null, threadId, projectId: assistantProjectId },
+        });
+        if (result._tag !== "Failure") return true;
+        toastManager.add({
+          type: "error",
+          title: gt("Could not start the Board Assistant"),
+          description: formatEnvironmentQueryError(result.cause),
+        });
+        return false;
+      },
+    });
+    if (created === null) return;
+    const drafts = useComposerDraftStore.getState();
+    drafts.setDraftThreadContext(created.draftId, { runtimeMode: "approval-required" });
+    drafts.setRuntimeMode(created.draftId, "approval-required");
+  };
   const openThread = (chat: BoardChat) => {
     if (chat.threadId === null || environmentId === null) return;
     void navigate({
@@ -187,6 +220,7 @@ export function BoardPage() {
         onChanged={view.refresh}
         onOpenThread={openThread}
         onContinue={(task, target) => void continueTask(task, target)}
+        onAskBoard={assistantProjectId === null ? null : () => void askBoard()}
       />
     );
 
@@ -370,9 +404,12 @@ function BoardScreen(props: {
   readonly onChanged: () => void;
   readonly onOpenThread: (chat: BoardChat) => void;
   readonly onContinue: (task: BoardTask, target: BoardContinueTarget) => void;
+  /** Starts the board's Assistant thread; null when no workspace of the board is a T3 project. */
+  readonly onAskBoard: (() => void) | null;
 }) {
   const gt = useGT();
   const navigate = useNavigate({ from: "/board" });
+  const canAsk = useAtomValue(boardEnvironment.linkThread.permissionAtom(props.environmentId));
   const { board } = props;
   const index = indexBoard(board.tasks);
   const canLink = useAtomValue(boardEnvironment.linkThread.permissionAtom(props.environmentId));
@@ -555,6 +592,12 @@ function BoardScreen(props: {
               });
             }}
           />
+          {props.onAskBoard !== null && canAsk ? (
+            <Button data-board-ask size="sm" variant="outline" onClick={props.onAskBoard}>
+              <MessageCircleQuestionIcon />
+              <T>Ask the board</T>
+            </Button>
+          ) : null}
           <ToggleGroup
             aria-label={gt("Board view")}
             value={[props.mode]}

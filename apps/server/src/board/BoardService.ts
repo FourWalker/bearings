@@ -316,7 +316,8 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
             reason: "not-on-board",
             detail: "The project's folder is not on this board.",
           });
-        if ((await store.loadTask(input.boardId, input.taskId)) === null)
+        const taskId = input.taskId;
+        if (taskId !== null && (await store.loadTask(input.boardId, taskId)) === null)
           return new BoardLinkError({ reason: "not-found", detail: "No such task." });
         const chat = new BoardChat(store, git, "t3");
         await chat.open({
@@ -324,8 +325,12 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
           cwd,
           source: { kind: "t3-thread", threadId: input.threadId, projectId: input.projectId },
         });
+        if (taskId === null) {
+          await chat.becomeAssistant();
+          return null;
+        }
         const reply = await chat.linkTask({
-          taskId: input.taskId,
+          taskId,
           override: input.override,
           personSaid:
             input.override === "once"
@@ -335,7 +340,7 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
                 : undefined,
         });
         const linked = await store.readSession(input.boardId, input.threadId);
-        return linked?.taskId === input.taskId
+        return linked?.taskId === taskId
           ? null
           : new BoardLinkError({ reason: "blocked", detail: reply.text });
       },

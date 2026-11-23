@@ -78,12 +78,14 @@ const replacementOf = (task: Task): string | undefined =>
 /**
  * Ranked matches: most words matched first, then open before done, then where they matched. A
  * superseded task is answered with its replacement, and several matches under one parent with the
- * parent, unless `level` asks for one level only.
+ * parent, unless `level` asks for one level only. `every` keeps only tasks matching every word:
+ * a question may be loose, a duplicate check may not.
  */
 export function searchTasks(
   docs: ReadonlyArray<SearchDoc>,
   query: string,
   level?: Level,
+  every = false,
 ): SearchHit[] {
   const paths = queryPaths(query);
   const pathWords = new Set(paths.flatMap((path) => queryWords(path)));
@@ -92,7 +94,7 @@ export function searchTasks(
   const words = paths.length > 0 ? all.filter((word) => !pathWords.has(word)) : all;
   const terms = words.length + paths.length;
   if (terms === 0) return [];
-  const need = Math.ceil(terms / 2);
+  const need = every ? terms : Math.ceil(terms / 2);
   const byId = new Map(docs.map((doc) => [doc.task.id, doc.task]));
   const hits = new Map<string, SearchHit>();
   for (const { task, plan } of docs) {
@@ -223,7 +225,11 @@ export async function findOnBoard(
   store: BoardStore,
   boardId: string,
   query: string,
-  options: { readonly service?: string | undefined; readonly level?: Level | undefined } = {},
+  options: {
+    readonly service?: string | undefined;
+    readonly level?: Level | undefined;
+    readonly every?: boolean | undefined;
+  } = {},
 ): Promise<{ lines: string[]; all: Task[] }> {
   const all = await store.listTasks(boardId);
   const byId = new Map(all.map((x) => [x.id, x]));
@@ -254,7 +260,9 @@ export async function findOnBoard(
     })),
   );
   return {
-    lines: searchTasks(docs, query, options.level).map((hit) => line(hit.task, hit.steps, hit)),
+    lines: searchTasks(docs, query, options.level, options.every).map((hit) =>
+      line(hit.task, hit.steps, hit),
+    ),
     all,
   };
 }
