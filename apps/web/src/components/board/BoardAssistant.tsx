@@ -18,12 +18,23 @@ import {
   Maximize2Icon,
   Minimize2Icon,
   MinusIcon,
+  PaletteIcon,
   RotateCcwIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import ChatMarkdown from "~/components/ChatMarkdown";
 import { Button } from "~/components/ui/button";
+import {
+  Menu,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuPopup,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuSeparator,
+  MenuTrigger,
+} from "~/components/ui/menu";
 import { Textarea } from "~/components/ui/textarea";
 import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
@@ -46,6 +57,11 @@ import { useOrchestrationCommand } from "~/state/use-orchestration-command";
 import { buildThreadRouteParams } from "~/threadRoutes";
 
 import { assistantBubbles, isAssistantBusy, latestExchange } from "./board.logic";
+import { TackAvatar, useTackLook } from "./TackAvatar";
+import { tackMood, tackNoteCount, type TackMotion, type TackSkin } from "./tackAvatar.logic";
+
+/** How long after the last keystroke Tack still counts as being typed to. */
+const TYPING_LINGER_MS = 800;
 
 const AssistantState = Schema.Struct({
   threadId: Schema.NullOr(Schema.String),
@@ -75,6 +91,10 @@ export function BoardAssistant(props: {
   );
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [typing, setTyping] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [look, setLook] = useTackLook();
   const canAsk = useAtomValue(boardEnvironment.linkThread.permissionAtom(environmentId));
   const linkThread = useAtomCommand(boardEnvironment.linkThread, { reportFailure: false });
   const startTurn = useOrchestrationCommand(threadEnvironment.startTurn, { reportFailure: false });
@@ -87,18 +107,33 @@ export function BoardAssistant(props: {
   const busy = sending || isAssistantBusy(shell?.runtime?.status);
   const waiting = shell?.hasPendingApprovals === true || shell?.hasPendingUserInput === true;
   if (!canAsk) return null;
+  const avatar = {
+    skin: look.skin,
+    motion: look.motion,
+    mood: tackMood({ open: state.view !== "closed", busy, waiting, typing, failed }),
+    notes: tackNoteCount(thread?.projection.turnItems ?? []),
+  };
 
-  const fail = (description: string) =>
+  const fail = (description: string) => {
+    setFailed(true);
     toastManager.add({
       type: "error",
       title: gt("Could not start the Board Assistant"),
       description,
     });
+  };
+  const noteTyping = () => {
+    setTyping(true);
+    clearTimeout(typingTimer.current);
+    typingTimer.current = setTimeout(() => setTyping(false), TYPING_LINGER_MS);
+  };
 
   const send = async (text: string) => {
     const message = text.trim();
     if (!message || sending) return;
     setSending(true);
+    setFailed(false);
+    setTyping(false);
     setDraft("");
     try {
       const createdAt = new Date().toISOString();
@@ -198,9 +233,8 @@ export function BoardAssistant(props: {
           className="pointer-events-auto flex items-center gap-2 rounded-full border bg-popover py-2 ps-3 pe-4 text-sm shadow-lg hover:bg-accent"
           onClick={() => setState((previous) => ({ ...previous, view: "open" }))}
         >
-          <span aria-hidden className="text-base">
-            📌
-          </span>
+          {/* The sprite's cell has empty rows around the body; the margins trim them in the pill. */}
+          <TackAvatar {...avatar} scale={2} className="-my-3 -ms-3 -me-2" />
           <span className="font-medium">{gt("Ask Tack")}</span>
           {busy || waiting ? (
             <span
@@ -216,6 +250,12 @@ export function BoardAssistant(props: {
   const shown = expanded ? bubbles : latestExchange(bubbles);
   return (
     <div className="pointer-events-none fixed end-4 bottom-4 z-[70]">
+      {look.skin === "emoji" ? null : (
+        // Perched on the chat's top edge: the cell's two empty bottom rows sit below the feet.
+        <div className="pointer-events-auto absolute end-5 bottom-full -mb-[7px] cursor-pointer">
+          <TackAvatar {...avatar} from="rest" scale={3} pokeable />
+        </div>
+      )}
       <section
         data-board-assistant={state.view}
         aria-label={gt("Board Assistant")}
@@ -227,13 +267,17 @@ export function BoardAssistant(props: {
         )}
       >
         <header className="flex items-center gap-1 border-b px-3 py-2">
-          <span aria-hidden className="text-base">
-            📌
-          </span>
+          {look.skin === "emoji" ? <TackAvatar {...avatar} scale={1} /> : null}
           <span className="min-w-0 flex-1 truncate">
             <span className="font-medium text-sm">{gt("Tack")}</span>
             <span className="ms-2 text-muted-foreground text-xs">{props.boardName}</span>
           </span>
+          <TackLookMenu
+            skin={look.skin}
+            motion={look.motion}
+            onSkin={(skin) => setLook((previous) => ({ ...previous, skin }))}
+            onMotion={(motion) => setLook((previous) => ({ ...previous, motion }))}
+          />
           <HeaderButton
             label={expanded ? gt("Hide history") : gt("Show history")}
             onClick={() =>
@@ -322,7 +366,10 @@ export function BoardAssistant(props: {
               value={draft}
               aria-label={gt("Message to the Board Assistant")}
               placeholder={gt("Ask Tack about this board…")}
-              onChange={(event) => setDraft(event.target.value)}
+              onChange={(event) => {
+                setDraft(event.target.value);
+                noteTyping();
+              }}
               onKeyDown={(event) => {
                 if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing)
                   return;
@@ -366,6 +413,71 @@ function HeaderButton(props: {
       </TooltipTrigger>
       <TooltipPopup>{props.label}</TooltipPopup>
     </Tooltip>
+  );
+}
+
+/** Picks Tack's avatar and how much it moves; kept on this device. */
+function TackLookMenu(props: {
+  readonly skin: TackSkin;
+  readonly motion: TackMotion;
+  readonly onSkin: (skin: TackSkin) => void;
+  readonly onMotion: (motion: TackMotion) => void;
+}) {
+  const gt = useGT();
+  const skins: ReadonlyArray<readonly [TackSkin, string]> = [
+    ["claude", gt("Claude")],
+    ["ivory", gt("Claude Ivory")],
+    ["mint", gt("Claude Mint")],
+    ["night", gt("Claude Night")],
+    ["pin", gt("Pushpin")],
+    ["emoji", gt("Emoji, no animation")],
+  ];
+  const motions: ReadonlyArray<readonly [TackMotion, string]> = [
+    ["full", gt("Full animation")],
+    ["calm", gt("Calm: reactions only")],
+    ["still", gt("Still")],
+  ];
+  return (
+    <Menu>
+      <MenuTrigger
+        aria-label={gt("Tack's look")}
+        render={<Button size="icon-xs" variant="ghost-muted" />}
+      >
+        <PaletteIcon />
+      </MenuTrigger>
+      <MenuPopup align="end">
+        <MenuGroup>
+          <MenuGroupLabel>{gt("Avatar")}</MenuGroupLabel>
+          <MenuRadioGroup
+            value={props.skin}
+            onValueChange={(next) => props.onSkin(next as TackSkin)}
+          >
+            {skins.map(([skin, label]) => (
+              <MenuRadioItem key={skin} value={skin}>
+                <span className="flex items-center gap-2">
+                  <TackAvatar skin={skin} motion="still" mood="idle" scale={1} />
+                  {label}
+                </span>
+              </MenuRadioItem>
+            ))}
+          </MenuRadioGroup>
+        </MenuGroup>
+        <MenuSeparator />
+        <MenuGroup>
+          <MenuGroupLabel>{gt("Animation")}</MenuGroupLabel>
+          <MenuRadioGroup
+            value={props.motion}
+            onValueChange={(next) => props.onMotion(next as TackMotion)}
+          >
+            {motions.map(([motion, label]) => (
+              <MenuRadioItem key={motion} value={motion}>
+                {label}
+              </MenuRadioItem>
+            ))}
+          </MenuRadioGroup>
+        </MenuGroup>
+      </MenuPopup>
+    </Menu>
   );
 }
 

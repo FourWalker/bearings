@@ -580,6 +580,18 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   }
 }
 
+@keyframes tack-strip {
+  to {
+    background-position-x: var(--tack-strip-end);
+  }
+}
+
+@utility tack-avatar {
+  background-repeat: repeat-x;
+  image-rendering: pixelated;
+  animation-play-state: var(--visible-animation-state, paused);
+}
+
 @utility visible-animate-spin {
   animation: var(--animate-spin);
   animation-play-state: var(--visible-animation-state, paused);
