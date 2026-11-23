@@ -162,13 +162,20 @@ thread must agree on what's done, blocked and verified, and on the next action.
 
 ## Not verified yet / known gaps
 
-- Model-behaviour evals were not run, and the live check used Codex only (no Claude thread, no web
-  board pass). `vp run check:changed` cannot finish in this checkout: mobile and marketing
+- Model-behaviour evals were not run though tool descriptions and rules text changed, and live checks
+  used Codex only (no Claude thread). `vp run check:changed` cannot finish in this checkout: mobile and marketing
   dependencies are not installed.
-- Goal Mode is driven from the executor thread. The web board marks a task held by an open Goal (tree
-  row, card, task view; seen in the dev app), but has no Goal view of its own. Delegated and parallel strategies, the server wake-up and releasing module
-  ownership on pause are not built.
-- Search has no aliases, file-path search, roll-up, `superseded_by` link or first-turn hint yet.
+- Goal Mode: the web board shows open Goals in its panel and marks their tasks, both seen in the dev
+  app with seeded Goals only. A paused Goal soft-releases the modules it claimed when their work is
+  pushed and clean (tested, not seen live).
+- Goal delegation ran live once (Codex): the executor handed a group to a child thread, which took
+  it, worked it and reported; T3 woke the executor, which finished the Goal. The child ran in a T3
+  worktree and could not commit there (the Codex sandbox denied the linked git metadata), so the
+  executor committed its files. Several groups out at once (parallel) is rules text plus the same
+  mechanism and was not run live. Two threads writing one Goal file at once is narrowed, not locked.
+- Search: other names for an item, file paths, roll-up, `level`, superseded tasks and the first-turn
+  line are tested, not run live. Other names are saved through `board_find` only; the web board
+  cannot list or remove them. `board_create_task` in a T3 thread now needs `parentId` or `topLevel`.
 - A task marked done from the board UI records the repo state of its owning workspace (or of the
   only workspace); on a board with several copies and no owner it records nothing. These fixes after
   the live run are tested but were not re-run live.
