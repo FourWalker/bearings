@@ -66,6 +66,18 @@ export function createBoardEnvironmentAtoms<R, E>(
       label: "environment-data:board:settings",
       tag: WS_METHODS.boardSettings,
     }),
+    archivedThreads: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:board:archived-threads",
+      tag: WS_METHODS.boardArchivedThreads,
+    }),
+    openFile: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:board:open-file",
+      tag: WS_METHODS.boardOpenFile,
+    }),
+    exportFile: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:board:export-file",
+      tag: WS_METHODS.boardExportFile,
+    }),
     editBoard: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:board:edit-board",
       tag: WS_METHODS.boardEditBoard,

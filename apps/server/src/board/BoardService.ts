@@ -20,6 +20,7 @@ import {
   type BoardTaskDetail,
   type BoardTaskDetailInput,
   type BoardView,
+  type OrchestrationV2ThreadTranscript,
   type Project,
   type ProjectId,
   ThreadId,
@@ -48,6 +49,8 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
 
+import * as BoardFile from "./BoardFile.ts";
+
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 
@@ -74,6 +77,16 @@ export class BoardService extends Context.Service<
     readonly editBoard: (
       input: BoardEditBoardInput,
     ) => Effect.Effect<BoardEditResult, BoardEditFailure>;
+    readonly archivedThreads: (input: {
+      readonly boardId: string;
+    }) => Effect.Effect<ReadonlyArray<OrchestrationV2ThreadTranscript>, BoardReadError>;
+    readonly openFile: (input: {
+      readonly contents: string;
+    }) => Effect.Effect<string, BoardEditFailure>;
+    readonly exportFile: (input: {
+      readonly boardId: string;
+      readonly includeThreads: boolean;
+    }) => Effect.Effect<string, BoardReadError>;
     readonly linkThread: (input: BoardLinkThreadInput) => Effect.Effect<void, BoardLinkError>;
   }
 >()("t3/board/BoardService") {}
@@ -188,7 +201,17 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
       ...workspace,
       projectId: byRoot.get(workspace.root)?.id ?? null,
     }));
-    return { ...raw, workspaces, tasks, unlinked } satisfies BoardView;
+    const hasArchivedThreads = yield* Effect.tryPromise({
+      try: () => BoardFile.hasArchivedThreads(store, input.boardId),
+      catch: failed,
+    });
+    return {
+      ...raw,
+      workspaces,
+      tasks,
+      unlinked,
+      ...(hasArchivedThreads ? { hasArchivedThreads } : {}),
+    } satisfies BoardView;
   });
 
   const taskDetail = Effect.fn("BoardService.taskDetail")(function* (input: BoardTaskDetailInput) {
@@ -320,6 +343,78 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
     }).pipe(Effect.flatMap((error) => (error === null ? Effect.void : Effect.fail(error))));
   });
 
+  const archivedThreads = Effect.fn("BoardService.archivedThreads")(
+    ({ boardId }: { readonly boardId: string }) =>
+      Effect.tryPromise({
+        try: () => BoardFile.readArchivedThreads(store, boardId),
+        catch: failed,
+      }),
+  );
+
+  const openFile = ({ contents }: { readonly contents: string }) =>
+    editLock.withLock(
+      "$registry",
+      Effect.tryPromise({
+        try: () => BoardFile.openBoardFile(store, contents),
+        catch: editFailed,
+      }),
+    );
+
+  const exportFile = Effect.fn("BoardService.exportFile")(function* (input: {
+    readonly boardId: string;
+    readonly includeThreads: boolean;
+  }) {
+    const boardSettings = yield* settings(input);
+    const { files, createdAt, archived, sessions } = yield* Effect.tryPromise({
+      try: async () => {
+        const registry = await store.loadRegistry();
+        const board = registry.boards.find((board) => board.id === input.boardId);
+        if (!board) throw new Error("No such board.");
+        return {
+          files: await BoardFile.readBoardFiles(store, input.boardId),
+          createdAt: board.createdAt,
+          archived: input.includeThreads
+            ? await BoardFile.readArchivedThreads(store, input.boardId)
+            : [],
+          sessions: input.includeThreads ? await store.listSessions(input.boardId) : [],
+        };
+      },
+      catch: failed,
+    });
+    const transcripts = new Map(archived.map((thread) => [thread.threadId, thread]));
+    for (const session of sessions) {
+      if (session.source?.kind !== "t3-thread") continue;
+      const id = ThreadId.make(session.source.threadId);
+      if (transcripts.has(id)) continue;
+      const shell = yield* threads.getThreadShell(id).pipe(Effect.mapError(failed));
+      if (shell === null) {
+        if (session.title === "") continue;
+        return yield* new BoardReadError({
+          reason: "not-found",
+          detail: `The thread "${session.title}" is unavailable in this environment. Export from the environment that holds it or choose Board only.`,
+        });
+      }
+      const { projection } = yield* threads.getThreadSnapshot(id).pipe(Effect.mapError(failed));
+      transcripts.set(id, {
+        threadId: id,
+        title: projection.thread.title,
+        updatedAt: projection.updatedAt,
+        items: projection.visibleTurnItems,
+      });
+    }
+    return yield* Effect.try({
+      try: () =>
+        BoardFile.encodeBoardFile({
+          id: input.boardId,
+          createdAt,
+          settings: boardSettings,
+          files,
+          threads: [...transcripts.values()],
+        }),
+      catch: failed,
+    });
+  });
+
   return BoardService.of({
     list,
     unassigned,
@@ -329,6 +424,9 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
     createTask,
     settings,
     editBoard,
+    archivedThreads,
+    openFile,
+    exportFile,
     linkThread,
   });
 });

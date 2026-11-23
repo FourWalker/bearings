@@ -56,6 +56,7 @@ import {
 } from "./board.logic";
 import { type BoardNoteActions, BoardModuleNote, BoardNote, BoardServiceRow } from "./BoardNotes";
 import { BoardPanel } from "./BoardPanel";
+import { BoardFileActions } from "./BoardFileActions";
 import { BoardSettingsButton } from "./BoardSettingsDialog";
 import { BoardTaskView } from "./BoardTaskView";
 import { ChoiceSelect } from "./BoardTaskEditors";
@@ -224,6 +225,18 @@ export function BoardPage() {
             ) : null}
           </WorkspaceBreadcrumb>
           <div className="min-w-0 flex-1" />
+          {environmentId !== null && (
+            <BoardFileActions
+              key={JSON.stringify([environmentId, boardId])}
+              environmentId={environmentId}
+              boardId={boardId}
+              hasArchivedThreads={board?.hasArchivedThreads ?? false}
+              onOpened={(id) => {
+                boards.refresh();
+                selectBoard(id);
+              }}
+            />
+          )}
           {boards.data !== null && boards.data.length > 1 && boardId !== null ? (
             <div className="[-webkit-app-region:no-drag]" data-workspace-titlebar-controls>
               <Menu>

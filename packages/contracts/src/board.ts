@@ -111,6 +111,7 @@ export const BoardTask = Schema.Struct({
 export type BoardTask = typeof BoardTask.Type;
 
 export const BoardView = Schema.Struct({
+  hasArchivedThreads: Schema.optional(Schema.Boolean),
   id: Schema.String,
   name: Schema.String,
   boardMode: Schema.Boolean,

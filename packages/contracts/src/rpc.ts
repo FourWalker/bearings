@@ -1,4 +1,5 @@
 import {
+  OrchestrationV2ThreadTranscript,
   OrchestrationV2SearchThreadError,
   OrchestrationV2SearchThreadInput,
   OrchestrationV2SearchThreadResult,
@@ -706,6 +707,9 @@ export const WS_METHODS = {
   boardEditTask: "board.editTask",
   boardCreateTask: "board.createTask",
   boardSettings: "board.settings",
+  boardArchivedThreads: "board.archivedThreads",
+  boardOpenFile: "board.openFile",
+  boardExportFile: "board.exportFile",
   boardEditBoard: "board.editBoard",
   boardLinkThread: "board.linkThread",
 
@@ -1556,6 +1560,24 @@ const WsBoardSettingsRpc = Rpc.make(WS_METHODS.boardSettings, {
 });
 
 /** Project Board fork: one change to a board's settings. */
+const WsBoardArchivedThreadsRpc = Rpc.make(WS_METHODS.boardArchivedThreads, {
+  payload: BoardViewInput,
+  success: Schema.Array(OrchestrationV2ThreadTranscript),
+  error: BoardRpcError,
+});
+
+const WsBoardOpenFileRpc = Rpc.make(WS_METHODS.boardOpenFile, {
+  payload: Schema.Struct({ contents: Schema.String }),
+  success: Schema.String,
+  error: BoardEditRpcError,
+});
+
+const WsBoardExportFileRpc = Rpc.make(WS_METHODS.boardExportFile, {
+  payload: Schema.Struct({ boardId: Schema.String, includeThreads: Schema.Boolean }),
+  success: Schema.String,
+  error: BoardRpcError,
+});
+
 const WsBoardEditBoardRpc = Rpc.make(WS_METHODS.boardEditBoard, {
   payload: BoardEditBoardInput,
   success: BoardEditResult,
@@ -2485,6 +2507,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsBoardEditTaskRpc,
   WsBoardCreateTaskRpc,
   WsBoardSettingsRpc,
+  WsBoardArchivedThreadsRpc,
+  WsBoardOpenFileRpc,
+  WsBoardExportFileRpc,
   WsBoardEditBoardRpc,
   WsBoardLinkThreadRpc,
   WsGuestShareCreateRpc,
