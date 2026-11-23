@@ -20,12 +20,31 @@ import {
   syncDelegatedSteps,
 } from "./edit.ts";
 import type { BoardGit } from "./io.ts";
-import { nextStep, objectiveLine, planPhases, planProgress, tickStep } from "./plan.ts";
+import {
+  type Goal,
+  goalDrift,
+  goalLedger,
+  listGoals,
+  loadGoal,
+  nextGoalTask,
+  planGroups,
+  saveGoal,
+  scopeTasks,
+} from "./goal.ts";
+import {
+  nextStep,
+  objectiveLine,
+  planPhases,
+  planProgress,
+  setStepDone,
+  tickStep,
+} from "./plan.ts";
 import {
   type BoardHost,
   boardModeProtocol,
   resumeHint,
   type T3OnDemandRule,
+  t3GoalRules,
   t3OnDemandRule,
   t3Rules,
   toolRules,
@@ -735,6 +754,12 @@ Before creating any task, ask the person ONE question: create a new board (ask f
     }
     const where = `workspace "${s.workspaceLabel}" (${s.workspace})${s.subfolder ? `, folder ${s.subfolder}` : ""}${s.branch ? `, branch ${s.branch}` : ""}`;
     const head = `## Claude Project Board\nThis ${chat} runs in ${where} of the ${b.name} board. Other ${chats} may work on the same board in its other workspace copies: ${b.roots.map((r) => r.label).join(", ")}.`;
+    const goal = await this.myGoal();
+    if (goal) {
+      const t = s.taskId ? await this.loadTask(s.taskId) : null;
+      this.context = `${head}\nThis ${chat} is the executor of a Goal.\n\n${goalLedger(goal, await this.listTasks())}${t && t.status !== "done" ? `\n\nTask in hand:\n${await this.resumeSummary(t)}` : ""}`;
+      return;
+    }
     if (s.taskId) {
       const t = await this.loadTask(s.taskId);
       if (t) {
@@ -869,6 +894,11 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
     };
     if (this.host === "t3") {
       const t = this.sess?.taskId && b ? await this.loadTask(this.sess.taskId) : null;
+      const goal = await this.myGoal();
+      if (goal && this.context) {
+        this.rules = `${t3GoalRules(goal.mode)}${extras()}`;
+        return;
+      }
       this.rules = this.context
         ? `${t3Rules({ linked: !!t, boardMode: this.boardModeOn, planning: !!t && levelOf(t) <= 2 })}${this.boardModeOn ? extras() : ""}`
         : "";
@@ -876,6 +906,263 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
     }
     if (this.context && b && this.boardModeOn)
       this.context += `\n\n${boardModeProtocol(this.host)}${extras()}`;
+  }
+
+  /** The Goal this thread is running, if it is still its executor. */
+  private async myGoal(): Promise<Goal | null> {
+    const id = this.sess?.goalId;
+    if (!id || !this.board || this.host !== "t3") return null;
+    const goal = await loadGoal(this.store, this.boardId, id);
+    return goal?.executor === this.sess?.sessionId ? goal : null;
+  }
+
+  async goalTool(a: Record<string, unknown>): Promise<BoardReply> {
+    const s = this.sess;
+    if (!s || this.ignored) return reply("The board is not available in this folder.");
+    if (!this.board) return reply(await this.unassignedHelp());
+    if (this.host !== "t3") return reply("Goals run in T3 threads.");
+    const all = await this.listTasks();
+    const byId = new Map(all.map((task) => [task.id, task]));
+    const action = str(a.action);
+    const withRules = () => `${this.context}\n\n${this.rules}`;
+
+    if (action === "start") {
+      const scope = Array.isArray(a.scope) ? a.scope.map(String) : [];
+      const tasks = scopeTasks(all, scope);
+      if (tasks.length === 0)
+        return reply(
+          "Not started: the scope has no open tasks. Pass scope as task, module or feature ids (board_find lists them).",
+        );
+      const taken = (await listGoals(this.store, this.boardId))
+        .filter((other) => other.status !== "done")
+        .flatMap((other) =>
+          other.groups
+            .flatMap((group) => group.taskIds)
+            .filter((id) => tasks.some((task) => task.id === id))
+            .map((id) => `${id} (Goal ${other.id})`),
+        );
+      if (taken.length > 0)
+        return reply(
+          `Not started: a task belongs to one active Goal at a time. Already in a Goal: ${taken.join(", ")}. Resume that Goal, or leave those tasks out.`,
+        );
+      const title = str(a.title, tasks[0]?.title ?? "Goal");
+      let id = `g-${slug(title)}`;
+      for (let n = 2; await loadGoal(this.store, this.boardId, id); n++)
+        id = `g-${slug(title)}-${n}`;
+      const at = this.now();
+      const goal: Goal = {
+        id,
+        title,
+        scope,
+        groups: planGroups(all, tasks),
+        decisions: [],
+        mode: a.mode === "auto" ? "auto" : "ask",
+        status: "running",
+        executor: s.sessionId,
+        executors: [s.sessionId],
+        baseline: Object.fromEntries(tasks.map((task) => [task.id, { status: task.status, at }])),
+        createdAt: at,
+        updatedAt: at,
+      };
+      await saveGoal(this.store, this.boardId, goal);
+      this.reported = true;
+      await this.save({ goalId: id });
+      await this.rebuildContext();
+      return reply(
+        `Started Goal ${id} with this thread as its executor.\n\n${withRules()}`,
+        `Board: Goal ${title}`,
+      );
+    }
+
+    if (action === "resume" || action === "status") {
+      const id = str(a.goalId || s.goalId);
+      const goal = id ? await loadGoal(this.store, this.boardId, id) : null;
+      if (!goal) {
+        const open = (await listGoals(this.store, this.boardId)).filter((g) => g.status !== "done");
+        return reply(
+          `No Goal "${id}". ${open.length ? `Goals on this board: ${open.map((g) => `${g.id} (${g.title}, ${g.status})`).join(", ")}.` : "This board has no open Goals."}`,
+        );
+      }
+      const drift = goalDrift(goal, all);
+      const changes = [...drift.notes];
+      for (const taskId of drift.doneElsewhere) {
+        const task = byId.get(taskId);
+        if (task)
+          changes.push(
+            `- ${taskId} "${task.title}": finished in another thread. ${(await this.doneCheck(task)).text}`,
+          );
+      }
+      if (action === "status")
+        return reply(
+          `${goalLedger(goal, all)}${changes.length ? `\n\nChanged outside the Goal:\n${changes.join("\n")}` : ""}`,
+        );
+      if (goal.status === "done") return reply(`Goal ${goal.id} is finished.`);
+      if (goal.executor && goal.executor !== s.sessionId) {
+        const other = await this.store.readSession(this.boardId, goal.executor);
+        if (other?.status === "working")
+          return reply(
+            `Goal ${goal.id} is running in another thread ("${other.title}") right now. A Goal has one executor: open that thread, or pause it there first.`,
+          );
+      }
+      const at = this.now();
+      for (const group of goal.groups)
+        group.taskIds = group.taskIds.filter((taskId) => !drift.removed.includes(taskId));
+      goal.executor = s.sessionId;
+      goal.executors = [...new Set([...goal.executors, s.sessionId])];
+      goal.status = "running";
+      delete goal.pausedReason;
+      goal.baseline = Object.fromEntries(
+        goal.groups
+          .flatMap((group) => group.taskIds)
+          .map((taskId) => [taskId, { status: byId.get(taskId)?.status ?? "active", at }]),
+      );
+      await saveGoal(this.store, this.boardId, goal);
+      this.reported = true;
+      await this.save({ goalId: goal.id });
+      await this.rebuildContext();
+      const summary = changes.length
+        ? `Changed while it was paused:\n${changes.join("\n")}${goal.mode === "auto" ? '\nAuto mode: carry on, and record how you handled these with board_goal {action: "decide"}.' : "\nTell the person about these before you continue."}`
+        : "Nothing changed while it was paused.";
+      return reply(`Resumed Goal ${goal.id}. ${summary}\n\n${withRules()}`);
+    }
+
+    const goal = await this.myGoal();
+    if (!goal)
+      return reply(
+        'This thread is not running a Goal. Start one with board_goal {action: "start", scope: [...]}, or take one over with {action: "resume", goalId}.',
+      );
+    const inGoal = (id: string) => goal.groups.some((group) => group.taskIds.includes(id));
+    const nextLine = (tasks: ReadonlyArray<Task>) => {
+      const next = nextGoalTask(goal, tasks);
+      return next
+        ? `Next task: ${next.id} "${next.title}". Take it with board_goal {action: "task", taskId: "${next.id}"}.`
+        : "No task is ready.";
+    };
+
+    if (action === "task") {
+      const id = str(a.taskId);
+      const task = byId.get(id);
+      if (!task || !inGoal(id))
+        return reply(`${id || "That task"} is not in this Goal. ${nextLine(all)}`);
+      // One runner per task: work started on it directly outranks the Goal.
+      const busy = (await this.store.listSessions(this.boardId)).find(
+        (other) =>
+          other.taskId === id && other.sessionId !== s.sessionId && other.status === "working",
+      );
+      if (busy)
+        return reply(
+          `${id} is being worked on in another thread ("${busy.title}"). Leave it to that thread and take another task; check it again with board_goal {action: "status"}.`,
+        );
+      const linked = await this.linkTask({ taskId: id });
+      if (!linked.text.startsWith("Linked")) return linked;
+      goal.baseline[id] = { status: task.status, at: this.now() };
+      await saveGoal(this.store, this.boardId, goal);
+      await this.rebuildContext();
+      return reply(`Working on ${id} for Goal ${goal.id}.\n\n${await this.resumeSummary(task)}`);
+    }
+
+    if (action === "done") {
+      const id = str(a.taskId || s.taskId);
+      if (!id || !inGoal(id)) return reply(`${id || "That task"} is not in this Goal.`);
+      if (s.taskId !== id)
+        return reply(`Take ${id} first with board_goal {action: "task", taskId: "${id}"}.`);
+      const plan = await this.readPlan(id);
+      const ticked = planPhases(plan)
+        .flatMap((phase) => phase.steps)
+        .filter((step) => !step.done)
+        .reduce((text, step) => setStepDone(text, step.id, true), plan);
+      if (ticked !== plan) await this.store.io.write(this.store.planPath(this.boardId, id), ticked);
+      const updated = await this.updateTask({
+        taskId: id,
+        status: "done",
+        lastAction: str(a.note, "Finished in the Goal."),
+      });
+      goal.baseline[id] = { status: "done", at: this.now() };
+      const tasks = await this.listTasks();
+      const left = goal.groups
+        .flatMap((group) => group.taskIds)
+        .filter((taskId) => tasks.find((task) => task.id === taskId)?.status !== "done");
+      if (left.length === 0) {
+        goal.status = "done";
+        goal.executor = null;
+        await saveGoal(this.store, this.boardId, goal);
+        await this.save({ goalId: undefined });
+        await this.rebuildContext();
+        return reply(
+          `${updated.text}\nGoal ${goal.id} is finished: every task is done. Run the full checks once more, then report to the person with the decisions you settled.`,
+        );
+      }
+      await saveGoal(this.store, this.boardId, goal);
+      await this.rebuildContext();
+      return reply(`${updated.text}\n${left.length} task(s) left. ${nextLine(tasks)}`);
+    }
+
+    if (action === "decide") {
+      const settled = str(a.settled).trim();
+      if (!str(a.title).trim()) return reply("Give the decision a title.");
+      if (settled && goal.mode !== "auto")
+        return reply(
+          "This Goal asks before deciding: record the question without `settled` and carry on with the tasks it doesn't block.",
+        );
+      const decision = {
+        id: `G${goal.decisions.length + 1}`,
+        title: str(a.title),
+        settled,
+        by: "model" as const,
+        taskIds: Array.isArray(a.taskIds) ? a.taskIds.map(String) : [],
+        at: this.now(),
+      };
+      goal.decisions.push(decision);
+      await saveGoal(this.store, this.boardId, goal);
+      await this.rebuildContext();
+      return reply(
+        settled
+          ? `Recorded ${decision.id} as settled by the model. The person reviews it later; carry on.`
+          : `Recorded ${decision.id} as an open question for the person. Carry on with the tasks it doesn't block.`,
+      );
+    }
+
+    if (action === "include") {
+      const ids = (Array.isArray(a.taskIds) ? a.taskIds.map(String) : []).filter(
+        (id) => byId.has(id) && !inGoal(id),
+      );
+      if (ids.length === 0) return reply("No new tasks to include.");
+      const at = this.now();
+      for (const id of ids) {
+        const task = byId.get(id);
+        if (!task) continue;
+        const home = goal.groups.find((group) =>
+          group.taskIds.some((other) => byId.get(other)?.parentId === task.parentId),
+        );
+        if (home) home.taskIds.push(id);
+        else
+          goal.groups.push({
+            id: String.fromCharCode(65 + (goal.groups.length % 26)),
+            title: (task.parentId ? byId.get(task.parentId)?.title : undefined) ?? task.title,
+            taskIds: [id],
+            dependsOn: [],
+          });
+        goal.baseline[id] = { status: task.status, at };
+      }
+      await saveGoal(this.store, this.boardId, goal);
+      await this.rebuildContext();
+      return reply(`Included ${ids.join(", ")}. ${nextLine(all)}`);
+    }
+
+    if (action === "pause") {
+      const reason = str(a.reason, "paused").trim() || "paused";
+      goal.status = "paused";
+      goal.pausedReason = reason;
+      goal.executor = null;
+      await saveGoal(this.store, this.boardId, goal);
+      const inHand = s.taskId ? byId.get(s.taskId) : undefined;
+      await this.save({ goalId: undefined });
+      await this.rebuildContext();
+      return reply(
+        `Paused Goal ${goal.id}: ${reason}. It resumes in any thread with board_goal {action: "resume", goalId: "${goal.id}"}.${inHand && inHand.status !== "done" ? ` ${inHand.id} is unfinished: write its living handoff now with board_checkpoint.` : ""}`,
+      );
+    }
+    return reply(`Unknown action "${action}".`);
   }
 
   /** The thread lost its history (compaction): nothing it was told can be assumed any more. */
@@ -887,7 +1174,8 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
 
   /** Adds a situational rule to a tool's reply, the first time a T3 thread meets the situation. */
   private once(rule: T3OnDemandRule, text: string): string {
-    if (this.host !== "t3" || this.told.has(rule)) return text;
+    // A Goal's executor works to the Goal's rules, not the per-task ones.
+    if (this.host !== "t3" || this.sess?.goalId || this.told.has(rule)) return text;
     this.told.add(rule);
     return `${text}\n\n${t3OnDemandRule(rule)}`;
   }
@@ -1711,6 +1999,8 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
         return this.moveTask(args);
       case "board_find":
         return this.findTasks(args);
+      case "board_goal":
+        return this.goalTool(args);
       case "board_promote":
         return this.promoteTask(args);
       case "board_checkpoint":

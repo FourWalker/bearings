@@ -428,6 +428,69 @@ describe("BoardChat", () => {
     expect(await finish()).toContain("done elsewhere, not merged here");
   });
 
+  it("runs a Goal: tasks in a row with light records, reconciling work done outside it", async () => {
+    const git: BoardGit = {
+      ...noGit,
+      state: async () => ({
+        repo: ws,
+        name: "nfx",
+        branch: "main",
+        head: "abc1234",
+        upstream: null,
+        ahead: null,
+        behind: null,
+        dirty: 0,
+        lastCommitAt: 0,
+        at: 0,
+      }),
+      since: async () => "same",
+    };
+    const store = await seedBoard({ boardMode: true });
+    const exec = await openChat(store, "t1", ws, "t3", git);
+    await exec.createTask({ title: "Feature" });
+    await exec.createTask({ title: "Module", parentId: "feature" });
+    for (const title of ["Alpha", "Beta", "Gamma"])
+      await exec.createTask({ title, parentId: "module" });
+
+    const started = (
+      await exec.goalTool({ action: "start", scope: ["module"], mode: "auto", title: "Ship it" })
+    ).text;
+    expect(started).toContain("Started Goal g-ship-it");
+    expect(started).toContain("## Goal Mode");
+    expect(started).toContain('Next task: alpha "Alpha"');
+    expect(exec.rules).not.toContain("## Board Mode");
+    const other = await openChat(store, "t2", ws, "t3", git);
+    expect((await other.goalTool({ action: "start", scope: ["module"] })).text).toMatch(
+      /^Not started: a task belongs to one active Goal/,
+    );
+
+    expect((await exec.goalTool({ action: "task", taskId: "alpha" })).text).toContain(
+      "### Task: Alpha",
+    );
+    await exec.recordCheck({ id: "c1", command: "npm test", exitCode: 0, at: 1 });
+    const done = (await exec.goalTool({ action: "done", note: "Built alpha" })).text;
+    expect(done).toContain("npm test exited 0");
+    expect(done).toContain('2 task(s) left. Next task: beta "Beta"');
+    expect(
+      (await exec.goalTool({ action: "decide", title: "Retry count", settled: "3, the default" }))
+        .text,
+    ).toContain("settled by the model");
+
+    // Paused; meanwhile Beta is finished directly in another thread.
+    expect((await exec.goalTool({ action: "pause", reason: "rate limit" })).text).toContain(
+      "Paused Goal g-ship-it: rate limit",
+    );
+    expect(exec.rules).toContain("## Board Mode");
+    await other.linkTask({ taskId: "beta" });
+    await other.updateTask({ status: "done", lastAction: "Fixed beta directly" });
+    const resumed = (await other.goalTool({ action: "resume", goalId: "g-ship-it" })).text;
+    expect(resumed).toContain('- beta "Beta": finished in another thread. done, unverified');
+    expect(resumed).toContain("G1 Retry count → 3, the default (settled by the model)");
+    expect(resumed).toContain('Next task: gamma "Gamma"');
+    await other.goalTool({ action: "task", taskId: "gamma" });
+    expect((await other.goalTool({ action: "done" })).text).toContain("Goal g-ship-it is finished");
+  });
+
   it("creates a board on request and moves an unassigned record into it", async () => {
     const store = new BoardStore(home, nodeIO, clock());
     const chat = await openChat(store, "t1", ws);

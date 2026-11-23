@@ -197,6 +197,39 @@ export const SCHEMA = {
       },
     },
   },
+  goal: {
+    type: "object",
+    properties: {
+      action: {
+        type: "string",
+        enum: ["start", "resume", "status", "task", "done", "decide", "include", "pause"],
+        description:
+          "start: begin a Goal over `scope` with this thread as its executor. resume: take over a paused Goal (`goalId`) and see what changed meanwhile. status: read a Goal. task: start working on one of its tasks (`taskId`). done: finish the task in hand (`note`). decide: record a decision or an open question. include: add tasks. pause: stop with a `reason`.",
+      },
+      goalId: { type: "string" },
+      title: { type: "string", description: "start: the Goal's name. decide: the question." },
+      scope: {
+        type: "array",
+        items: { type: "string" },
+        description: "start: task, module or feature ids; their open tasks become the Goal's work.",
+      },
+      mode: {
+        type: "string",
+        enum: ["auto", "ask"],
+        description:
+          "start: auto settles decisions with your recommendation and records them; ask (default) queues them for the person.",
+      },
+      taskId: { type: "string" },
+      taskIds: { type: "array", items: { type: "string" } },
+      note: { type: "string", description: "done: one line on what was done." },
+      settled: {
+        type: "string",
+        description: "decide: how it was settled. Omit to leave it as an open question.",
+      },
+      reason: { type: "string" },
+    },
+    required: ["action"],
+  },
   find: {
     type: "object",
     properties: {
@@ -423,6 +456,12 @@ export const BOARD_TOOLS: ReadonlyArray<BoardToolDefinition> = [
     description:
       "Find existing work on the board by words and/or service: tasks, and plan steps not yet split into tasks. Best matches first; finished tasks come back as reference.",
     inputSchema: SCHEMA.find,
+  },
+  {
+    name: "board_goal",
+    description:
+      "Run a Goal: finish several tasks, a module or a feature in this one thread without the per-task ceremony. Start it only when the person asks for a Goal or for several tasks to be done in a row.",
+    inputSchema: SCHEMA.goal,
   },
   {
     name: "board_promote",

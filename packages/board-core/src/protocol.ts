@@ -145,6 +145,23 @@ export function t3Rules(input: {
     .join("\n");
 }
 
+/** What a Goal's executor is told in place of the per-task rules: finish tasks in a row, lightly. */
+export function t3GoalRules(mode: "auto" | "ask"): string {
+  return `## Goal Mode (you are this Goal's executor)
+You finish the Goal's tasks one after another in this thread, without stopping between them.
+- Take the next task with board_goal {action: "task", taskId}; its reply is what that task needs. Do the work, run its checks as one single command so the result is recorded, commit, then call board_goal {action: "done", note: "<one line: what was done>"}. The board records the commit, files and check itself.
+- For a finished task write no handoff, no checkpoint reply and no plan stub, and don't suggest a new thread. Write a living handoff (board_checkpoint) for a task only when you leave it unfinished or blocked.
+- Decisions that affect more than the task in hand go to the Goal with board_goal {action: "decide"}. ${
+    mode === "auto"
+      ? "Auto mode: don't stop to ask. Settle it with the option you recommend and record how you settled it in `settled`; the person reviews these rows later. Never overrule a decision the person made: if one blocks you, pause."
+      : "Record the question without `settled`, carry on with the tasks it doesn't block, and pause when nothing else is left. Never settle it yourself."
+  }
+- Work outside the Goal's tasks: if it belongs to the Goal, add it with board_goal {action: "include"}; otherwise create a task for later with board_create_task and continue.
+- A dependency reported "not merged here" or "re-run" comes first: resolve it before the tasks that rest on it.
+- Stop only when blocked: board_goal {action: "pause", reason}. A paused Goal resumes in any thread with board_goal {action: "resume", goalId}.
+- ${HYGIENE}`;
+}
+
 /** How a host tells the person to pick a task up again. */
 export function resumeHint(host: BoardHost, taskId: string): string {
   return host === "t3"

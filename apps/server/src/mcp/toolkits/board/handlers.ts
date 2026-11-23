@@ -54,6 +54,7 @@ const handlers = {
   board_link_task: writes("board_link_task"),
   board_move: writes("board_move"),
   board_find: reads("board_find"),
+  board_goal: writes("board_goal"),
   board_promote: writes("board_promote"),
   board_checkpoint: writes("board_checkpoint"),
   board_read: reads("board_read"),

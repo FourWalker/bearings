@@ -232,5 +232,7 @@ export interface Session {
   suggestedName?: string | undefined;
   boardModeOff?: boolean | undefined;
   pickupNote?: string | undefined;
+  /** The Goal this chat is the executor of. */
+  goalId?: string | undefined;
   source?: SessionSource | undefined;
 }

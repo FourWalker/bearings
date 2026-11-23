@@ -122,6 +122,10 @@ export const BoardToolkit = Toolkit.make(
     .annotate(Tool.Readonly, true)
     .annotate(Tool.Destructive, false)
     .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromOutsideClients),
+  Tool.make("board_goal", definition("board_goal")).annotate(
+    McpSchema.EnabledWhen,
+    McpInvocationContext.hiddenFromOutsideClients,
+  ),
   Tool.make("board_promote", definition("board_promote")).annotate(
     McpSchema.EnabledWhen,
     McpInvocationContext.hiddenFromOutsideClients,
