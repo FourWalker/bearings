@@ -171,7 +171,71 @@ it.effect("records a thread's turns, answers and changed files on its board task
           input: `powershell.exe -Command "vp test run failing.test.ts; echo done"`,
         }),
       );
+      // Agents log a check to a file and pass its exit code on: the result is still the check's.
+      yield* reactor.handle(
+        event("turn-item.updated", {
+          id: "check:logged",
+          type: "command_execution",
+          runId,
+          completedAt,
+          exitCode: 0,
+          input: `"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'New-Item -ItemType Directory -Force .local-run/logs/add-max | Out-Null; npm test *> .local-run/logs/add-max/check.log; $checkExit = $LASTEXITCODE; Get-Content .local-run/logs/add-max/check.log -Tail 30; exit $checkExit'`,
+        }),
+      );
+      yield* reactor.handle(
+        event("turn-item.updated", {
+          id: "check:bash",
+          type: "command_execution",
+          runId,
+          completedAt,
+          exitCode: 2,
+          input:
+            "npm run lint > .local-run/logs/lint.log 2>&1; code=$?; tail -n 20 .local-run/logs/lint.log; exit $code",
+        }),
+      );
+      // Without the exit code passed on, the command's result is the last statement's.
+      yield* reactor.handle(
+        event("turn-item.updated", {
+          id: "check:lost",
+          type: "command_execution",
+          runId,
+          completedAt,
+          exitCode: 0,
+          input: "npm test > test.log 2>&1; tail -n 20 test.log",
+        }),
+      );
+      // A file the agent wrote counts before the turn's checkpoint, so "done" in the same turn has it.
+      yield* reactor.handle(
+        event("turn-item.updated", {
+          id: "file:1",
+          type: "file_change",
+          runId,
+          completedAt,
+          fileName: "api/refunds.test.ts",
+          changes: [
+            { operation: "add", path: "api/refunds.test.ts" },
+            { operation: "add", path: "api/fixtures.ts" },
+          ],
+        }),
+      );
+      expect((yield* task())?.files).toEqual([
+        `${ws}/api/refunds.test.ts`,
+        `${ws}/api/fixtures.ts`,
+        `${ws}/api/refunds.ts`,
+      ]);
       expect((yield* task())?.checks).toEqual([
+        {
+          id: "check:bash",
+          command: "npm run lint",
+          exitCode: 2,
+          at: DateTime.toEpochMillis(completedAt),
+        },
+        {
+          id: "check:logged",
+          command: "npm test",
+          exitCode: 0,
+          at: DateTime.toEpochMillis(completedAt),
+        },
         {
           id: "check:pwsh",
           command: "npm test",

@@ -129,13 +129,14 @@ thread must agree on what's done, blocked and verified, and on the next action.
 `.t3/` in the clone is gitignored and holds the dev state:
 
 - `.t3/claude-board`: a copy of `~/.claude-board` plus a throwaway "Dev Board" rooted at
-  `.t3/board-ws` (a small git repo with a linked task `refund-api` from a Codex run).
+  `.t3/board-ws` (a small git repo, T3 project `board-ws`, module `math-helpers` with four done tasks).
+  If `.t3` is missing, copy the board folder again and add the workspace with `t3 project add`.
 - Start: in PowerShell, `$env:T3_BOARD_HOME = "<clone>\.t3\claude-board"`, then
   `vp run dev --home-dir <clone>\.t3`. Open the `pairingUrl` from the log, then `/board`.
 - Free turns: `node apps/server/src/bin.ts thread start --base-dir .t3 --provider devReplay
   --model showcase <folder> "go"`. Real cheap turns: `--provider codex --model gpt-6-luna`.
 - Board app on the copy: `BOARD_ROOT=<copy> BOARD_PORT=4318 node server.js` in the mod's `app/`.
-- This machine has no `~/.t3`, so there is no live T3 database to protect.
+- `~/.t3/userdata` is the owner's real T3 data: always pass `--home-dir` / `--base-dir`, never run without it.
 
 ## Verified
 
@@ -151,13 +152,23 @@ thread must agree on what's done, blocked and verified, and on the next action.
 - "Continue in new thread" on the Dev Board: the draft opened in board-ws with the prompt, its board
   record was linked to `refund-api` before sending, and after a Replay turn the thread showed on the
   task with its answer as the last action. NEFX (no T3 project in its folders) shows no button.
+- Core 1 to 4 live (Codex `gpt-6-luna`, Dev Board): a thread linked itself to a task and received the
+  short T3 profile, the task with its parents and the project rules; a Goal on a module took its tasks
+  one by one in a single turn, committed each and finished. The first run showed three evidence bugs,
+  now fixed and re-run: a check logged to a file with its exit code passed on is recorded; files are
+  recorded as the agent writes them (Codex and Claude; other providers still only at the turn's
+  checkpoint); `.local-run` logs no longer count as uncommitted work.
 - One `BoardChats` is shared by every user of `BoardChats.layer` in a build (checked against Effect).
 
 ## Not verified yet / known gaps
 
-- Core 1 to 4 (2026-11-23) passed board-core and server board tests, typechecks and lint, but have
-  not run in a real thread, and the model-behaviour evals were not run. `vp run check:changed` cannot
-  finish in this checkout: mobile and marketing dependencies are not installed.
+- Model-behaviour evals were not run, and the live check used Codex only (no Claude thread, no web
+  board pass). `vp run check:changed` cannot finish in this checkout: mobile and marketing
+  dependencies are not installed.
+- Seen live, not fixed: a Goal task's reply still says "No plan yet: write one with board_plan",
+  against the Goal rule of no plan stub; the turn's checkpoint adds every file of the turn to the
+  last task taken (its done evidence is right, its file list is not); a one-workspace board lists its
+  own workspace as the "other workspace copies".
 - Goal Mode has no board UI yet (no Goal view or "part of a Goal" badge); it is driven from the
   executor thread. Delegated and parallel strategies, the server wake-up and releasing module
   ownership on pause are not built.

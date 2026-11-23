@@ -44,19 +44,33 @@ const SETTLED = new Set(["completed", "failed", "interrupted", "cancelled", "rol
 // The board app shows a chat offline after 2.5 minutes without a heartbeat.
 const HEARTBEAT = "60 seconds";
 
+const CHECK =
+  /^(?:(?:vp|npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:test|lint|typecheck|check(?::changed)?|build)|(?:go|cargo|dotnet|mvn|gradle|\.[/\\](?:mvnw|gradlew)(?:\.(?:cmd|bat))?)\s+test|pytest|git\s+diff\s+--check)(?=\s|$)/;
+
 function checkCommand(input: string): string | undefined {
   // Codex reports the Windows shell invocation rather than the command inside it.
   const powershell =
     /^(?:"(?:[^"\r\n]*[/\\])?(?:powershell|pwsh)(?:\.exe)?"|(?:powershell|pwsh)(?:\.exe)?)(?:\s+-(?:NoProfile|NoLogo|NonInteractive))*\s+-Command\s+(['"])(.*)\1$/i.exec(
       input.trim(),
     );
-  const script = powershell?.[2] ?? input;
-  if (/[\r\n;&|]/.test(script)) return undefined;
-  const command =
-    /^(?:(?:vp|npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:test|lint|typecheck|check(?::changed)?|build)|(?:go|cargo|dotnet|mvn|gradle|\.[/\\](?:mvnw|gradlew)(?:\.(?:cmd|bat))?)\s+test|pytest|git\s+diff\s+--check)(?=\s|$)/.exec(
-      script.trim(),
-    )?.[0];
-  return command?.replace(/\s+/g, " ");
+  const statements = (powershell?.[2] ?? input)
+    .split(/[\r\n;]+/)
+    .map((statement) => statement.trim())
+    .filter(Boolean);
+  const checks = statements.filter((statement) => CHECK.test(statement));
+  const [statement] = checks;
+  if (statement === undefined || checks.length > 1) return undefined;
+  if (statements.length > 1) {
+    // A script exits with its last statement's code: that is the check's only when passed on.
+    const kept = /^\$?(\w+)\s*=\s*\$(?:LASTEXITCODE|\?)$/i.exec(
+      statements[statements.indexOf(statement) + 1] ?? "",
+    )?.[1];
+    if (!kept || statements.at(-1)?.toLowerCase() !== `exit $${kept.toLowerCase()}`)
+      return undefined;
+  }
+  // Where the output goes ("> file", "*> file", "2>&1") doesn't change what ran.
+  if (/[&|]/.test(statement.replace(/\s(?:\*|\d)?>>?\s*(?:&\d|[^\s&|]+)/g, ""))) return undefined;
+  return CHECK.exec(statement)?.[0].replace(/\s+/g, " ");
 }
 
 export const make = Effect.gen(function* () {
@@ -188,7 +202,15 @@ export const make = Effect.gen(function* () {
         }
         case "turn-item.updated": {
           const item = event.payload;
-          if (item.type !== "command_execution" || item.runId === null) return;
+          if (item.runId === null) return;
+          if (item.type === "file_change") {
+            // The checkpoint lists a turn's files after it ends: too late for a task finished in it.
+            const chat = yield* chatOf(event.threadId);
+            const files = [item.fileName, ...(item.changes ?? []).map((change) => change.path)];
+            yield* Effect.promise(() => chat.filesChanged(files));
+            return;
+          }
+          if (item.type !== "command_execution") return;
           const { exitCode, completedAt } = item;
           if (exitCode === undefined || completedAt === null) return;
           const command = checkCommand(item.input);

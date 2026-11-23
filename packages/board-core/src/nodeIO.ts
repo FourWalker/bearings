@@ -105,6 +105,11 @@ const gitOk = (dir: string, args: ReadonlyArray<string>): Promise<boolean | null
     );
   });
 
+/** Changed paths in `git status --porcelain` output; the board's rules keep run logs in `.local-run`. */
+export const dirtyCount = (porcelain: string): number =>
+  porcelain.split("\n").filter((line) => line && !/^"?(?:.*\/)?\.local-run\//.test(line.slice(3)))
+    .length;
+
 export const nodeGit: BoardGit = {
   since: async (dir, head, files) => {
     if (!(await gitOk(dir, ["cat-file", "-e", `${head}^{commit}`]))) return "unreachable";
@@ -143,7 +148,7 @@ export const nodeGit: BoardGit = {
       upstream,
       ahead,
       behind,
-      dirty: status.split("\n").filter(Boolean).length,
+      dirty: dirtyCount(status),
       lastCommitAt: Number((await git(dir, ["log", "-1", "--format=%ct"])) ?? 0) * 1000,
       at: Date.now(),
     };
