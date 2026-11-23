@@ -42,6 +42,8 @@ export interface Goal {
   executor: string | null;
   /** Every thread that has run it: their work on its tasks is not drift. */
   executors: string[];
+  /** Modules the Goal claimed for its workspace: released when it pauses. */
+  claimed?: string[] | undefined;
   /** Each task as the Goal last saw it. */
   baseline: Record<string, { status: TaskStatus; at: number }>;
   createdAt: number;

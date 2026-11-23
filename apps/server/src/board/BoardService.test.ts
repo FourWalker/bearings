@@ -131,7 +131,7 @@ it.effect(
         });
         const setup = new BoardChat(store, noGit, "t3");
         await setup.open({ sessionId: "thread:setup", cwd: main });
-        await setup.createTask({ title: "Refunds" });
+        await setup.createTask({ title: "Refunds", topLevel: true });
         await setup.createTask({ title: "Payouts", parentId: "refunds" });
         const payouts = await store.loadTask("nefx", "payouts");
         if (payouts === null) throw new Error("no task");

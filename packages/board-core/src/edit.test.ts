@@ -42,7 +42,15 @@ const plan = (id: string) => store.readText(store.planPath("nefx", id));
 describe("editTask", () => {
   it("creates a linked bug fix next to a level-three task and keeps its service tags", async () => {
     await createTask(store, "nefx", { title: "Billing" }, actor);
-    await createTask(store, "nefx", { title: "Refunds", parentId: "billing" }, actor);
+    await createTask(
+      store,
+      "nefx",
+      { title: "Refunds", parentId: "billing", services: ["ledger"] },
+      actor,
+    );
+    // A new item starts with its parent's services.
+    await createTask(store, "nefx", { title: "Sync", parentId: "refunds" }, actor);
+    expect((await task("sync")).services).toEqual(["ledger"]);
     await createTask(
       store,
       "nefx",

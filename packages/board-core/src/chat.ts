@@ -1057,8 +1057,21 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
         return reply(
           `${id} is being worked on in another thread ("${busy.title}"). Leave it to that thread and take another task; check it again with board_goal {action: "status"}.`,
         );
+      const heldBefore = (await this.ownerHolder(task))?.owner;
       const linked = await this.linkTask({ taskId: id });
       if (!linked.text.startsWith("Linked")) return linked;
+      // The Goal holds a module it claimed, or took back after its own pause released it.
+      const holder = await this.ownerHolder(task);
+      if (holder?.owner && sameRoot(holder.owner.root, s.workspace)) {
+        if (holder.owner.state === "soft") {
+          const { softAt: _softAt, pickup: _pickup, ...owned } = holder.owner;
+          holder.owner = { ...owned, state: "owned" };
+          this.ownerHistory(holder, "reclaim", { to: holder.owner.label });
+          await this.saveTask(holder);
+        }
+        if (!heldBefore || heldBefore.state === "soft")
+          goal.claimed = [...new Set([...(goal.claimed ?? []), holder.id])];
+      }
       goal.baseline[id] = { status: task.status, at: this.now() };
       await saveGoal(this.store, this.boardId, goal);
       await this.rebuildContext();
@@ -1158,12 +1171,13 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
       goal.status = "paused";
       goal.pausedReason = reason;
       goal.executor = null;
+      const kept = await this.releaseGoalHolds(goal);
       await saveGoal(this.store, this.boardId, goal);
       const inHand = s.taskId ? byId.get(s.taskId) : undefined;
       await this.save({ goalId: undefined });
       await this.rebuildContext();
       return reply(
-        `Paused Goal ${goal.id}: ${reason}. It resumes in any thread with board_goal {action: "resume", goalId: "${goal.id}"}.${inHand && inHand.status !== "done" ? ` ${inHand.id} is unfinished: write its living handoff now with board_checkpoint.` : ""}`,
+        `Paused Goal ${goal.id}: ${reason}. It resumes in any thread with board_goal {action: "resume", goalId: "${goal.id}"}.${inHand && inHand.status !== "done" ? ` ${inHand.id} is unfinished: write its living handoff now with board_checkpoint.` : ""}${kept.length > 0 ? `\n${kept.join("\n")}` : ""}`,
       );
     }
     return reply(`Unknown action "${action}".`);
@@ -1530,6 +1544,11 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
 
   async createTask(a: Record<string, unknown>): Promise<BoardReply> {
     if (!this.board) return reply(await this.unassignedHelp());
+    // Work with no place in the tree is how boards fill with unmapped tasks.
+    if (this.host === "t3" && !a.parentId && !a.topLevel)
+      return reply(
+        "Not created: a new item needs a parent. Pass parentId (board_find lists the features and modules), or topLevel: true when the person wants a new feature or master task.",
+      );
     // A step handed to a subtask matches its own step; anything else is checked for a duplicate.
     if (!a.createAnyway && !a.fromStep) {
       const { lines } = await this.searchBoard(str(a.title));
@@ -1909,7 +1928,22 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
       await this.rebuildContext();
       return reply(`Released "${holder.title}": the next workspace to link claims it.`);
     }
-    // soft: only when everything is pushed, clean and checkpointed after the last commit
+    const { repos, problems } = await this.softReleaseState(holder);
+    if (problems.length)
+      return reply(`Not ready for a soft release:\n${problems.map((x) => `- ${x}`).join("\n")}`);
+    holder.owner = { ...holder.owner, state: "soft", softAt: this.now(), pickup: repos };
+    this.ownerHistory(holder, "soft-release", { from: holder.owner.label });
+    await this.saveTask(holder);
+    await this.rebuildContext();
+    return reply(
+      `Soft-released "${holder.title}". Another workspace can take over from:\n${repos.map((r) => `- ${repoLine(r)}`).join("\n")}\nThis ${this.host === "t3" ? "thread" : "chat"} should stop working on it unless it reclaims it (board_release reclaim).`,
+    );
+  }
+
+  /** Soft release needs everything pushed, clean and checkpointed after the last commit. */
+  private async softReleaseState(
+    holder: Task,
+  ): Promise<{ repos: RepoState[]; problems: string[] }> {
     const repos = await this.reposFor(holder);
     const problems: string[] = [];
     if (!repos.length) problems.push("no repos found — tag the services it touches first");
@@ -1930,15 +1964,30 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
     const lastCommit = Math.max(0, ...repos.map((r) => r.lastCommitAt));
     if (repos.length && handoffAt < lastCommit)
       problems.push("the living handoff is older than the last commit — checkpoint first");
-    if (problems.length)
-      return reply(`Not ready for a soft release:\n${problems.map((x) => `- ${x}`).join("\n")}`);
-    holder.owner = { ...holder.owner, state: "soft", softAt: this.now(), pickup: repos };
-    this.ownerHistory(holder, "soft-release", { from: holder.owner.label });
-    await this.saveTask(holder);
-    await this.rebuildContext();
-    return reply(
-      `Soft-released "${holder.title}". Another workspace can take over from:\n${repos.map((r) => `- ${repoLine(r)}`).join("\n")}\nThis ${this.host === "t3" ? "thread" : "chat"} should stop working on it unless it reclaims it (board_release reclaim).`,
-    );
+    return { repos, problems };
+  }
+
+  /**
+   * A paused Goal holds nothing: the modules it claimed are soft-released where their work can be
+   * picked up elsewhere. Returns what stays owned, and why.
+   */
+  private async releaseGoalHolds(goal: Goal): Promise<string[]> {
+    const kept: string[] = [];
+    for (const id of goal.claimed ?? []) {
+      const holder = await this.loadTask(id);
+      const owner = holder?.owner;
+      if (!holder || owner?.state !== "owned" || !sameRoot(owner.root, this.sess?.workspace))
+        continue;
+      const { repos, problems } = await this.softReleaseState(holder);
+      if (problems.length > 0) {
+        kept.push(`"${holder.title}" stays owned by ${owner.label}: ${problems.join("; ")}.`);
+        continue;
+      }
+      holder.owner = { ...owner, state: "soft", softAt: this.now(), pickup: repos };
+      this.ownerHistory(holder, "soft-release", { from: owner.label });
+      await this.saveTask(holder);
+    }
+    return kept;
   }
 
   async readTask(a: Record<string, unknown>): Promise<BoardReply> {

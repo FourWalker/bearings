@@ -246,7 +246,7 @@ describe("BoardChat", () => {
   it("gives a linked T3 thread a short resume summary, and an unlinked one only recent tasks", async () => {
     const store = await seedBoard();
     const chat = await openChat(store, "t1", ws);
-    for (let i = 0; i < 10; i++) await chat.createTask({ title: `Task ${i}` });
+    for (let i = 0; i < 10; i++) await chat.createTask({ title: `Task ${i}`, topLevel: true });
     await chat.turnStart("Hi");
     await chat.rebuildContext();
     expect(chat.context).toContain("…and 2 more: search them with board_find");
@@ -339,7 +339,10 @@ describe("BoardChat", () => {
     expect(t3.boardModeOn).toBe(false);
     expect(t3.context).toContain("standard conversation workflow");
     expect(t3.rules).toMatch(/^Token hygiene/);
-    await t3.createTask({ title: "Discussed feature" });
+    expect((await t3.createTask({ title: "Discussed feature" })).text).toMatch(
+      /^Not created: a new item needs a parent/,
+    );
+    await t3.createTask({ title: "Discussed feature", topLevel: true });
     expect(t3.sess?.taskId).toBeFalsy();
     const linked = await t3.runTool("board_link", { newTaskTitle: "Task" });
     expect(t3.boardModeOn).toBe(true);
@@ -371,7 +374,7 @@ describe("BoardChat", () => {
   it("finds work by a question's words, in plan steps too, and stops a duplicate task", async () => {
     const store = await seedBoard();
     const chat = await openChat(store, "t1", ws, "t3");
-    await chat.createTask({ title: "Marketplace" });
+    await chat.createTask({ title: "Marketplace", topLevel: true });
     await chat.createTask({
       title: "Catalog",
       parentId: "marketplace",
@@ -432,6 +435,7 @@ describe("BoardChat", () => {
   });
 
   it("runs a Goal: tasks in a row with light records, reconciling work done outside it", async () => {
+    let pushed = false;
     const git: BoardGit = {
       ...noGit,
       state: async () => ({
@@ -439,8 +443,8 @@ describe("BoardChat", () => {
         name: "nfx",
         branch: "main",
         head: "abc1234",
-        upstream: null,
-        ahead: null,
+        upstream: pushed ? "origin/main" : null,
+        ahead: pushed ? 0 : null,
         behind: null,
         dirty: 0,
         lastCommitAt: 0,
@@ -450,7 +454,7 @@ describe("BoardChat", () => {
     };
     const store = await seedBoard({ boardMode: true });
     const exec = await openChat(store, "t1", ws, "t3", git);
-    await exec.createTask({ title: "Feature" });
+    await exec.createTask({ title: "Feature", topLevel: true });
     await exec.createTask({ title: "Module", parentId: "feature" });
     for (const title of ["Alpha", "Beta", "Gamma"])
       await exec.createTask({ title, parentId: "module" });
@@ -482,10 +486,17 @@ describe("BoardChat", () => {
     ).toContain("settled by the model");
 
     // Paused; meanwhile Beta is finished directly in another thread.
-    expect((await exec.goalTool({ action: "pause", reason: "rate limit" })).text).toContain(
-      "Paused Goal g-ship-it: rate limit",
-    );
+    const paused = (await exec.goalTool({ action: "pause", reason: "rate limit" })).text;
+    expect(paused).toContain("Paused Goal g-ship-it: rate limit");
     expect(exec.rules).toContain("## Board Mode");
+    // A paused Goal holds nothing, but unpushed work is not handed to another workspace.
+    const owner = async () => (await store.loadTask("nefx", "module"))?.owner;
+    expect(paused).toContain('"Module" stays owned by main: nfx: branch main has no upstream');
+    expect((await owner())?.state).toBe("owned");
+    pushed = true;
+    await exec.goalTool({ action: "resume", goalId: "g-ship-it" });
+    await exec.goalTool({ action: "pause", reason: "rate limit" });
+    expect((await owner())?.state).toBe("soft");
     await other.linkTask({ taskId: "beta" });
     await other.updateTask({ status: "done", lastAction: "Fixed beta directly" });
     const resumed = (await other.goalTool({ action: "resume", goalId: "g-ship-it" })).text;
@@ -493,6 +504,7 @@ describe("BoardChat", () => {
     expect(resumed).toContain("G1 Retry count → 3, the default (settled by the model)");
     expect(resumed).toContain('Next task: gamma "Gamma"');
     await other.goalTool({ action: "task", taskId: "gamma" });
+    expect((await owner())?.state).toBe("owned");
     // The board shows which tasks an open Goal holds, and stops when it is finished.
     const goalOf = async (id: string) =>
       (await readBoardView(store, "nefx", 0))?.tasks.find((task) => task.id === id)?.goal;

@@ -216,6 +216,7 @@ export async function createTask(
   };
   if (level === 1) task.kind = input.kind === "backlog" ? "backlog" : "feature";
   if (input.services) task.services = [...input.services];
+  else if (parent?.services?.length) task.services = [...parent.services];
   if (input.mainService) task.mainService = input.mainService;
   if (input.bug) task.bug = true;
   if (input.fixes) {

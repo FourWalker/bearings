@@ -127,7 +127,7 @@ it.effect("records a thread's turns, answers and changed files on its board task
       expect(issues.map((link) => link.key)).toEqual(["refunds"]);
 
       yield* Effect.promise(async () => {
-        await chat.createTask({ title: "Billing" });
+        await chat.createTask({ title: "Billing", topLevel: true });
         const billing = (await store.loadTask("nefx", "billing"))!;
         billing.owner = { root: `${ws}-other`, label: "other", state: "owned", since: 0 };
         await store.saveTask("nefx", billing);

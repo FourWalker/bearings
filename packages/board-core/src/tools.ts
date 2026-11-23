@@ -39,7 +39,11 @@ export const SCHEMA = {
       parentId: {
         type: "string",
         description:
-          "Parent task id. Omit for a Level 1 master task; a master task's child is a Level 2 module, a module's child a Level 3 task.",
+          "Parent task id: a master task's child is a Level 2 module, a module's child a Level 3 task. Omit only with topLevel.",
+      },
+      topLevel: {
+        type: "boolean",
+        description: "Create a new Level 1 master task or feature, which has no parent.",
       },
       description: { type: "string", description: "One-line purpose." },
       plan: {
