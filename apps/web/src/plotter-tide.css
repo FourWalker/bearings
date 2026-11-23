@@ -28,3 +28,28 @@ html[data-theme-id="plotter-tide"]
   );
   backdrop-filter: blur(18px);
 }
+
+/* Claude-style type: a serif for headings, titles and tabs. Anthropic's own faces aren't
+   public, so this uses them when installed and falls back to close serifs. */
+html[data-theme-id="plotter-tide"] {
+  --plotter-serif:
+    "Anthropic Serif", "Tiempos Text", "Source Serif 4", "Iowan Old Style", "Palatino Linotype",
+    Georgia, serif;
+}
+
+html[data-theme-id="plotter-tide"]
+  :is(
+    h1,
+    h2,
+    h3,
+    [role="tab"],
+    [data-slot="dialog-title"],
+    [data-slot="alert-dialog-title"],
+    [data-slot="sheet-title"],
+    [data-slot="popover-title"],
+    [data-slot="empty-title"]
+  ):not([data-board-panel-heading], [data-board-card-title]) {
+  font-family: var(--plotter-serif);
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
