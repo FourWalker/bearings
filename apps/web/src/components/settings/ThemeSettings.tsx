@@ -10,7 +10,7 @@ import {
   UploadIcon,
 } from "lucide-react";
 import { useState, type ReactElement } from "react";
-import { BUILT_IN_THEMES } from "@t3tools/shared/themePalettes";
+import { WEB_BUILT_IN_THEMES } from "@t3tools/shared/themePalettes";
 import { useEnvironmentThemeDefinitions } from "../../hooks/useEnvironmentTheme";
 import { readThemeHalvesRaw } from "../../hooks/useTheme";
 import { cn } from "../../lib/utils";
@@ -51,7 +51,7 @@ import {
 import { ThemeWireframe } from "./ThemeWireframe";
 import { T, useGT } from "gt-react";
 
-const MAINTAINER_THEMES: ReadonlyArray<ThemeDefinition> = BUILT_IN_THEMES;
+const MAINTAINER_THEMES: ReadonlyArray<ThemeDefinition> = WEB_BUILT_IN_THEMES;
 
 function collectionVariantLabels(themes: ReadonlyArray<ThemeDefinition>): ReadonlyArray<string> {
   if (themes.length === 0) return [];

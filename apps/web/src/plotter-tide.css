@@ -1,6 +1,7 @@
 /* The original Plotter Tide corner scene overlays the shell, as in the VS Code theme.
    Its center stays clear for conversation text and pointer events pass through. */
-html[data-theme-id="plotter-tide"]::after {
+html[data-theme-id="plotter-tide"]::after,
+html[data-theme-id="plotter-tide-frozen"] body::before {
   content: "";
   position: fixed;
   inset: 0;
@@ -10,7 +11,8 @@ html[data-theme-id="plotter-tide"]::after {
   opacity: 0.55;
 }
 
-html.dark[data-theme-id="plotter-tide"]::after {
+html.dark[data-theme-id="plotter-tide"]::after,
+html.dark[data-theme-id="plotter-tide-frozen"] body::before {
   background-image: url("./assets/plotter-tide/plotter-tide-night.svg");
 }
 
@@ -31,13 +33,13 @@ html[data-theme-id="plotter-tide"]
 
 /* Claude-style type: a serif for headings, titles and tabs. Anthropic's own faces aren't
    public, so this uses them when installed and falls back to close serifs. */
-html[data-theme-id="plotter-tide"] {
+html:is([data-theme-id="plotter-tide"], [data-theme-id="plotter-tide-frozen"]) {
   --plotter-serif:
     "Anthropic Serif", "Tiempos Text", "Source Serif 4", "Iowan Old Style", "Palatino Linotype",
     Georgia, serif;
 }
 
-html[data-theme-id="plotter-tide"]
+html:is([data-theme-id="plotter-tide"], [data-theme-id="plotter-tide-frozen"])
   :is(
     h1,
     h2,
@@ -52,4 +54,113 @@ html[data-theme-id="plotter-tide"]
   font-family: var(--plotter-serif);
   font-weight: 500;
   letter-spacing: -0.005em;
+}
+
+html[data-theme-id="plotter-tide-frozen"] {
+  --surface-grain: var(--plotter-frozen-grain, none);
+  --surface-grain-size: 128px 128px;
+  --plotter-frozen-popup-tint: calc(30% + var(--plotter-frozen-tint, 32%) * 0.7);
+}
+
+html[data-theme-id="plotter-tide-frozen"] body {
+  isolation: isolate;
+  background-color: var(--app-theme-canvas);
+}
+
+html[data-theme-id="plotter-tide-frozen"] body::before {
+  z-index: -1;
+  filter: var(--plotter-frozen-scene-filter, blur(1px));
+}
+
+html[data-theme-id="plotter-tide-frozen"] [data-slot="sidebar-inset"] {
+  background-color: color-mix(
+    in srgb,
+    var(--background) var(--plotter-frozen-tint, 32%),
+    transparent
+  );
+}
+
+html[data-theme-id="plotter-tide-frozen"]
+  :is([data-slot="sidebar-inner"], [data-slot="sidebar"][data-mobile]) {
+  background-color: color-mix(in srgb, var(--sidebar) var(--plotter-frozen-tint, 32%), transparent);
+}
+
+html[data-theme-id="plotter-tide-frozen"]
+  :is(
+    [data-board-page],
+    [data-chat-workspace],
+    [data-chat-workspace] [data-workspace-area="conversation"]
+  ) {
+  background-color: transparent;
+}
+
+html[data-theme-id="plotter-tide-frozen"]
+  :is([data-board-panel], [data-board-card], [data-board-note], [data-board-surface] .bg-card) {
+  background-color: color-mix(
+    in srgb,
+    var(--plotter-frozen-card, var(--card))
+      var(--plotter-frozen-card-tint, var(--plotter-frozen-tint, 32%)),
+    transparent
+  );
+  background-image: var(--surface-grain);
+  background-size: var(--surface-grain-size);
+}
+
+html[data-theme-id="plotter-tide-frozen"] [data-board-note] {
+  --plotter-frozen-card-tint: var(--plotter-frozen-popup-tint);
+}
+
+html[data-theme-id="plotter-tide-frozen"] [data-note-colour="1"] {
+  --plotter-frozen-card: var(--board-note-1);
+}
+html[data-theme-id="plotter-tide-frozen"] [data-note-colour="2"] {
+  --plotter-frozen-card: var(--board-note-2);
+}
+html[data-theme-id="plotter-tide-frozen"] [data-note-colour="3"] {
+  --plotter-frozen-card: var(--board-note-3);
+}
+html[data-theme-id="plotter-tide-frozen"] [data-note-colour="4"] {
+  --plotter-frozen-card: var(--board-note-4);
+}
+html[data-theme-id="plotter-tide-frozen"] [data-note-colour="5"] {
+  --plotter-frozen-card: var(--board-note-5);
+}
+html[data-theme-id="plotter-tide-frozen"] [data-note-colour="6"] {
+  --plotter-frozen-card: var(--board-note-6);
+}
+
+html[data-theme-id="plotter-tide-frozen"] [data-board-surface] button.bg-card:hover {
+  --plotter-frozen-card: var(--accent);
+}
+
+html[data-theme-id="plotter-tide-frozen"]
+  :is(
+    .surface-glass,
+    .dialog-glass,
+    .dropdown-glass,
+    [data-slot="dialog-popup"],
+    [data-slot="alert-dialog-popup"],
+    [data-slot="popover-popup"],
+    [data-slot="menu-popup"],
+    [data-slot="sheet-popup"]
+  ) {
+  background-color: color-mix(
+    in srgb,
+    var(--app-theme-surface-overlay) var(--plotter-frozen-popup-tint),
+    transparent
+  );
+  background-image: var(--surface-grain);
+  background-size: var(--surface-grain-size);
+  -webkit-backdrop-filter: var(--plotter-frozen-popup-filter, blur(4px));
+  backdrop-filter: var(--plotter-frozen-popup-filter, blur(4px));
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  html[data-theme-id="plotter-tide-frozen"] {
+    --plotter-frozen-tint: 100% !important;
+  }
+
+  html[data-theme-id="plotter-tide-frozen"] body::before {
+    display: none;
+  }
 }

@@ -354,6 +354,21 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: [msg("transparent transparency solid menus dialogs composer")],
   },
   {
+    id: "plotter-frozen-transparency",
+    title: msg("Frozen transparency"),
+    to: "/settings/appearance",
+  },
+  {
+    id: "plotter-frozen-blur",
+    title: msg("Frozen blur"),
+    to: "/settings/appearance",
+  },
+  {
+    id: "plotter-frozen-grain",
+    title: msg("Frozen grain"),
+    to: "/settings/appearance",
+  },
+  {
     id: "diff-color-scheme",
     title: msg("Diff colors"),
     to: "/settings/diffs",

@@ -100,6 +100,29 @@ function startClientAppearance(): void {
         root.style.removeProperty("--glass-blur");
       }
     }
+    if (previous?.plotterTideFrozenTransparency !== settings.plotterTideFrozenTransparency) {
+      root.style.setProperty(
+        "--plotter-frozen-tint",
+        `${100 - settings.plotterTideFrozenTransparency}%`,
+      );
+    }
+    if (previous?.plotterTideFrozenBlur !== settings.plotterTideFrozenBlur) {
+      const blur = settings.plotterTideFrozenBlur;
+      root.style.setProperty("--plotter-frozen-scene-filter", blur ? `blur(${blur}px)` : "none");
+      root.style.setProperty(
+        "--plotter-frozen-popup-filter",
+        blur ? `blur(${blur * 4}px)` : "none",
+      );
+    }
+    if (previous?.plotterTideFrozenGrain !== settings.plotterTideFrozenGrain) {
+      const opacity = settings.plotterTideFrozenGrain / 400;
+      root.style.setProperty(
+        "--plotter-frozen-grain",
+        opacity
+          ? `url("data:image/svg+xml,%3Csvg viewBox='0 0 128 128' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.68' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23grain)' opacity='${opacity}'/%3E%3C/svg%3E")`
+          : "none",
+      );
+    }
     if (
       previous?.fontFamilySans !== settings.fontFamilySans ||
       previous.fontFamilyCode !== settings.fontFamilyCode ||

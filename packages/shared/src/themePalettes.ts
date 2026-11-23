@@ -1,6 +1,8 @@
 import { CLAY_POST_THEME } from "./clayPostTheme.ts";
 import { PLOTTER_TIDE_THEME } from "./plotterTideTheme.ts";
 
+const PLOTTER_TIDE_FROZEN_ID = "plotter-tide-frozen";
+
 export const BUILT_IN_THEME_IDS = [
   "t3-chat",
   "grove",
@@ -21,6 +23,7 @@ export const RESERVED_THEME_IDS: ReadonlySet<string> = new Set([
   "light",
   "dark",
   ...BUILT_IN_THEME_IDS,
+  PLOTTER_TIDE_FROZEN_ID,
   "t3-chat-dark",
   "t3-grove",
   "t3-ocean",
@@ -929,6 +932,11 @@ export const BUILT_IN_THEMES: ReadonlyArray<ThemeDefinition> = [
   OCEAN_THEME,
   EMBER_THEME,
   IRIS_THEME,
+];
+
+export const WEB_BUILT_IN_THEMES: ReadonlyArray<ThemeDefinition> = [
+  ...BUILT_IN_THEMES,
+  { ...PLOTTER_TIDE_THEME, id: PLOTTER_TIDE_FROZEN_ID, label: "Plotter Tide Frozen" },
 ];
 
 export function getThemeColorsForAppearance(

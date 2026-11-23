@@ -192,7 +192,10 @@ export function BoardPage() {
     board?.name ?? boards.data?.find((candidate) => candidate.id === boardId)?.name ?? null;
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
+      <div
+        data-board-page
+        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background"
+      >
         <WorkspacePageHeader
           electron={isElectron}
           reserveNativeControls

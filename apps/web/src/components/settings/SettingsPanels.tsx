@@ -496,6 +496,12 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.glassOpacity !== DEFAULT_UNIFIED_SETTINGS.glassOpacity
       ? [gt("Glass opacity")]
       : []),
+    ...(settings.plotterTideFrozenTransparency !==
+      DEFAULT_UNIFIED_SETTINGS.plotterTideFrozenTransparency ||
+    settings.plotterTideFrozenBlur !== DEFAULT_UNIFIED_SETTINGS.plotterTideFrozenBlur ||
+    settings.plotterTideFrozenGrain !== DEFAULT_UNIFIED_SETTINGS.plotterTideFrozenGrain
+      ? [gt("Plotter Tide Frozen")]
+      : []),
     ...(settings.diffColorScheme !== DEFAULT_UNIFIED_SETTINGS.diffColorScheme
       ? [gt("Diff colors")]
       : []),
@@ -719,6 +725,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       screenReaderWindowTitle: DEFAULT_UNIFIED_SETTINGS.screenReaderWindowTitle,
       environmentIdentificationMode: DEFAULT_UNIFIED_SETTINGS.environmentIdentificationMode,
       glassOpacity: DEFAULT_UNIFIED_SETTINGS.glassOpacity,
+      plotterTideFrozenTransparency: DEFAULT_UNIFIED_SETTINGS.plotterTideFrozenTransparency,
+      plotterTideFrozenBlur: DEFAULT_UNIFIED_SETTINGS.plotterTideFrozenBlur,
+      plotterTideFrozenGrain: DEFAULT_UNIFIED_SETTINGS.plotterTideFrozenGrain,
       panelAnimationDurationMs: DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs,
       sidebarProjectGroupingMode: DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode,
       sidebarProjectSortOrder: DEFAULT_UNIFIED_SETTINGS.sidebarProjectSortOrder,
