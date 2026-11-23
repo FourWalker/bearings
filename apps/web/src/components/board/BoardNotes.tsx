@@ -111,6 +111,13 @@ function NoteFlags(props: { readonly index: BoardIndex; readonly task: BoardTask
           {gt("⛔ {count} blocked below", { count: flags.blockedBelow })}
         </div>
       ) : null}
+      {props.task.goal !== null ? (
+        <div data-board-stamp="goal" className="text-xs">
+          {props.task.goal.status === "paused"
+            ? gt("🎯 Goal paused · {goal}", { goal: props.task.goal.title })
+            : gt("🎯 Goal · {goal}", { goal: props.task.goal.title })}
+        </div>
+      ) : null}
       {props.task.bug ? (
         <div className="text-xs">
           {flags.fixes !== null
@@ -420,6 +427,7 @@ function BoardTaskRow(props: {
       <BoardDotMark dot={dotOf(index, task)} />
       <span className="min-w-0 flex-1 truncate">
         {flags.blockedBy.length > 0 ? "⛔ " : ""}
+        {task.goal !== null ? "🎯 " : ""}
         {task.bug || flags.openFixes > 0 ? "🐞 " : ""}
         {task.title}
       </span>
@@ -495,6 +503,7 @@ export function BoardServiceRow(props: {
         <BoardDotMark dot={dotOf(index, task)} />
         <span className="min-w-0 flex-1 truncate font-medium text-sm">
           {flagsOf(index, task).blockedBy.length > 0 ? "⛔ " : ""}
+          {task.goal !== null ? "🎯 " : ""}
           {task.bug ? "🐞 " : ""}
           {task.title}
         </span>

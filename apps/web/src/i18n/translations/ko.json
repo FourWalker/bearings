@@ -12431,6 +12431,8 @@
   "fc9eb4dfce827fb3": "⛔ 하위에서 {count}개 막힘",
   "dfcc706ea826f0cb": "🐞 버그 수정 · {task}",
   "84bf46aef45d0f2c": "🐞 버그 수정",
+  "0a7c00fd48a855fc": "🎯 목표 · {goal}",
+  "6a2cdc99bcfef24e": "🎯 목표 일시 중지됨 · {goal}",
   "bebe6c7f1b6825a7": "🐞 열린 수정 {count}개",
   "32605a507b17249b": "🐞 하위에 열린 수정 {count}개",
   "7a03680bf03c53a6": "🤝 인계 가능 · {workspace}",

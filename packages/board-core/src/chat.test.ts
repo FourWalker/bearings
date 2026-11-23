@@ -493,7 +493,13 @@ describe("BoardChat", () => {
     expect(resumed).toContain("G1 Retry count → 3, the default (settled by the model)");
     expect(resumed).toContain('Next task: gamma "Gamma"');
     await other.goalTool({ action: "task", taskId: "gamma" });
+    // The board shows which tasks an open Goal holds, and stops when it is finished.
+    const goalOf = async (id: string) =>
+      (await readBoardView(store, "nefx", 0))?.tasks.find((task) => task.id === id)?.goal;
+    expect(await goalOf("gamma")).toEqual({ id: "g-ship-it", title: "Ship it", status: "running" });
+    expect(await goalOf("module")).toBeNull();
     expect((await other.goalTool({ action: "done" })).text).toContain("Goal g-ship-it is finished");
+    expect(await goalOf("gamma")).toBeNull();
   });
 
   it("creates a board on request and moves an unassigned record into it", async () => {

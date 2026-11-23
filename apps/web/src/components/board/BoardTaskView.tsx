@@ -238,6 +238,13 @@ function TaskHeader(props: BoardTaskViewProps & { readonly detail: BoardTaskDeta
           ))
         )}
         <Badge variant="outline">{levelLabel(task)}</Badge>
+        {task.goal !== null ? (
+          <Badge variant={task.goal.status === "paused" ? "warning" : "info"}>
+            {task.goal.status === "paused"
+              ? gt("🎯 Goal paused · {goal}", { goal: task.goal.title })
+              : gt("🎯 Goal · {goal}", { goal: task.goal.title })}
+          </Badge>
+        ) : null}
       </div>
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">

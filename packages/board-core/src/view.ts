@@ -12,6 +12,7 @@ import {
   planProgress,
   type PlanStep,
 } from "./plan.ts";
+import { listGoals } from "./goal.ts";
 import type { BoardStore } from "./store.ts";
 import { norm } from "./text.ts";
 import type {
@@ -103,6 +104,12 @@ export interface BoardViewTask {
   readonly updatedAt: number;
   /** The root of the workspace copy that owns the task's module or master task, if one does. */
   readonly ownerRoot: string | null;
+  /** The open Goal that holds the task: one thread is finishing it with the Goal's other tasks. */
+  readonly goal: {
+    readonly id: string;
+    readonly title: string;
+    readonly status: "running" | "paused";
+  } | null;
 }
 
 export interface BoardView {
@@ -194,6 +201,11 @@ export async function readBoardView(
     }
     return null;
   };
+  const goals = new Map<string, BoardViewTask["goal"]>();
+  for (const goal of await listGoals(store, boardId))
+    if (goal.status !== "done")
+      for (const taskId of goal.groups.flatMap((group) => group.taskIds))
+        goals.set(taskId, { id: goal.id, title: goal.title, status: goal.status });
   const tasks = await Promise.all(
     all.map(async (t: Task): Promise<BoardViewTask> => {
       const plan = await store.readText(store.planPath(boardId, t.id));
@@ -246,6 +258,7 @@ export async function readBoardView(
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,
         ownerRoot: ownerRoot(t),
+        goal: goals.get(t.id) ?? null,
       };
     }),
   );

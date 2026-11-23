@@ -12513,6 +12513,8 @@
   "fc9eb4dfce827fb3": "⛔ 下级有 {count} 个被阻塞",
   "dfcc706ea826f0cb": "🐞 缺陷修复 · {task}",
   "84bf46aef45d0f2c": "🐞 缺陷修复",
+  "0a7c00fd48a855fc": "🎯 目标 · {goal}",
+  "6a2cdc99bcfef24e": "🎯 目标已暂停 · {goal}",
   "bebe6c7f1b6825a7": "🐞 {count} 个未完成修复",
   "32605a507b17249b": "🐞 下级有 {count} 个未完成修复",
   "7a03680bf03c53a6": "🤝 可接手 · {workspace}",

@@ -165,8 +165,8 @@ thread must agree on what's done, blocked and verified, and on the next action.
 - Model-behaviour evals were not run, and the live check used Codex only (no Claude thread, no web
   board pass). `vp run check:changed` cannot finish in this checkout: mobile and marketing
   dependencies are not installed.
-- Goal Mode has no board UI yet (no Goal view or "part of a Goal" badge); it is driven from the
-  executor thread. Delegated and parallel strategies, the server wake-up and releasing module
+- Goal Mode is driven from the executor thread. The web board marks a task held by an open Goal (tree
+  row, card, task view; seen in the dev app), but has no Goal view of its own. Delegated and parallel strategies, the server wake-up and releasing module
   ownership on pause are not built.
 - Search has no aliases, file-path search, roll-up, `superseded_by` link or first-turn hint yet.
 - A task marked done from the board UI records the repo state of its owning workspace (or of the

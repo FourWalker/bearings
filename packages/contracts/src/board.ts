@@ -107,6 +107,14 @@ export const BoardTask = Schema.Struct({
   updatedAt: Schema.Number,
   /** The root of the workspace copy that owns the task's module or master task, if one does. */
   ownerRoot: Schema.NullOr(Schema.String),
+  /** The open Goal that holds the task: one thread is finishing it with the Goal's other tasks. */
+  goal: Schema.NullOr(
+    Schema.Struct({
+      id: Schema.String,
+      title: Schema.String,
+      status: Schema.Literals(["running", "paused"]),
+    }),
+  ),
 });
 export type BoardTask = typeof BoardTask.Type;
 

@@ -41,6 +41,7 @@ const task = (id: string, patch: Partial<BoardTask> = {}): BoardTask => ({
   createdAt: 0,
   updatedAt: 0,
   ownerRoot: null,
+  goal: null,
   ...patch,
 });
 

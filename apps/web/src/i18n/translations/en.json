@@ -12496,6 +12496,8 @@
   "fc9eb4dfce827fb3": "⛔ {count} blocked below",
   "dfcc706ea826f0cb": "🐞 Bug fix · {task}",
   "84bf46aef45d0f2c": "🐞 Bug fix",
+  "0a7c00fd48a855fc": "🎯 Goal · {goal}",
+  "6a2cdc99bcfef24e": "🎯 Goal paused · {goal}",
   "bebe6c7f1b6825a7": "🐞 {count} open fixes",
   "32605a507b17249b": "🐞 {count} open fixes below",
   "7a03680bf03c53a6": "🤝 ready · {workspace}",
