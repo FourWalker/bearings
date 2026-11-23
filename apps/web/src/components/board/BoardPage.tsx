@@ -61,6 +61,7 @@ import { BoardAssistant } from "./BoardAssistant";
 import { BoardPanel } from "./BoardPanel";
 import { BoardFileActions } from "./BoardFileActions";
 import { BoardSettingsButton } from "./BoardSettingsDialog";
+import { BoardGoals } from "./BoardGoals";
 import { BoardTaskView } from "./BoardTaskView";
 import { ChoiceSelect } from "./BoardTaskEditors";
 import { BoardRecommendations } from "./BoardRecommendations";
@@ -582,7 +583,8 @@ function BoardScreen(props: {
                 value === "2" ||
                 value === "3" ||
                 value === "svc" ||
-                value === "register"
+                value === "register" ||
+                value === "goals"
               )
                 setSearch({ view: value });
             }}
@@ -593,8 +595,9 @@ function BoardScreen(props: {
             <Toggle value="3">{gt("Level 3")}</Toggle>
             <Toggle value="svc">{gt("By service")}</Toggle>
             <Toggle value="register">{gt("Register")}</Toggle>
+            <Toggle value="goals">{gt("Goals")}</Toggle>
           </ToggleGroup>
-          {props.mode !== "register" ? (
+          {props.mode !== "register" && props.mode !== "goals" ? (
             <ToggleGroup
               data-board-status-filter
               aria-label={gt("Task status")}
@@ -627,6 +630,15 @@ function BoardScreen(props: {
                 })
               }
               onOpen={(task) => openTask(task, "decisions")}
+            />
+          ) : props.mode === "goals" ? (
+            <BoardGoals
+              environmentId={props.environmentId}
+              board={board}
+              index={index}
+              onChanged={props.onChanged}
+              onOpenTask={openTask}
+              onOpenThread={props.onOpenThread}
             />
           ) : (
             <BoardArea

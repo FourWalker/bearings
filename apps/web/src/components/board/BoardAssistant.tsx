@@ -1,14 +1,11 @@
 import { useAtomValue } from "@effect/atom-react";
-import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
-  DEFAULT_SERVER_SETTINGS,
   type EnvironmentId,
   type ProjectId,
   type ScopedThreadRef,
   ThreadId,
 } from "@t3tools/contracts";
-import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
-import { resolveNewThreadModelSelection } from "@t3tools/shared/usageLimits";
 import { useNavigate } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
 import { T, useGT } from "gt-react";
@@ -40,23 +37,16 @@ import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { cn, newMessageId, newThreadId } from "~/lib/utils";
-import { resolveProjectDefaultProviderModelSelection } from "~/providerInstances";
-import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { boardEnvironment } from "~/state/board";
-import {
-  readProject,
-  readThreadShell,
-  useThreadProjection,
-  useThreadShell,
-} from "~/state/entities";
+import { readThreadShell, useThreadProjection, useThreadShell } from "~/state/entities";
 import { formatEnvironmentQueryError } from "~/state/query";
-import { environmentServerConfigsAtom } from "~/state/server";
 import { environmentThreadDetails, threadEnvironment } from "~/state/threads";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { useOrchestrationCommand } from "~/state/use-orchestration-command";
 import { buildThreadRouteParams } from "~/threadRoutes";
 
 import { assistantBubbles, isAssistantBusy, latestExchange } from "./board.logic";
+import { boardThreadModelSelection } from "./boardThread";
 import { TackAvatar, useTackLook } from "./TackAvatar";
 import { tackMood, tackNoteCount, type TackMotion, type TackSkin } from "./tackAvatar.logic";
 
@@ -158,23 +148,7 @@ export function BoardAssistant(props: {
         if (result._tag === "Failure") fail(gt("The message could not be sent."));
         return;
       }
-      const configs = appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId);
-      const settings = configs?.settings ?? DEFAULT_SERVER_SETTINGS;
-      const providers = configs?.providers ?? [];
-      const modelSelection = resolveNewThreadModelSelection({
-        defaultSelection:
-          resolveProjectSettings(
-            settings,
-            projectId,
-            readProject(scopeProjectRef(environmentId, projectId)),
-          ).settings.defaultModelSelection ??
-          resolveProjectDefaultProviderModelSelection(providers, settings, projectId),
-        fallbackSelection: settings.fallbackModelSelection ?? null,
-        providers,
-        settings,
-        projectId,
-        now: Date.now(),
-      }).selection;
+      const modelSelection = boardThreadModelSelection(environmentId, projectId);
       if (modelSelection === null) {
         fail(gt("No model is set up for this project."));
         return;

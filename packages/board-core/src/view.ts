@@ -13,6 +13,7 @@ import {
   type PlanStep,
 } from "./plan.ts";
 import { listGoals } from "./goal.ts";
+import { evidenceLine } from "./verify.ts";
 import type { BoardStore } from "./store.ts";
 import { norm } from "./text.ts";
 import type {
@@ -110,12 +111,14 @@ export interface BoardViewTask {
     readonly title: string;
     readonly status: "running" | "paused";
   } | null;
+  /** What a finished task left behind (commit, files, check), in one line; null when not recorded. */
+  readonly evidence: string | null;
 }
 
 export interface BoardViewGoal {
   readonly id: string;
   readonly title: string;
-  readonly status: "running" | "paused";
+  readonly status: "running" | "paused" | "done";
   readonly mode: "auto" | "ask";
   readonly pausedReason: string | null;
   /** The session running it now. */
@@ -128,7 +131,25 @@ export interface BoardViewGoal {
     readonly settled: string;
     readonly by: "model" | "person";
   }>;
+  /** The Goal's order of work: a group starts once the groups it depends on are finished. */
+  readonly groups: ReadonlyArray<{
+    readonly id: string;
+    readonly title: string;
+    readonly taskIds: ReadonlyArray<string>;
+    readonly dependsOn: ReadonlyArray<string>;
+    readonly delegated: boolean;
+    /** The session of the child thread working the group. */
+    readonly worker: string | null;
+    readonly report: string | null;
+  }>;
+  /** Every chat that has run the Goal or one of its groups, the current executor included. */
+  readonly chats: ReadonlyArray<BoardViewChat>;
+  readonly createdAt: number;
+  readonly updatedAt: number;
 }
+
+/** How many finished Goals the board keeps in view. */
+const FINISHED_GOALS_SHOWN = 20;
 
 export interface BoardView {
   readonly id: string;
@@ -151,6 +172,8 @@ export interface BoardView {
   readonly unlinked: ReadonlyArray<BoardViewChat>;
   /** Goals not finished yet, newest first. Progress is read from their tasks. */
   readonly goals: ReadonlyArray<BoardViewGoal>;
+  /** The latest finished Goals, newest first. */
+  readonly finishedGoals: ReadonlyArray<BoardViewGoal>;
 }
 
 export const liveOf = (s: Pick<Session, "status" | "heartbeatAt">, now: number): BoardChatLive =>
@@ -223,12 +246,14 @@ export async function readBoardView(
   };
   const goals = new Map<string, BoardViewTask["goal"]>();
   const openGoals: BoardViewGoal[] = [];
+  const finishedGoals: BoardViewGoal[] = [];
   for (const goal of await listGoals(store, boardId)) {
-    if (goal.status === "done") continue;
     const taskIds = goal.groups.flatMap((group) => group.taskIds);
-    for (const taskId of taskIds)
-      goals.set(taskId, { id: goal.id, title: goal.title, status: goal.status });
-    openGoals.push({
+    if (goal.status !== "done")
+      for (const taskId of taskIds)
+        goals.set(taskId, { id: goal.id, title: goal.title, status: goal.status });
+    const ran = new Set([...goal.executors, ...goal.groups.flatMap((group) => group.worker ?? [])]);
+    (goal.status === "done" ? finishedGoals : openGoals).push({
       id: goal.id,
       title: goal.title,
       status: goal.status,
@@ -237,6 +262,18 @@ export async function readBoardView(
       executor: goal.executor,
       taskIds,
       decisions: goal.decisions.map(({ id, title, settled, by }) => ({ id, title, settled, by })),
+      groups: goal.groups.map((group) => ({
+        id: group.id,
+        title: group.title,
+        taskIds: group.taskIds,
+        dependsOn: group.dependsOn,
+        delegated: !!group.delegated,
+        worker: group.worker ?? null,
+        report: group.report ?? null,
+      })),
+      chats: chats.filter((chat) => ran.has(chat.sessionId)),
+      createdAt: goal.createdAt,
+      updatedAt: goal.updatedAt,
     });
   }
   const tasks = await Promise.all(
@@ -292,6 +329,7 @@ export async function readBoardView(
         updatedAt: t.updatedAt,
         ownerRoot: ownerRoot(t),
         goal: goals.get(t.id) ?? null,
+        evidence: t.status === "done" && t.doneEvidence ? evidenceLine(t.doneEvidence) : null,
       };
     }),
   );
@@ -309,6 +347,9 @@ export async function readBoardView(
       .map((s) => chatOf(s, now))
       .filter((c) => c.live !== "ended"),
     goals: openGoals.toSorted((a, b) => b.id.localeCompare(a.id)),
+    finishedGoals: finishedGoals
+      .toSorted((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, FINISHED_GOALS_SHOWN),
   };
 }
 

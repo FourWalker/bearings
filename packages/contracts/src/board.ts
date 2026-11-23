@@ -115,13 +115,15 @@ export const BoardTask = Schema.Struct({
       status: Schema.Literals(["running", "paused"]),
     }),
   ),
+  /** What a finished task left behind (commit, files, check), in one line; null when not recorded. */
+  evidence: Schema.NullOr(Schema.String),
 });
 export type BoardTask = typeof BoardTask.Type;
 
 export const BoardGoal = Schema.Struct({
   id: Schema.String,
   title: Schema.String,
-  status: Schema.Literals(["running", "paused"]),
+  status: Schema.Literals(["running", "paused", "done"]),
   mode: Schema.Literals(["auto", "ask"]),
   pausedReason: Schema.NullOr(Schema.String),
   /** The session running it now. */
@@ -136,6 +138,23 @@ export const BoardGoal = Schema.Struct({
       by: Schema.Literals(["model", "person"]),
     }),
   ),
+  /** The Goal's order of work: a group starts once the groups it depends on are finished. */
+  groups: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      title: Schema.String,
+      taskIds: Schema.Array(Schema.String),
+      dependsOn: Schema.Array(Schema.String),
+      delegated: Schema.Boolean,
+      /** The session of the child thread working the group. */
+      worker: Schema.NullOr(Schema.String),
+      report: Schema.NullOr(Schema.String),
+    }),
+  ),
+  /** Every chat that has run the Goal or one of its groups, the current executor included. */
+  chats: Schema.Array(BoardChat),
+  createdAt: Schema.Number,
+  updatedAt: Schema.Number,
 });
 export type BoardGoal = typeof BoardGoal.Type;
 
@@ -168,6 +187,8 @@ export const BoardView = Schema.Struct({
   unlinked: Schema.Array(BoardChat),
   /** Goals not finished yet. Progress is read from their tasks. */
   goals: Schema.Array(BoardGoal),
+  /** The latest finished Goals, newest first. */
+  finishedGoals: Schema.Array(BoardGoal),
 });
 export type BoardView = typeof BoardView.Type;
 

@@ -1,4 +1,10 @@
-import { type BoardChat, type BoardTask, ProjectId } from "@t3tools/contracts";
+import {
+  type BoardChat,
+  type BoardGoal,
+  type BoardTask,
+  ProjectId,
+  ThreadId,
+} from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -12,7 +18,12 @@ import {
   collisionsOf,
   externalLinksOf,
   flagsOf,
+  goalLanes,
+  goalLaunchPreview,
+  goalScopeRows,
+  goalStartPrompt,
   goalsOf,
+  goalThreadOf,
   indexBoard,
   levelKindOf,
   openDecisionCount,
@@ -46,7 +57,18 @@ const task = (id: string, patch: Partial<BoardTask> = {}): BoardTask => ({
   updatedAt: 0,
   ownerRoot: null,
   goal: null,
+  evidence: null,
   ...patch,
+});
+
+const group = (id: string, taskIds: Array<string>, dependsOn: Array<string> = []) => ({
+  id,
+  title: id,
+  taskIds,
+  dependsOn,
+  delegated: false,
+  worker: null,
+  report: null,
 });
 
 const chat = (sessionId: string, patch: Partial<BoardChat> = {}): BoardChat => ({
@@ -114,19 +136,73 @@ it("reads a Goal's progress from its tasks and skips ones no longer on the board
     task("b"),
     task("c", { status: "paused" }),
   ]);
-  const goal = {
+  const goal: BoardGoal = {
     id: "g-1",
     title: "Ship",
-    status: "running" as const,
-    mode: "auto" as const,
+    status: "running",
+    mode: "auto",
     pausedReason: null,
-    executor: null,
+    executor: "s-exec",
     taskIds: ["c", "a", "gone", "b"],
     decisions: [],
+    groups: [
+      { ...group("A", ["a"]) },
+      { ...group("B", ["c", "gone"], ["A"]) },
+      { ...group("C", ["b"], ["B"]) },
+      { ...group("D", ["b"]), delegated: true, worker: "s-child" },
+    ],
+    chats: [
+      chat("s-child", { threadId: ThreadId.make("t-child") }),
+      chat("s-old", { threadId: ThreadId.make("t-old") }),
+      chat("s-exec", { threadId: ThreadId.make("t-exec") }),
+    ],
+    createdAt: 0,
+    updatedAt: 0,
   };
   expect(goalsOf(index, [goal])).toMatchObject([
     { done: 1, total: 3, open: [{ id: "c" }, { id: "b" }] },
   ]);
+  // Lanes: A is finished, B is the executor's group in hand, C waits for B, D is with a child.
+  expect(goalLanes(index, goal).map((lane) => [lane.group.id, lane.state, lane.done])).toEqual([
+    ["A", "done", 1],
+    ["B", "working", 0],
+    ["C", "waiting", 0],
+    ["D", "working", 0],
+  ]);
+  expect(goalLanes(index, goal)[3]?.worker?.sessionId).toBe("s-child");
+  expect(goalLanes(index, { ...goal, status: "paused" })[1]?.state).toBe("ready");
+  // The board talks to the executor; once paused, to the last thread that ran it, never a child.
+  expect(goalThreadOf(goal)?.sessionId).toBe("s-exec");
+  expect(goalThreadOf({ ...goal, executor: null })?.sessionId).toBe("s-old");
+  expect(goalThreadOf({ ...goal, chats: [chat("s-exec")] })).toBeNull();
+});
+
+it("previews a Goal as the open leaf tasks no Goal holds, one group per parent", () => {
+  const held = { id: "g-1", title: "Ship", status: "running" as const };
+  const index = indexBoard([
+    task("checkout"),
+    task("payments", { level: 2, parentId: "checkout" }),
+    task("refund", { level: 3, parentId: "payments" }),
+    task("capture", { level: 3, parentId: "payments", status: "done" }),
+    task("cart", { level: 2, parentId: "checkout" }),
+    task("coupons", { level: 3, parentId: "cart", goal: held }),
+    task("empty", { level: 2, parentId: "checkout" }),
+    task("old", { status: "done" }),
+  ]);
+  const preview = goalLaunchPreview(index, ["checkout", "payments"]);
+  expect(preview.map((entry) => [entry.parent?.id, entry.tasks.map((t) => t.id)])).toEqual([
+    ["payments", ["refund"]],
+    ["checkout", ["empty"]],
+  ]);
+  // Only features and modules with open work are offered; a module whose task is held is not.
+  expect(goalScopeRows(index).map((row) => [row.task.id, row.open])).toEqual([
+    ["checkout", 2],
+    ["payments", 1],
+    ["empty", 1],
+  ]);
+  expect(goalStartPrompt(["payments", "cart"], "auto")).toContain(
+    'board_goal {action: "start", scope: ["payments","cart"], mode: "auto"}',
+  );
 });
 
 describe("board tree", () => {

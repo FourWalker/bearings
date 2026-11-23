@@ -9,7 +9,7 @@ import type {
 } from "@t3tools/contracts";
 
 /** The board app's views: a column per master task, one level at a time, or a column per service. */
-export type BoardViewMode = "tree" | "1" | "2" | "3" | "svc" | "register";
+export type BoardViewMode = "tree" | "1" | "2" | "3" | "svc" | "register" | "goals";
 export type BoardFilter = "active" | "paused" | "done" | "all";
 export type BoardTaskTab = "overview" | "threads" | "plan" | "handoff" | "subtasks" | "decisions";
 export type RecommendationFilter = "open" | "decided" | "all";
@@ -28,7 +28,7 @@ export interface BoardSearch {
   readonly recommendationFilter?: RecommendationFilter | undefined;
 }
 
-const VIEWS: ReadonlyArray<string> = ["tree", "1", "2", "3", "svc", "register"];
+const VIEWS: ReadonlyArray<string> = ["tree", "1", "2", "3", "svc", "register", "goals"];
 const FILTERS: ReadonlyArray<string> = ["active", "paused", "done", "all"];
 const TABS: ReadonlyArray<string> = [
   "overview",
@@ -592,3 +592,115 @@ export function chatsForView(
         LIVE_ORDER[a.chat.live] - LIVE_ORDER[b.chat.live] || b.chat.updatedAt - a.chat.updatedAt,
     );
 }
+
+export interface BoardGoalLane {
+  readonly group: BoardGoal["groups"][number];
+  readonly tasks: ReadonlyArray<BoardTask>;
+  readonly done: number;
+  /** waiting: a group it depends on is unfinished. working: the executor or a child is on it. */
+  readonly state: "done" | "working" | "ready" | "waiting";
+  /** The child thread the group was handed to. */
+  readonly worker: BoardChat | null;
+}
+
+/** A Goal's groups as lanes, in its order, each with where it stands. Read from the tasks. */
+export function goalLanes(index: BoardIndex, goal: BoardGoal): ReadonlyArray<BoardGoalLane> {
+  const tasksOf = (group: BoardGoal["groups"][number]) =>
+    group.taskIds.flatMap((id) => index.byId.get(id) ?? []);
+  const finished = new Set(
+    goal.groups
+      .filter((group) => tasksOf(group).every((task) => task.status === "done"))
+      .map((group) => group.id),
+  );
+  // The executor works its own groups one at a time, in order: the first open one is in hand.
+  const inHand = goal.groups.find(
+    (group) =>
+      !finished.has(group.id) &&
+      !group.delegated &&
+      group.dependsOn.every((id) => finished.has(id)),
+  )?.id;
+  return goal.groups.map((group) => {
+    const tasks = tasksOf(group);
+    const open = group.dependsOn.every((id) => finished.has(id));
+    const running = goal.status === "running" && (group.delegated || group.id === inHand);
+    return {
+      group,
+      tasks,
+      done: tasks.filter((task) => task.status === "done").length,
+      state: finished.has(group.id) ? "done" : !open ? "waiting" : running ? "working" : "ready",
+      worker: goal.chats.find((chat) => chat.sessionId === group.worker) ?? null,
+    };
+  });
+}
+
+/** The thread to talk to about a Goal: its executor, or the last thread that ran it. */
+export function goalThreadOf(goal: BoardGoal): BoardChat | null {
+  const held = goal.chats.filter((chat) => chat.threadId !== null);
+  return (
+    held.find((chat) => chat.sessionId === goal.executor) ??
+    held.find((chat) => !goal.groups.some((group) => group.worker === chat.sessionId)) ??
+    null
+  );
+}
+
+export interface BoardGoalScopeRow {
+  readonly task: BoardTask;
+  /** Open tasks without subtasks under it: what a Goal over it would work. */
+  readonly open: number;
+}
+
+/** What a Goal can be started over: features and modules with open work no Goal holds yet. */
+export function goalScopeRows(index: BoardIndex): ReadonlyArray<BoardGoalScopeRow> {
+  const rows = (task: BoardTask): ReadonlyArray<BoardGoalScopeRow> => {
+    const open = goalLaunchPreview(index, [task.id]).reduce(
+      (count, group) => count + group.tasks.length,
+      0,
+    );
+    if (open === 0 || task.level === 3) return [];
+    return [{ task, open }, ...index.kidsOf(task.id).flatMap(rows)];
+  };
+  return index.tasks
+    .filter((task) => task.parentId === null)
+    .toSorted((a, b) => a.title.localeCompare(b.title))
+    .flatMap(rows);
+}
+
+/**
+ * The groups a Goal over `scope` would work, as the server plans them: each id's open tasks that
+ * have no subtasks, one group per parent. Tasks already in an open Goal are left out.
+ */
+export function goalLaunchPreview(
+  index: BoardIndex,
+  scope: ReadonlyArray<string>,
+): ReadonlyArray<{ readonly parent: BoardTask | null; readonly tasks: ReadonlyArray<BoardTask> }> {
+  const leaves = (task: BoardTask): ReadonlyArray<BoardTask> => {
+    const kids = index.kidsOf(task.id);
+    return kids.length === 0 ? [task] : kids.flatMap(leaves);
+  };
+  const seen = new Set<string>();
+  const groups = new Map<string, Array<BoardTask>>();
+  for (const task of scope.flatMap((id) => index.byId.get(id) ?? []).flatMap(leaves)) {
+    if (task.status === "done" || task.goal !== null || seen.has(task.id)) continue;
+    seen.add(task.id);
+    const key = task.parentId ?? task.id;
+    groups.set(key, [...(groups.get(key) ?? []), task]);
+  }
+  return [...groups].map(([parentId, tasks]) => ({
+    parent: index.byId.get(parentId) ?? null,
+    tasks,
+  }));
+}
+
+// What the board says to a Goal's thread. A Goal is driven only by its thread, so the board
+// asks that thread instead of writing the Goal itself. English: the model reads these.
+export const goalStartPrompt = (scope: ReadonlyArray<string>, mode: BoardGoal["mode"]) =>
+  `Start a Goal on the board over ${scope.join(", ")} in ${mode} mode: call board_goal {action: "start", scope: ${JSON.stringify(scope)}, mode: "${mode}"}, then work through it until it is finished.`;
+export const goalPausePrompt = (goalId: string) =>
+  `Pause Goal ${goalId} now: call board_goal {action: "pause", reason: "paused from the board"} and stop.`;
+export const goalResumePrompt = (goalId: string) =>
+  `Resume Goal ${goalId}: call board_goal {action: "resume", goalId: "${goalId}"} and carry on until it is finished.`;
+export const goalAnswerPrompt = (
+  goalId: string,
+  decision: BoardGoal["decisions"][number],
+  answer: string,
+) => `My answer to open question ${decision.id} of Goal ${goalId} ("${decision.title}"): ${answer}`;

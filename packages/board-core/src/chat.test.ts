@@ -569,7 +569,18 @@ describe("BoardChat", () => {
     ]);
     expect((await other.goalTool({ action: "done" })).text).toContain("Goal g-ship-it is finished");
     expect(await goalOf("gamma")).toBeNull();
-    expect((await readBoardView(store, "nefx", 0))?.goals).toEqual([]);
+    const finished = await readBoardView(store, "nefx", 0);
+    expect(finished?.goals).toEqual([]);
+    // A finished Goal stays readable, with its order of work and the chats that ran it.
+    expect(finished?.finishedGoals).toMatchObject([
+      { id: "g-ship-it", status: "done", taskIds: ["alpha", "beta", "gamma"] },
+    ]);
+    expect(finished?.finishedGoals[0]?.groups.flatMap((group) => group.taskIds)).toEqual([
+      "alpha",
+      "beta",
+      "gamma",
+    ]);
+    expect(finished?.finishedGoals[0]?.chats.map((chat) => chat.sessionId)).toContain("t2");
   });
 
   it("hands a Goal's group to a child thread, which works it and reports once", async () => {

@@ -205,11 +205,17 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
       try: () => BoardFile.hasArchivedThreads(store, input.boardId),
       catch: failed,
     });
+    const withChats = (goals: typeof raw.goals) =>
+      Effect.forEach(goals, (goal) =>
+        resolve(goal.chats).pipe(Effect.map((chats) => ({ ...goal, chats }))),
+      );
     return {
       ...raw,
       workspaces,
       tasks,
       unlinked,
+      goals: yield* withChats(raw.goals),
+      finishedGoals: yield* withChats(raw.finishedGoals),
       ...(hasArchivedThreads ? { hasArchivedThreads } : {}),
     } satisfies BoardView;
   });
