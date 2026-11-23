@@ -111,6 +111,13 @@ thread must agree on what's done, blocked and verified, and on the next action.
   final executable stays available for electron-builder's resource editing.
   Appearance settings now use the shared built-in theme list, matching the command palette.
   Plotter Tide also honors the existing Glass opacity control.
+- The Windows x64 transfer build `0.1.11-board.5` includes Clay Post, Plotter Tide's serif
+  headings, and the board masthead. On a fresh extraction, both launchers worked against
+  isolated data. The desktop app showed both themes in light and dark, styled the board settings
+  dialog, kept the palette selection after reload, and opened the standard composer from New
+  chat. The extracted native payload also passed its probes.
+- Mobile includes both Clay Post palettes and the generated Uniwind types. Its appearance tests
+  and typecheck passed. Native phone layout checks remain deferred.
 - **Phase 6 remains deferred.** Mobile and Board Mode with T3-created worktrees.
 
 ## How to run it (dev, isolated)
