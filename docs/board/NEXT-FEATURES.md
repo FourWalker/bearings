@@ -1,6 +1,9 @@
 # Project Board — next features (design brief)
 
-Status: design agreed in discussion (2026-11-23), not yet implemented. Goal Mode (§5–§8)
+Status: design agreed in discussion (2026-11-23). Built so far: protocol profiles for plain and
+task threads (§9.1–9.3), ranked search with the duplicate check (§2.3, §2.5 in part), done evidence
+with verification levels 0–1 (§7.3–7.4), and Goal Mode's inline strategy (§5–§7, §9.4). See
+[PROGRESS.md](PROGRESS.md) for what is and is not verified. Goal Mode (§5–§8)
 replaces the earlier Dispatch, Batch and Orchestra sections.
 Scope: the finished product, not the current repo state. Read alongside
 [INTEGRATION.md](INTEGRATION.md), [RECONCILIATION.md](RECONCILIATION.md) and [PROGRESS.md](PROGRESS.md).

@@ -1,4 +1,4 @@
-# Board integration: where it stands (2026-11-22)
+# Board integration: where it stands (2026-11-23)
 
 Resume from here. The design is in [INTEGRATION.md](INTEGRATION.md) and the concept and protocol
 mapping in [RECONCILIATION.md](RECONCILIATION.md).
@@ -35,6 +35,10 @@ mapping in [RECONCILIATION.md](RECONCILIATION.md).
 | P3a    | Editing from T3, first slice: `board-core/edit.ts` is the one implementation of task edits (agents' board tools now share its create, decision, link and delegated-step code); guarded `board.editTask` (one typed op per change) and `board.createTask` RPCs, serialized per board; in the task views: title, purpose, status, must-dos and to-dos, phase plan (edit, tick steps, step → module/task), living handoff, master plan, docs, links, service tags, new module/task, decisions (file, decide, drop, reopen, recommendations with R#); "+ New task" on the board                                                                                                       | see `git log`           |
 | P3b    | Editing, rest: move and promote (agents' tools share the code), ownership (assign a workspace copy, soft release with the push/clean/checkpoint checks, reclaim, release), editing a decision's text and its "How implemented" record, board settings ⚙ (`board.settings` / `board.editBoard`, settings-write scope: name, workspaces, services, project rules, Board Mode, registers). Fixes from the owner's review: tree columns no longer overlap (pinned grid tracks, long words wrap); modules and tasks open in one big modal (`open=`) over the board or a master task's page (`task=`), and a task that becomes a master task moves to its page                          | see `git log`           |
 | Mod    | Claude mod switched to board-core (vendored by `tools/sync-board-core.mjs`; thin `register.ts`; stands down under `T3_BOARD_HOST`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | board project `e4dbb9d` |
+| Core 1 | Protocol profiles for T3 threads: rules sent once per thread and after compaction, task state only when changed outside the thread; a short core for linked threads, with out-of-scope, decision and ownership rules delivered in the tool reply that meets them; plain threads get one hygiene line. The Claude mod keeps its full text                                                                                                                                                                                                                                                                                                                                          | `4746e7a`               |
+| Core 2 | Search: `board_find` ranks across titles, plan step names, decisions, docs and purposes; finished tasks are reference only; `board_create_task` lists similar work first (`createAnyway` overrides)                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `4746e7a`               |
+| Core 3 | Done evidence: marking a task done records commit, files and latest check; `verifyDone` answers verified / re-run / not merged here / unverified; an unverified finished dependency shows in the resume summary                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `0ce72a9`               |
+| Core 4 | Goal Mode, inline: `board_goal` (start, resume, status, task, done, decide, include, pause); one executor thread, groups by module ordered by `blocked_by`, Auto and ask modes, drift on resume, one active Goal per task. Goals are stored in the board's `goals/` folder                                                                                                                                                                                                                                                                                                                                                                                                        | `2f5e9f5`               |
 
 Each step passed `vp run check:changed`, apart from the Windows-only failures listed below.
 
@@ -150,6 +154,16 @@ thread must agree on what's done, blocked and verified, and on the next action.
 - One `BoardChats` is shared by every user of `BoardChats.layer` in a build (checked against Effect).
 
 ## Not verified yet / known gaps
+
+- Core 1 to 4 (2026-11-23) passed board-core and server board tests, typechecks and lint, but have
+  not run in a real thread, and the model-behaviour evals were not run. `vp run check:changed` cannot
+  finish in this checkout: mobile and marketing dependencies are not installed.
+- Goal Mode has no board UI yet (no Goal view or "part of a Goal" badge); it is driven from the
+  executor thread. Delegated and parallel strategies, the server wake-up and releasing module
+  ownership on pause are not built.
+- Search has no aliases, file-path search, roll-up, `superseded_by` link or first-turn hint yet.
+- Tasks marked done from the board UI record no evidence, so they read as "done, unverified".
+- The design for what comes next is in [NEXT-FEATURES.md](NEXT-FEATURES.md).
 
 - The board app still shows T3 threads unused since a restart as "offline", and its jump link
   (`claude://…`) is wrong for T3 threads. T3's own Board page has neither problem.
