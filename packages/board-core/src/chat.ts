@@ -53,7 +53,7 @@ import {
   toolRules,
 } from "./protocol.ts";
 import { BoardStore, LEVEL_NAME, findBoard, levelOf } from "./store.ts";
-import { namedTask, queryWords, type SearchHit, searchTasks } from "./search.ts";
+import { findOnBoard, namedTask, queryWords } from "./search.ts";
 import { type DoneCheck, doneEvidence, evidenceLine, verifyDone } from "./verify.ts";
 import { checksForTask } from "./view.ts";
 import {
@@ -2034,39 +2034,12 @@ ${this.related}`
   }
 
   /** One line per search hit: where it sits, its state, and any plan steps that matched. */
-  private async searchBoard(
+  private searchBoard(
     query: string,
     service = "",
     level?: Level,
   ): Promise<{ lines: string[]; all: Task[] }> {
-    const all = await this.listTasks();
-    const byId = new Map(all.map((x) => [x.id, x]));
-    const pathOf = (x: Task) => {
-      const p: string[] = [];
-      let c: Task | undefined = x;
-      for (let i = 0; i < 3 && c; i++) {
-        p.unshift(c.title);
-        c = c.parentId ? byId.get(c.parentId) : undefined;
-      }
-      return p.join(" › ");
-    };
-    const line = (
-      x: Task,
-      steps: ReadonlyArray<{ id: string; text: string }> = [],
-      more: Partial<Pick<SearchHit, "files" | "replaces" | "below">> = {},
-    ) =>
-      `- ${x.id} [L${levelOf(x)}${levelOf(x) === 1 ? ` ${x.kind ?? "feature"}` : ""}, ${x.status === "done" ? "done: reference only" : x.status}] ${pathOf(x)}${x.services?.length ? ` · services: ${x.services.join(", ")}` : ""}${steps.length ? ` · planned as ${steps.map((step) => `${step.id} – ${clip(step.text, 60)}`).join("; ")}` : ""}${more.files?.length ? ` · touched ${more.files.slice(0, 3).map(base).join(", ")}` : ""}${more.replaces?.length ? ` · replaces ${more.replaces.join(", ")} (superseded)` : ""}${more.below?.length ? ` · ${more.below.length} matching tasks below: ${more.below.slice(0, 5).join(", ")}` : ""}`;
-    const inService = all.filter(
-      (x) => !service || (x.services ?? []).includes(service) || x.mainService === service,
-    );
-    if (queryWords(query).length === 0) return { lines: inService.map((x) => line(x)), all };
-    const docs = await Promise.all(
-      inService.map(async (task) => ({ task, plan: await this.readPlan(task.id) })),
-    );
-    return {
-      lines: searchTasks(docs, query, level).map((hit) => line(hit.task, hit.steps, hit)),
-      all,
-    };
+    return findOnBoard(this.store, this.boardId, query, { service, level });
   }
 
   async findTasks(a: Record<string, unknown>): Promise<BoardReply> {

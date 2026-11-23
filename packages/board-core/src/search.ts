@@ -6,7 +6,8 @@
  * @module board-core/search
  */
 import { planPhases } from "./plan.ts";
-import { levelOf } from "./store.ts";
+import { type BoardStore, levelOf } from "./store.ts";
+import { base, clip } from "./text.ts";
 import type { Level, Task } from "./types.ts";
 
 // Words of the question itself, not of what it asks about.
@@ -212,4 +213,48 @@ export function namedTask(tasks: ReadonlyArray<Task>, prompt: string): Task | nu
     }
   }
   return best?.task ?? null;
+}
+
+/**
+ * A board search as lines for a person or an agent to read: one per match, best first. With no
+ * words in the query it lists the board, or one service's tasks.
+ */
+export async function findOnBoard(
+  store: BoardStore,
+  boardId: string,
+  query: string,
+  options: { readonly service?: string | undefined; readonly level?: Level | undefined } = {},
+): Promise<{ lines: string[]; all: Task[] }> {
+  const all = await store.listTasks(boardId);
+  const byId = new Map(all.map((x) => [x.id, x]));
+  const pathOf = (x: Task) => {
+    const p: string[] = [];
+    let c: Task | undefined = x;
+    for (let i = 0; i < 3 && c; i++) {
+      p.unshift(c.title);
+      c = c.parentId ? byId.get(c.parentId) : undefined;
+    }
+    return p.join(" › ");
+  };
+  const line = (
+    x: Task,
+    steps: ReadonlyArray<{ id: string; text: string }> = [],
+    more: Partial<Pick<SearchHit, "files" | "replaces" | "below">> = {},
+  ) =>
+    `- ${x.id} [L${levelOf(x)}${levelOf(x) === 1 ? ` ${x.kind ?? "feature"}` : ""}, ${x.status === "done" ? "done: reference only" : x.status}] ${pathOf(x)}${x.services?.length ? ` · services: ${x.services.join(", ")}` : ""}${steps.length ? ` · planned as ${steps.map((step) => `${step.id} – ${clip(step.text, 60)}`).join("; ")}` : ""}${more.files?.length ? ` · touched ${more.files.slice(0, 3).map(base).join(", ")}` : ""}${more.replaces?.length ? ` · replaces ${more.replaces.join(", ")} (superseded)` : ""}${more.below?.length ? ` · ${more.below.length} matching tasks below: ${more.below.slice(0, 5).join(", ")}` : ""}`;
+  const service = options.service ?? "";
+  const inService = all.filter(
+    (x) => !service || (x.services ?? []).includes(service) || x.mainService === service,
+  );
+  if (queryWords(query).length === 0) return { lines: inService.map((x) => line(x)), all };
+  const docs = await Promise.all(
+    inService.map(async (task) => ({
+      task,
+      plan: await store.readText(store.planPath(boardId, task.id)),
+    })),
+  );
+  return {
+    lines: searchTasks(docs, query, options.level).map((hit) => line(hit.task, hit.steps, hit)),
+    all,
+  };
 }

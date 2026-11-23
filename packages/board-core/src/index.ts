@@ -9,4 +9,5 @@ export * from "./view.ts";
 export * from "./edit.ts";
 export * from "./verify.ts";
 export * from "./goal.ts";
+export * from "./search.ts";
 export { BoardChat, repoLine, type BoardReply, type OpenChatInput } from "./chat.ts";
