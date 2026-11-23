@@ -12871,5 +12871,16 @@
   "4998b4dbe06bada0": "Untergeordneter Thread: {title}",
   "b32ddeb99329c642": "Deine Antwort wurde an den Thread des Ziels gesendet.",
   "01f1b7ea80a6d537": "Deine Antwort",
-  "29ea79cb3aeabe1a": "Antworten"
+  "29ea79cb3aeabe1a": "Antworten",
+  "1a05f91e360ecd98": "Bevor das Ziel startet · {title}",
+  "c891e367610b103a": "Der Thread hat die Aufgaben gelesen. Kläre, was du brauchst, und starte dann.",
+  "09fdb0d8fbbbd732": "Jetzt starten",
+  "c64836d6ff83ffa3": "Anweisungen für das Ziel",
+  "77ed90641747e964": "Anweisungen oder Grenzen für dieses Ziel (optional)",
+  "fa835208f28cc41d": "Erst besprechen",
+  "60424bbfdb05ed0e": "Der Thread arbeitet…",
+  "303697190ec81ca1": "Nachricht an den Thread des Ziels",
+  "dca4654c768065da": "Dem Thread des Ziels etwas sagen…",
+  "0954e04a52635abd": "Chat ausblenden",
+  "8fe70cd2c948f219": "Ergebnis von {task}"
 }

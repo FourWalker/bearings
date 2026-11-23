@@ -12871,5 +12871,16 @@
   "4998b4dbe06bada0": "Conversa filha: {title}",
   "b32ddeb99329c642": "Sua resposta foi enviada à conversa da meta.",
   "01f1b7ea80a6d537": "Sua resposta",
-  "29ea79cb3aeabe1a": "Responder"
+  "29ea79cb3aeabe1a": "Responder",
+  "1a05f91e360ecd98": "Antes de a meta começar · {title}",
+  "c891e367610b103a": "A conversa leu as tarefas. Esclareça o que precisar e depois inicie.",
+  "09fdb0d8fbbbd732": "Iniciar agora",
+  "c64836d6ff83ffa3": "Instruções para a meta",
+  "77ed90641747e964": "Instruções ou limites para esta meta (opcional)",
+  "fa835208f28cc41d": "Conversar primeiro",
+  "60424bbfdb05ed0e": "A conversa está trabalhando…",
+  "303697190ec81ca1": "Mensagem para a conversa da meta",
+  "dca4654c768065da": "Diga algo à conversa da meta…",
+  "0954e04a52635abd": "Ocultar chat",
+  "8fe70cd2c948f219": "Resultado de {task}"
 }

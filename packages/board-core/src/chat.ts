@@ -22,6 +22,7 @@ import {
 import type { BoardGit } from "./io.ts";
 import {
   type Goal,
+  type GoalDecision,
   type GoalGroup,
   goalDrift,
   goalLedger,
@@ -1298,16 +1299,35 @@ ${this.related}`
       if (s.taskId !== id)
         return reply(`Take ${id} first with board_goal {action: "task", taskId: "${id}"}.`);
       const plan = await this.readPlan(id);
+      // A step named in `open` stays unticked: a question left for the person is not finished work.
+      const leaveOpen = new Set(Array.isArray(a.open) ? a.open.map(String) : []);
       const ticked = planPhases(plan)
         .flatMap((phase) => phase.steps)
-        .filter((step) => !step.done)
+        .filter((step) => !step.done && !leaveOpen.has(step.id))
         .reduce((text, step) => setStepDone(text, step.id, true), plan);
       if (ticked !== plan) await this.store.io.write(this.store.planPath(this.boardId, id), ticked);
-      const updated = await this.updateTask({
-        taskId: id,
-        status: "done",
-        lastAction: str(a.note, "Finished in the Goal."),
-      });
+      const note = str(a.note, "Finished in the Goal.");
+      const finished = await this.updateTask({ taskId: id, status: "done", lastAction: note });
+      const saved = await this.store.loadTask(this.boardId, id);
+      if (saved) {
+        saved.doneNote = note;
+        await this.store.saveTask(this.boardId, saved);
+      }
+      // The parent's plan can name this task on several steps; only the thread knows which are done.
+      const parentId = byId.get(id)?.parentId;
+      const pointing = parentId
+        ? planPhases(await this.readPlan(parentId))
+            .flatMap((phase) => phase.steps)
+            .filter((step) => !step.done && step.text.includes(id))
+            .map((step) => step.id)
+        : [];
+      const updated =
+        pointing.length > 0
+          ? {
+              ...finished,
+              text: `${finished.text}\nSteps ${pointing.join(", ")} of ${parentId} name this task and are still open: tick the ones now finished with board_goal {action: "step", taskId: "${parentId}", step}.`,
+            }
+          : finished;
       const tasks = await this.listTasks();
       if (work) {
         await this.rebuildContext();
@@ -1339,14 +1359,39 @@ ${this.related}`
         return reply(
           "This Goal asks before deciding: record the question without `settled` and carry on with the tasks it doesn't block.",
         );
-      const decision = {
+      const decision: GoalDecision = {
         id: `G${goal.decisions.length + 1}`,
         title: str(a.title),
         settled,
-        by: "model" as const,
+        by: "model",
         taskIds: Array.isArray(a.taskIds) ? a.taskIds.map(String) : [],
         at: this.now(),
       };
+      const raisedOn =
+        byId.get(decision.taskIds[0] ?? "") ??
+        byId.get(s.taskId ?? "") ??
+        byId.get(goal.groups[0]?.taskIds[0] ?? "");
+      if (raisedOn) {
+        // Also in the board's register, so the person sees it with every other decision and can
+        // decide or overrule it there.
+        const filed = await addDecision(
+          this.store,
+          this.boardId,
+          raisedOn,
+          { title: decision.title, description: `Raised in Goal ${goal.id} as ${decision.id}.` },
+          this.actor(),
+        );
+        if (settled) {
+          settleDecision(
+            this.store,
+            filed.decision,
+            "decide",
+            `${settled} (settled by the model in Goal ${goal.id})`,
+          );
+          await this.store.saveTask(this.boardId, filed.owner);
+        }
+        decision.decisionId = filed.decision.id;
+      }
       goal.decisions.push(decision);
       await saveGoal(this.store, this.boardId, goal);
       await this.rebuildContext();
@@ -1355,6 +1400,31 @@ ${this.related}`
           ? `Recorded ${decision.id} as settled by the model. The person reviews it later; carry on.`
           : `Recorded ${decision.id} as an open question for the person. Carry on with the tasks it doesn't block.`,
       );
+    }
+
+    if (action === "step") {
+      const stepId = str(a.step).trim();
+      const id = str(a.taskId || s.taskId);
+      const parents = new Set<string>();
+      for (const taskId of goal.groups.flatMap((group) => group.taskIds))
+        for (
+          let up = byId.get(taskId)?.parentId;
+          up && !parents.has(up);
+          up = byId.get(up)?.parentId
+        )
+          parents.add(up);
+      if (!id || !(inGoal(id) || parents.has(id)))
+        return reply(`${id || "That task"} is not in this Goal, nor a parent of one of its tasks.`);
+      const plan = await this.readPlan(id);
+      const steps = planPhases(plan).flatMap((phase) => phase.steps);
+      if (!steps.some((step) => step.id === stepId))
+        return reply(
+          `No step "${stepId}" in the plan of ${id}. Its steps: ${steps.map((step) => step.id).join(", ") || "none"}.`,
+        );
+      const done = a.done !== false;
+      const next = setStepDone(plan, stepId, done);
+      if (next !== plan) await this.store.io.write(this.store.planPath(this.boardId, id), next);
+      return reply(`Step ${stepId} of ${id} is ${done ? "done" : "open"}.`);
     }
 
     if (action === "include") {
@@ -1395,7 +1465,7 @@ ${this.related}`
       await this.save({ goalId: undefined });
       await this.rebuildContext();
       return reply(
-        `Paused Goal ${goal.id}: ${reason}. It resumes in any thread with board_goal {action: "resume", goalId: "${goal.id}"}.${inHand && inHand.status !== "done" ? ` ${inHand.id} is unfinished: write its living handoff now with board_checkpoint.` : ""}${kept.length > 0 ? `\n${kept.join("\n")}` : ""}`,
+        `Paused Goal ${goal.id}: ${reason}. It resumes in any thread with board_goal {action: "resume", goalId: "${goal.id}"}.${inHand && inHand.status !== "done" ? ` ${inHand.id} is unfinished: tick the plan steps already finished with board_goal {action: "step", step}, and write its living handoff now with board_checkpoint.` : ""}${kept.length > 0 ? `\n${kept.join("\n")}` : ""}`,
       );
     }
     return reply(`Unknown action "${action}".`);

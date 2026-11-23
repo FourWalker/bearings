@@ -18,6 +18,8 @@ import {
   collisionsOf,
   externalLinksOf,
   flagsOf,
+  goalChatText,
+  goalDiscussPrompt,
   goalLanes,
   goalLaunchPreview,
   goalScopeRows,
@@ -58,6 +60,7 @@ const task = (id: string, patch: Partial<BoardTask> = {}): BoardTask => ({
   ownerRoot: null,
   goal: null,
   evidence: null,
+  doneNote: null,
   ...patch,
 });
 
@@ -203,6 +206,18 @@ it("previews a Goal as the open leaf tasks no Goal holds, one group per parent",
   expect(goalStartPrompt(["payments", "cart"], "auto")).toContain(
     'board_goal {action: "start", scope: ["payments","cart"], mode: "auto"}',
   );
+  // The person's instructions travel with the start; talking first holds the start back.
+  expect(goalStartPrompt(["payments"], "ask", "  No pushes.  ")).toMatch(
+    /finished\.\n\nInstructions from the person:\nNo pushes\.$/,
+  );
+  const discuss = goalDiscussPrompt(["payments"], "ask", "No pushes.");
+  expect(discuss).toContain("Do not start it yet");
+  expect(discuss).toContain('board_goal {action: "start", scope: ["payments"], mode: "ask"}');
+  expect(discuss).toMatch(/No pushes\.$/);
+  // The chat shows the person's part of a start prompt, and other messages as they are.
+  expect(goalChatText(discuss)).toBe("No pushes.");
+  expect(goalChatText(goalStartPrompt(["payments"], "ask"))).toBe("");
+  expect(goalChatText("Ties return the smallest.")).toBe("Ties return the smallest.");
 });
 
 describe("board tree", () => {

@@ -220,6 +220,7 @@ export const SCHEMA = {
           "status",
           "task",
           "done",
+          "step",
           "decide",
           "include",
           "delegate",
@@ -229,7 +230,7 @@ export const SCHEMA = {
           "report",
         ],
         description:
-          "start: begin a Goal over `scope` with this thread as its executor. resume: take over a paused Goal (`goalId`) and see what changed meanwhile. status: read a Goal. task: start working on one of its tasks (`taskId`). done: finish the task in hand (`note`). decide: record a decision or an open question. include: add tasks. delegate: hand a `group` to a child thread. finish: close a Goal whose tasks are all done. pause: stop with a `reason`. work / report: for a child thread given a group.",
+          "start: begin a Goal over `scope` with this thread as its executor. resume: take over a paused Goal (`goalId`) and see what changed meanwhile. status: read a Goal. task: start working on one of its tasks (`taskId`). done: finish the task in hand (`note`; `open` lists plan steps to leave unticked). step: tick one plan `step` of the task in hand, or of `taskId` when it is another Goal task or a parent of one (`done: false` unticks). decide: record a decision or an open question. include: add tasks. delegate: hand a `group` to a child thread. finish: close a Goal whose tasks are all done. pause: stop with a `reason`. work / report: for a child thread given a group.",
       },
       goalId: { type: "string" },
       group: {
@@ -259,6 +260,13 @@ export const SCHEMA = {
       settled: {
         type: "string",
         description: "decide: how it was settled. Omit to leave it as an open question.",
+      },
+      step: { type: "string", description: "step: the plan step id, e.g. A2." },
+      done: { type: "boolean", description: "step: false unticks the step." },
+      open: {
+        type: "array",
+        items: { type: "string" },
+        description: "done: plan step ids that are not finished and stay unticked.",
       },
       reason: { type: "string" },
     },

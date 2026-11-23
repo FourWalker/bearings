@@ -113,6 +113,8 @@ export interface BoardViewTask {
   } | null;
   /** What a finished task left behind (commit, files, check), in one line; null when not recorded. */
   readonly evidence: string | null;
+  /** What the Goal's thread reported when it finished the task, in full. */
+  readonly doneNote: string | null;
 }
 
 export interface BoardViewGoal {
@@ -147,6 +149,9 @@ export interface BoardViewGoal {
   readonly createdAt: number;
   readonly updatedAt: number;
 }
+
+/** Marks a register verdict a Goal's model wrote; a verdict without it is a person's. */
+export const MODEL_SETTLED = "(settled by the model in Goal ";
 
 /** How many finished Goals the board keeps in view. */
 const FINISHED_GOALS_SHOWN = 20;
@@ -247,6 +252,9 @@ export async function readBoardView(
   const goals = new Map<string, BoardViewTask["goal"]>();
   const openGoals: BoardViewGoal[] = [];
   const finishedGoals: BoardViewGoal[] = [];
+  const registered = new Map(
+    all.flatMap((t) => (t.decisions ?? []).map((d) => [d.id, d] as const)),
+  );
   for (const goal of await listGoals(store, boardId)) {
     const taskIds = goal.groups.flatMap((group) => group.taskIds);
     if (goal.status !== "done")
@@ -261,7 +269,17 @@ export async function readBoardView(
       pausedReason: goal.pausedReason ?? null,
       executor: goal.executor,
       taskIds,
-      decisions: goal.decisions.map(({ id, title, settled, by }) => ({ id, title, settled, by })),
+      decisions: goal.decisions.map((decision) => {
+        // The register wins: a person who decided or overruled it there has answered the Goal.
+        const filed = decision.decisionId ? registered.get(decision.decisionId) : undefined;
+        const answered = filed?.status === "decided" && !filed.verdict.includes(MODEL_SETTLED);
+        return {
+          id: decision.id,
+          title: decision.title,
+          settled: answered ? filed.verdict : decision.settled,
+          by: answered ? ("person" as const) : decision.by,
+        };
+      }),
       groups: goal.groups.map((group) => ({
         id: group.id,
         title: group.title,
@@ -330,6 +348,7 @@ export async function readBoardView(
         ownerRoot: ownerRoot(t),
         goal: goals.get(t.id) ?? null,
         evidence: t.status === "done" && t.doneEvidence ? evidenceLine(t.doneEvidence) : null,
+        doneNote: t.status === "done" ? (t.doneNote ?? null) : null,
       };
     }),
   );

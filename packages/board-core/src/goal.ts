@@ -32,6 +32,8 @@ export interface GoalDecision {
   by: "model" | "person";
   taskIds: string[];
   at: number;
+  /** The same decision in the board's register, where the person can decide or overrule it. */
+  decisionId?: string | undefined;
 }
 
 export interface Goal {

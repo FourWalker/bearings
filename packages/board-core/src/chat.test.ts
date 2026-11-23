@@ -13,7 +13,7 @@ import { boardModeProtocol } from "./protocol.ts";
 import { BoardStore } from "./store.ts";
 import { norm } from "./text.ts";
 import { BOARD_TOOL_NAMES } from "./tools.ts";
-import { OFFLINE_MS, readBoardView, readTaskDetail } from "./view.ts";
+import { MODEL_SETTLED, OFFLINE_MS, readBoardView, readTaskDetail } from "./view.ts";
 import type { Registry, Session, Task } from "./types.ts";
 
 let home: string;
@@ -581,6 +581,70 @@ describe("BoardChat", () => {
       "gamma",
     ]);
     expect(finished?.finishedGoals[0]?.chats.map((chat) => chat.sessionId)).toContain("t2");
+  });
+
+  it("keeps a Goal's plans and decisions true on the board, not only in its thread", async () => {
+    const store = await seedBoard({ boardMode: true });
+    const exec = await openChat(store, "t1", ws, "t3", noGit);
+    await exec.createTask({ title: "Feature", topLevel: true });
+    await exec.createTask({ title: "Module", parentId: "feature" });
+    await exec.createTask({ title: "Rollout", parentId: "feature" });
+    const plan = (id: string) => store.readText(store.planPath("nefx", id));
+    await store.io.write(
+      store.planPath("nefx", "feature"),
+      "- [ ] C1 Manual test → module\n- [ ] C3 Decide the fixture → module\n- [ ] C5 Push → rollout\n",
+    );
+    await store.io.write(store.planPath("nefx", "module"), "- [ ] B1 Run it\n- [ ] B2 Decide\n");
+    await store.io.write(store.planPath("nefx", "rollout"), "- [ ] A1 Rebase\n- [ ] A2 Push\n");
+    await exec.goalTool({ action: "start", scope: ["feature"], mode: "auto", title: "Ship it" });
+
+    // Finishing a task leaves the steps it names open, keeps the whole note, and points at the
+    // parent's steps that name the task; the thread ticks the ones that are really finished.
+    await exec.goalTool({ action: "task", taskId: "module" });
+    const long = `All passed. ${"Receipt row. ".repeat(40)}`;
+    const done = (await exec.goalTool({ action: "done", note: long, open: ["B2"] })).text;
+    expect(await plan("module")).toBe("- [x] B1 Run it\n- [ ] B2 Decide\n");
+    expect(
+      (await readBoardView(store, "nefx", 0))?.tasks.find((t) => t.id === "module"),
+    ).toMatchObject({ doneNote: long, status: "done" });
+    expect(done).toContain("Steps C1, C3 of feature name this task and are still open");
+    expect((await exec.goalTool({ action: "step", taskId: "feature", step: "C1" })).text).toBe(
+      "Step C1 of feature is done.",
+    );
+    expect(await plan("feature")).toContain("- [x] C1 Manual test → module\n- [ ] C3");
+
+    // A task that is worked but not finished gets its finished steps ticked one by one.
+    await exec.goalTool({ action: "task", taskId: "rollout" });
+    await exec.goalTool({ action: "step", step: "A1" });
+    expect(await plan("rollout")).toBe("- [x] A1 Rebase\n- [ ] A2 Push\n");
+    expect((await exec.goalTool({ action: "step", step: "A1", done: false })).text).toContain(
+      "open",
+    );
+    expect((await exec.goalTool({ action: "step", step: "Z9" })).text).toContain(
+      "Its steps: A1, A2",
+    );
+    expect((await exec.goalTool({ action: "step", taskId: "nope", step: "A1" })).text).toContain(
+      "not in this Goal",
+    );
+
+    // Goal decisions are filed in the board's register: settled ones as decided by the model,
+    // open ones as open. A person's verdict there answers the Goal.
+    await exec.goalTool({ action: "decide", title: "Renumber", settled: "V86 to V89" });
+    await exec.goalTool({ action: "decide", title: "Keep the fixture invoice?" });
+    const rollout = await store.loadTask("nefx", "rollout");
+    expect(rollout?.decisions).toMatchObject([
+      { title: "Renumber", status: "decided" },
+      { title: "Keep the fixture invoice?", status: "open", verdict: "" },
+    ]);
+    expect(rollout?.decisions?.[0]?.verdict).toContain(`V86 to V89 ${MODEL_SETTLED}g-ship-it)`);
+    const open = rollout!.decisions![1]!;
+    open.status = "decided";
+    open.verdict = "Yes, keep it";
+    await store.saveTask("nefx", rollout!);
+    expect((await readBoardView(store, "nefx", 0))?.goals[0]?.decisions).toEqual([
+      { id: "G1", title: "Renumber", settled: "V86 to V89", by: "model" },
+      { id: "G2", title: "Keep the fixture invoice?", settled: "Yes, keep it", by: "person" },
+    ]);
   });
 
   it("hands a Goal's group to a child thread, which works it and reports once", async () => {

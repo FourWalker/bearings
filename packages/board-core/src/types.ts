@@ -160,6 +160,8 @@ export interface Task {
   /** Files changed by threads working on this task (most recent kept), for done evidence. */
   files?: string[] | undefined;
   doneEvidence?: DoneEvidence | undefined;
+  /** What a Goal's thread reported when it finished the task, in full; the card shows a clip. */
+  doneNote?: string | undefined;
   /** A fix for a bug found in finished work (linked with "fixes" to the original task). */
   bug?: boolean | undefined;
   /** Other words people use for this item; search treats them like its title. */

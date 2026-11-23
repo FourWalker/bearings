@@ -12866,5 +12866,16 @@
   "4998b4dbe06bada0": "Hilo hijo: {title}",
   "b32ddeb99329c642": "Tu respuesta se envió al hilo del objetivo.",
   "01f1b7ea80a6d537": "Tu respuesta",
-  "29ea79cb3aeabe1a": "Responder"
+  "29ea79cb3aeabe1a": "Responder",
+  "1a05f91e360ecd98": "Antes de que empiece el objetivo · {title}",
+  "c891e367610b103a": "El hilo ha leído las tareas. Aclara lo que necesites y luego inicia.",
+  "09fdb0d8fbbbd732": "Iniciar ahora",
+  "c64836d6ff83ffa3": "Instrucciones para el objetivo",
+  "77ed90641747e964": "Instrucciones o límites para este objetivo (opcional)",
+  "fa835208f28cc41d": "Hablarlo primero",
+  "60424bbfdb05ed0e": "El hilo está trabajando…",
+  "303697190ec81ca1": "Mensaje al hilo del objetivo",
+  "dca4654c768065da": "Dile algo al hilo del objetivo…",
+  "0954e04a52635abd": "Ocultar chat",
+  "8fe70cd2c948f219": "Resultado de {task}"
 }

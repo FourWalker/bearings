@@ -1,30 +1,40 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import type {
-  BoardChat,
-  BoardGoal,
-  BoardTask,
-  BoardView,
-  EnvironmentId,
-  ProjectId,
+import {
+  type BoardChat,
+  type BoardGoal,
+  type BoardTask,
+  type BoardView,
+  type EnvironmentId,
+  type ProjectId,
+  ThreadId,
 } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 import { useGT } from "gt-react";
+import { ArrowUpIcon } from "lucide-react";
 import { useState } from "react";
 
+import ChatMarkdown from "~/components/ChatMarkdown";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
 import { Input } from "~/components/ui/input";
+import { Textarea } from "~/components/ui/textarea";
 import { toastManager } from "~/components/ui/toast";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
+import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { cn, newMessageId, newThreadId } from "~/lib/utils";
-import { readThreadShell } from "~/state/entities";
+import { readThreadShell, useThreadProjection, useThreadShell } from "~/state/entities";
 import { threadEnvironment } from "~/state/threads";
 import { useOrchestrationCommand } from "~/state/use-orchestration-command";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
 
 import {
+  assistantBubbles,
   type BoardGoalLane,
   type BoardIndex,
+  GOAL_GO_PROMPT,
   goalAnswerPrompt,
+  goalChatText,
+  goalDiscussPrompt,
   goalLanes,
   goalLaunchPreview,
   goalPausePrompt,
@@ -32,11 +42,26 @@ import {
   goalScopeRows,
   goalStartPrompt,
   goalThreadOf,
+  isAssistantBusy,
+  latestExchange,
 } from "./board.logic";
 import { boardThreadModelSelection } from "./boardThread";
 
 const iso = (ms: number) => new Date(ms).toISOString();
 const nowIso = () => new Date().toISOString();
+
+/** A Goal's thread opened to talk things through, before the Goal itself has started. */
+const GoalDraft = Schema.NullOr(Schema.Struct({ threadId: Schema.String, title: Schema.String }));
+
+interface GoalLaunchInput {
+  readonly projectId: ProjectId;
+  readonly scope: ReadonlyArray<string>;
+  readonly mode: BoardGoal["mode"];
+  readonly title: string;
+  readonly instructions: string;
+  /** Talk first: the thread reads the tasks and asks, and starts the Goal on the person's go. */
+  readonly discuss: boolean;
+}
 
 /**
  * Project Board fork: the Goals screen. A Goal is driven only by its own thread, so the screen
@@ -61,9 +86,22 @@ export function BoardGoals(props: {
       description,
     });
 
+  const [draft, setDraft] = useLocalStorage(
+    `t3.board.goalDraft:${environmentId}:${board.id}`,
+    null,
+    GoalDraft,
+  );
+  // Once the draft's thread runs a Goal, it is that Goal's card that shows it.
+  const started =
+    draft !== null &&
+    [...board.goals, ...board.finishedGoals].some((goal) =>
+      goal.chats.some((chat) => chat.threadId === draft.threadId),
+    );
+
   /** Says something to a Goal's thread, as the person would in that thread. */
-  const tell = async (goal: BoardGoal, text: string) => {
-    const threadId = goalThreadOf(goal)?.threadId ?? null;
+  const tell = async (goal: BoardGoal, text: string) =>
+    tellThread(goalThreadOf(goal)?.threadId ?? null, text);
+  const tellThread = async (threadId: ThreadId | null, text: string) => {
     const shell =
       threadId === null ? null : readThreadShell(scopeThreadRef(environmentId, threadId));
     if (threadId === null || shell === null) {
@@ -89,12 +127,7 @@ export function BoardGoals(props: {
     return true;
   };
 
-  const launch = async (input: {
-    readonly projectId: ProjectId;
-    readonly scope: ReadonlyArray<string>;
-    readonly mode: BoardGoal["mode"];
-    readonly title: string;
-  }) => {
+  const launch = async (input: GoalLaunchInput) => {
     const modelSelection = boardThreadModelSelection(environmentId, input.projectId);
     if (modelSelection === null) {
       failed(gt("No model is set up for this project."));
@@ -111,7 +144,11 @@ export function BoardGoals(props: {
         message: {
           messageId: newMessageId(),
           role: "user",
-          text: goalStartPrompt(input.scope, input.mode),
+          text: (input.discuss ? goalDiscussPrompt : goalStartPrompt)(
+            input.scope,
+            input.mode,
+            input.instructions,
+          ),
           attachments: [],
         },
         modelSelection,
@@ -135,6 +172,7 @@ export function BoardGoals(props: {
       return false;
     }
     toastManager.add({ type: "success", title: gt("Goal thread started") });
+    setDraft(input.discuss ? { threadId, title: input.title } : null);
     props.onChanged();
     return true;
   };
@@ -142,6 +180,37 @@ export function BoardGoals(props: {
   return (
     <div data-board-goals className="grid max-w-5xl grid-cols-[minmax(0,1fr)] gap-6">
       <GoalLaunch board={board} index={index} onLaunch={launch} />
+      {draft !== null && !started ? (
+        <section
+          data-board-goal-draft
+          className="grid gap-3 rounded-xl border border-info/50 bg-card/40 p-4"
+        >
+          <header className="flex flex-wrap items-center gap-2">
+            <span className="min-w-0 flex-1">
+              <span className="font-medium">
+                {gt("Before the Goal starts · {title}", { title: draft.title })}
+              </span>
+              <span className="block text-muted-foreground text-xs">
+                {gt("The thread has read the tasks. Clarify what you need, then start.")}
+              </span>
+            </span>
+            <Button
+              size="sm"
+              onClick={() => void tellThread(ThreadId.make(draft.threadId), GOAL_GO_PROMPT)}
+            >
+              {gt("Start now")}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setDraft(null)}>
+              {gt("Dismiss")}
+            </Button>
+          </header>
+          <GoalChat
+            environmentId={environmentId}
+            threadId={ThreadId.make(draft.threadId)}
+            onSend={(text) => tellThread(ThreadId.make(draft.threadId), text)}
+          />
+        </section>
+      ) : null}
       <section className="grid gap-3">
         <SectionHeading title={gt("Running and paused")} count={board.goals.length} />
         {board.goals.length === 0 ? (
@@ -150,6 +219,7 @@ export function BoardGoals(props: {
           board.goals.map((goal) => (
             <GoalCard
               key={goal.id}
+              environmentId={environmentId}
               goal={goal}
               lanes={goalLanes(index, goal)}
               onTell={(text) => tell(goal, text)}
@@ -167,6 +237,7 @@ export function BoardGoals(props: {
           board.finishedGoals.map((goal) => (
             <GoalCard
               key={goal.id}
+              environmentId={environmentId}
               goal={goal}
               lanes={goalLanes(index, goal)}
               onTell={(text) => tell(goal, text)}
@@ -194,12 +265,7 @@ function SectionHeading(props: { readonly title: string; readonly count?: number
 function GoalLaunch(props: {
   readonly board: BoardView;
   readonly index: BoardIndex;
-  readonly onLaunch: (input: {
-    readonly projectId: ProjectId;
-    readonly scope: ReadonlyArray<string>;
-    readonly mode: BoardGoal["mode"];
-    readonly title: string;
-  }) => Promise<boolean>;
+  readonly onLaunch: (input: GoalLaunchInput) => Promise<boolean>;
 }) {
   const gt = useGT();
   const { index } = props;
@@ -207,6 +273,7 @@ function GoalLaunch(props: {
   const [mode, setMode] = useState<BoardGoal["mode"]>("auto");
   const [workspace, setWorkspace] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [instructions, setInstructions] = useState("");
   const rows = goalScopeRows(index);
   const workspaces = props.board.workspaces.flatMap((entry) =>
     entry.projectId === null ? [] : [{ label: entry.label, projectId: entry.projectId }],
@@ -221,6 +288,22 @@ function GoalLaunch(props: {
   const preview = goalLaunchPreview(index, scope);
   const taskCount = preview.reduce((count, group) => count + group.tasks.length, 0);
   const title = scope.flatMap((id) => index.byId.get(id)?.title ?? []).join(", ");
+  const start = async (discuss: boolean) => {
+    if (target === null) return;
+    setStarting(true);
+    const started = await props.onLaunch({
+      projectId: target.projectId,
+      scope,
+      mode,
+      title,
+      instructions,
+      discuss,
+    });
+    setStarting(false);
+    if (!started) return;
+    setPicked([]);
+    setInstructions("");
+  };
 
   return (
     <section data-board-goal-launch className="grid gap-3 rounded-xl border bg-card/40 p-4">
@@ -314,23 +397,27 @@ function GoalLaunch(props: {
                   )}{" "}
               {gt("The thread runs with full access on the project's default model.")}
             </p>
-            <div>
+            <Textarea
+              size="sm"
+              rows={2}
+              value={instructions}
+              aria-label={gt("Instructions for the Goal")}
+              placeholder={gt("Instructions or limits for this Goal (optional)")}
+              onChange={(event) => setInstructions(event.target.value)}
+            />
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 disabled={starting || taskCount === 0 || target === null}
-                onClick={async () => {
-                  if (target === null) return;
-                  setStarting(true);
-                  const started = await props.onLaunch({
-                    projectId: target.projectId,
-                    scope,
-                    mode,
-                    title,
-                  });
-                  setStarting(false);
-                  if (started) setPicked([]);
-                }}
+                onClick={() => void start(false)}
               >
                 {gt("Start Goal · {count} tasks", { count: taskCount })}
+              </Button>
+              <Button
+                variant="outline"
+                disabled={starting || taskCount === 0 || target === null}
+                onClick={() => void start(true)}
+              >
+                {gt("Discuss first")}
               </Button>
               {target === null ? (
                 <span className="ms-2 text-muted-foreground text-xs">
@@ -345,7 +432,95 @@ function GoalLaunch(props: {
   );
 }
 
+/** The latest exchange with a Goal's thread, and a box to say something to it. */
+function GoalChat(props: {
+  readonly environmentId: EnvironmentId;
+  readonly threadId: ThreadId;
+  readonly onSend: (text: string) => Promise<boolean>;
+}) {
+  const gt = useGT();
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const threadRef = scopeThreadRef(props.environmentId, props.threadId);
+  const shell = useThreadShell(threadRef);
+  const thread = useThreadProjection(threadRef);
+  const shown = latestExchange(assistantBubbles(thread?.projection.messages ?? [])).flatMap(
+    (bubble) => {
+      const text = bubble.role === "user" ? goalChatText(bubble.text) : bubble.text;
+      return text === "" ? [] : [{ ...bubble, text }];
+    },
+  );
+  const busy = sending || isAssistantBusy(shell?.runtime?.status);
+  const send = async () => {
+    const text = message.trim();
+    if (text === "" || sending) return;
+    setSending(true);
+    if (await props.onSend(text)) setMessage("");
+    setSending(false);
+  };
+  return (
+    <div data-board-goal-chat className="grid gap-2">
+      {shown.map((bubble) => (
+        <div
+          key={bubble.id}
+          className={cn(
+            "max-w-[90%] rounded-lg px-3 py-1.5 text-sm",
+            bubble.role === "user" ? "justify-self-end bg-primary/15" : "bg-muted",
+          )}
+        >
+          {bubble.role === "user" ? (
+            <span className="line-clamp-6 whitespace-pre-wrap">{bubble.text}</span>
+          ) : (
+            <ChatMarkdown
+              text={bubble.text}
+              cwd={undefined}
+              environmentId={props.environmentId}
+              isStreaming={bubble.streaming}
+              headingLevelOffset={3}
+            />
+          )}
+        </div>
+      ))}
+      {busy ? (
+        <p className="text-muted-foreground text-xs">{gt("The thread is working…")}</p>
+      ) : null}
+      <form
+        className="flex items-end gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void send();
+        }}
+      >
+        <div className="min-w-0 flex-1">
+          <Textarea
+            size="sm"
+            rows={1}
+            value={message}
+            aria-label={gt("Message to the Goal's thread")}
+            placeholder={gt("Say something to the Goal's thread…")}
+            onChange={(event) => setMessage(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+              event.preventDefault();
+              void send();
+            }}
+          />
+        </div>
+        <Button
+          type="submit"
+          size="icon-sm"
+          aria-label={gt("Send")}
+          disabled={sending || message.trim() === ""}
+        >
+          <ArrowUpIcon />
+        </Button>
+      </form>
+    </div>
+  );
+}
+
 function GoalCard(props: {
+  readonly environmentId: EnvironmentId;
   readonly goal: BoardGoal;
   readonly lanes: ReadonlyArray<BoardGoalLane>;
   readonly onTell: (text: string) => Promise<boolean>;
@@ -355,7 +530,10 @@ function GoalCard(props: {
   const gt = useGT();
   const { goal, lanes } = props;
   const [asked, setAsked] = useState<"pause" | "resume" | null>(null);
+  // The thread's messages are followed only while its chat is open.
+  const [chatOpen, setChatOpen] = useState(false);
   const thread = goalThreadOf(goal);
+  const threadId = thread?.threadId ?? null;
   const total = lanes.reduce((count, lane) => count + lane.tasks.length, 0);
   const done = lanes.reduce((count, lane) => count + lane.done, 0);
   const waiting = goal.decisions.filter((decision) => decision.settled === "");
@@ -389,6 +567,11 @@ function GoalCard(props: {
             {status}
           </span>
         </span>
+        {threadId !== null ? (
+          <Button size="sm" variant="outline" onClick={() => setChatOpen((open) => !open)}>
+            {chatOpen ? gt("Hide chat") : gt("Chat")}
+          </Button>
+        ) : null}
         {thread !== null ? (
           <Button size="sm" variant="outline" onClick={() => props.onOpenThread(thread)}>
             {gt("Open thread")}
@@ -413,6 +596,9 @@ function GoalCard(props: {
           </Button>
         ) : null}
       </header>
+      {chatOpen && threadId !== null ? (
+        <GoalChat environmentId={props.environmentId} threadId={threadId} onSend={props.onTell} />
+      ) : null}
       {waiting.map((decision) => (
         <GoalQuestion
           key={decision.id}
@@ -504,6 +690,16 @@ function GoalLane(props: {
           </span>
         </button>
       ))}
+      {lane.tasks.map((task) =>
+        task.doneNote === null ? null : (
+          <details key={task.id} className="px-2 text-xs">
+            <summary className="cursor-pointer text-muted-foreground">
+              {gt("Result of {task}", { task: task.title })}
+            </summary>
+            <p className="whitespace-pre-wrap pt-1">{task.doneNote}</p>
+          </details>
+        ),
+      )}
       {worker !== null && worker.threadId !== null ? (
         <button
           type="button"

@@ -117,6 +117,8 @@ export const BoardTask = Schema.Struct({
   ),
   /** What a finished task left behind (commit, files, check), in one line; null when not recorded. */
   evidence: Schema.NullOr(Schema.String),
+  /** What the Goal's thread reported when it finished the task, in full. */
+  doneNote: Schema.NullOr(Schema.String),
 });
 export type BoardTask = typeof BoardTask.Type;
 

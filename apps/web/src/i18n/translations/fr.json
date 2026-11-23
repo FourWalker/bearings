@@ -12871,5 +12871,16 @@
   "4998b4dbe06bada0": "Fil enfant : {title}",
   "b32ddeb99329c642": "Votre réponse a été envoyée au fil de l'objectif.",
   "01f1b7ea80a6d537": "Votre réponse",
-  "29ea79cb3aeabe1a": "Répondre"
+  "29ea79cb3aeabe1a": "Répondre",
+  "1a05f91e360ecd98": "Avant le démarrage de l'objectif · {title}",
+  "c891e367610b103a": "Le fil a lu les tâches. Précisez ce qu'il faut, puis démarrez.",
+  "09fdb0d8fbbbd732": "Démarrer maintenant",
+  "c64836d6ff83ffa3": "Instructions pour l'objectif",
+  "77ed90641747e964": "Instructions ou limites pour cet objectif (facultatif)",
+  "fa835208f28cc41d": "En discuter d'abord",
+  "60424bbfdb05ed0e": "Le fil travaille…",
+  "303697190ec81ca1": "Message au fil de l'objectif",
+  "dca4654c768065da": "Dites quelque chose au fil de l'objectif…",
+  "0954e04a52635abd": "Masquer la discussion",
+  "8fe70cd2c948f219": "Résultat de {task}"
 }

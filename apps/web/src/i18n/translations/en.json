@@ -12880,5 +12880,16 @@
   "4998b4dbe06bada0": "Child thread: {title}",
   "b32ddeb99329c642": "Your answer was sent to the Goal's thread.",
   "01f1b7ea80a6d537": "Your answer",
-  "29ea79cb3aeabe1a": "Answer"
+  "29ea79cb3aeabe1a": "Answer",
+  "1a05f91e360ecd98": "Before the Goal starts · {title}",
+  "c891e367610b103a": "The thread has read the tasks. Clarify what you need, then start.",
+  "09fdb0d8fbbbd732": "Start now",
+  "c64836d6ff83ffa3": "Instructions for the Goal",
+  "77ed90641747e964": "Instructions or limits for this Goal (optional)",
+  "fa835208f28cc41d": "Discuss first",
+  "60424bbfdb05ed0e": "The thread is working…",
+  "303697190ec81ca1": "Message to the Goal's thread",
+  "dca4654c768065da": "Say something to the Goal's thread…",
+  "0954e04a52635abd": "Hide chat",
+  "8fe70cd2c948f219": "Result of {task}"
 }

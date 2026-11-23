@@ -12878,5 +12878,16 @@
   "4998b4dbe06bada0": "Underordnad tråd: {title}",
   "b32ddeb99329c642": "Ditt svar skickades till målets tråd.",
   "01f1b7ea80a6d537": "Ditt svar",
-  "29ea79cb3aeabe1a": "Svara"
+  "29ea79cb3aeabe1a": "Svara",
+  "1a05f91e360ecd98": "Innan målet startar · {title}",
+  "c891e367610b103a": "Tråden har läst uppgifterna. Red ut det du behöver och starta sedan.",
+  "09fdb0d8fbbbd732": "Starta nu",
+  "c64836d6ff83ffa3": "Instruktioner för målet",
+  "77ed90641747e964": "Instruktioner eller gränser för det här målet (valfritt)",
+  "fa835208f28cc41d": "Diskutera först",
+  "60424bbfdb05ed0e": "Tråden arbetar…",
+  "303697190ec81ca1": "Meddelande till målets tråd",
+  "dca4654c768065da": "Säg något till målets tråd…",
+  "0954e04a52635abd": "Dölj chatten",
+  "8fe70cd2c948f219": "Resultat för {task}"
 }

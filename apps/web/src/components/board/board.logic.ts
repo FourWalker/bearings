@@ -693,8 +693,37 @@ export function goalLaunchPreview(
 
 // What the board says to a Goal's thread. A Goal is driven only by its thread, so the board
 // asks that thread instead of writing the Goal itself. English: the model reads these.
-export const goalStartPrompt = (scope: ReadonlyArray<string>, mode: BoardGoal["mode"]) =>
-  `Start a Goal on the board over ${scope.join(", ")} in ${mode} mode: call board_goal {action: "start", scope: ${JSON.stringify(scope)}, mode: "${mode}"}, then work through it until it is finished.`;
+const withInstructions = (prompt: string, instructions: string) =>
+  instructions.trim() === ""
+    ? prompt
+    : `${prompt}\n\nInstructions from the person:\n${instructions.trim()}`;
+export const goalStartPrompt = (
+  scope: ReadonlyArray<string>,
+  mode: BoardGoal["mode"],
+  instructions = "",
+) =>
+  withInstructions(
+    `Start a Goal on the board over ${scope.join(", ")} in ${mode} mode: call board_goal {action: "start", scope: ${JSON.stringify(scope)}, mode: "${mode}"}, then work through it until it is finished.`,
+    instructions,
+  );
+/** Opens the Goal's thread without starting the Goal, so the person can clarify things first. */
+export const goalDiscussPrompt = (
+  scope: ReadonlyArray<string>,
+  mode: BoardGoal["mode"],
+  instructions = "",
+) =>
+  withInstructions(
+    `I want a Goal on the board over ${scope.join(", ")} in ${mode} mode. Do not start it yet. Read those tasks with board_read, then tell me in a few lines the order you would work in and ask me what is unclear. When I say go, call board_goal {action: "start", scope: ${JSON.stringify(scope)}, mode: "${mode}"} and work through it until it is finished.`,
+    instructions,
+  );
+/** A message as the Goals chat shows it: of the board's own start prompts, only the person's part. */
+export function goalChatText(text: string): string {
+  if (!/^(Start a Goal on the board over|I want a Goal on the board over) /.test(text)) return text;
+  const marker = "\n\nInstructions from the person:\n";
+  const at = text.indexOf(marker);
+  return at < 0 ? "" : text.slice(at + marker.length);
+}
+export const GOAL_GO_PROMPT = "Go: start the Goal now and work through it until it is finished.";
 export const goalPausePrompt = (goalId: string) =>
   `Pause Goal ${goalId} now: call board_goal {action: "pause", reason: "paused from the board"} and stop.`;
 export const goalResumePrompt = (goalId: string) =>
