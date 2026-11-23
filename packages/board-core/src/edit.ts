@@ -9,6 +9,7 @@
 import { type BoardGit, systemClock } from "./io.ts";
 import { markStepDelegated, setDelegatedDone, setStepDone, stepDone } from "./plan.ts";
 import { type BoardStore, levelOf } from "./store.ts";
+import { doneEvidence } from "./verify.ts";
 import { base, isInside, norm, sameRoot, slug, stamp } from "./text.ts";
 import type {
   Board,
@@ -642,6 +643,20 @@ export async function editTask(
       }
       if (edit.description !== undefined) task.description = edit.description;
       if (edit.status !== undefined) task.status = edit.status;
+      if (wasDone && task.status !== "done") delete task.doneEvidence;
+      if (!wasDone && task.status === "done" && git) {
+        const node = await ownerNodeOf(store, boardId, task);
+        const board = (await store.loadRegistry()).boards.find((b) => b.id === boardId);
+        // Without an owner, only a one-workspace board says which copy holds the work.
+        const root =
+          node.owner?.root ?? (board?.roots.length === 1 ? board.roots[0]?.path : undefined);
+        if (board && root)
+          task.doneEvidence = doneEvidence(
+            task,
+            await reposAt(store, boardId, board, node, root, git),
+            now,
+          );
+      }
       if (edit.kind !== undefined && levelOf(task) === 1) task.kind = edit.kind;
       if (edit.mainService !== undefined) task.mainService = edit.mainService;
       if (edit.services !== undefined) task.services = [...new Set(edit.services)];

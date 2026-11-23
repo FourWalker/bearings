@@ -409,7 +409,7 @@ describe("BoardChat", () => {
     const store = await seedBoard();
     const chat = await openChat(store, "t1", ws, "t3", git);
     await chat.linkTask({ newTaskTitle: "Task" });
-    await chat.filesChanged(["api/a.ts"]);
+    await chat.filesChanged(["api/a.ts", ".local-run/logs/task/check.log"]);
     const finish = async () => {
       await chat.updateTask({ status: "active" });
       const done = (await chat.updateTask({ status: "done" })).text;
@@ -422,6 +422,9 @@ describe("BoardChat", () => {
     expect(verified).toContain("nfx main @ abc1234, 1 file(s), npm test exited 0");
     expect(verified).toContain("files unchanged since; npm test passed");
     expect((await store.loadTask("nefx", "task"))?.doneEvidence?.files).toEqual([`${ws}/api/a.ts`]);
+    // Files reported after a task is done (the turn's checkpoint) are not its work.
+    await chat.filesChanged(["api/later.ts"]);
+    expect((await store.loadTask("nefx", "task"))?.files).toEqual([`${ws}/api/a.ts`]);
     since = "changed";
     expect(await finish()).toContain("re-run `npm test` before building on it");
     since = "unreachable";
@@ -459,14 +462,16 @@ describe("BoardChat", () => {
     expect(started).toContain("## Goal Mode");
     expect(started).toContain('Next task: alpha "Alpha"');
     expect(exec.rules).not.toContain("## Board Mode");
+    expect(exec.context).toContain("in its other workspace copies: copy-b.");
     const other = await openChat(store, "t2", ws, "t3", git);
     expect((await other.goalTool({ action: "start", scope: ["module"] })).text).toMatch(
       /^Not started: a task belongs to one active Goal/,
     );
 
-    expect((await exec.goalTool({ action: "task", taskId: "alpha" })).text).toContain(
-      "### Task: Alpha",
-    );
+    const taken = (await exec.goalTool({ action: "task", taskId: "alpha" })).text;
+    expect(taken).toContain("### Task: Alpha");
+    // A Goal's tasks get no plan stub.
+    expect(taken).not.toContain("No plan yet");
     await exec.recordCheck({ id: "c1", command: "npm test", exitCode: 0, at: 1 });
     const done = (await exec.goalTool({ action: "done", note: "Built alpha" })).text;
     expect(done).toContain("npm test exited 0");

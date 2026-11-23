@@ -447,12 +447,14 @@ export class BoardChat {
   async filesChanged(files: ReadonlyArray<string>): Promise<void> {
     if (!this.board || !this.sess?.taskId || this.ignored || files.length === 0) return;
     const t = await this.loadTask(this.sess.taskId);
-    if (!t) return;
+    // A turn's checkpoint lists its files after the task may be done; those are not its work.
+    if (!t || t.status === "done") return;
     const s = this.sess;
     const copy = !isInside(s.cwd, s.workspace) ? s.cwd : s.workspace;
-    const paths = files.map((file) =>
-      norm(/^([A-Za-z]:)?[/\\]/.test(file) ? file : `${copy}/${file}`),
-    );
+    const paths = files
+      .map((file) => norm(/^([A-Za-z]:)?[/\\]/.test(file) ? file : `${copy}/${file}`))
+      .filter((path) => !path.includes("/.local-run/"));
+    if (paths.length === 0) return;
     const had = t.files ?? [];
     if (paths.every((path) => had.includes(path))) return;
     t.files = [...new Set([...paths, ...had])].slice(0, TASK_FILES);
@@ -753,7 +755,8 @@ Before creating any task, ask the person ONE question: create a new board (ask f
       return;
     }
     const where = `workspace "${s.workspaceLabel}" (${s.workspace})${s.subfolder ? `, folder ${s.subfolder}` : ""}${s.branch ? `, branch ${s.branch}` : ""}`;
-    const head = `## Claude Project Board\nThis ${chat} runs in ${where} of the ${b.name} board. Other ${chats} may work on the same board in its other workspace copies: ${b.roots.map((r) => r.label).join(", ")}.`;
+    const others = b.roots.filter((r) => r.label !== s.workspaceLabel).map((r) => r.label);
+    const head = `## Claude Project Board\nThis ${chat} runs in ${where} of the ${b.name} board.${others.length > 0 ? ` Other ${chats} may work on the same board in its other workspace copies: ${others.join(", ")}.` : ""}`;
     const goal = await this.myGoal();
     if (goal) {
       const t = s.taskId ? await this.loadTask(s.taskId) : null;
@@ -852,7 +855,8 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
         ? `Next action: ${next.id} – ${next.text} (step ${progress.done + 1} of ${progress.total}). The plan's checklist is authoritative if the handoff below disagrees.`
         : plan
           ? "Next action: every plan step is done; confirm with the person what's left."
-          : "No plan yet: write one with board_plan before starting multi-step work.",
+          : !(await this.myGoal()) &&
+            "No plan yet: write one with board_plan before starting multi-step work.",
       delegated.length > 0 &&
         `Completed delegated steps:\n${delegated.map((step) => `- ${step.id} – ${step.text} (task ${step.childId})`).join("\n")}`,
       blockers.length > 0 && `Open blockers:\n${blockers.slice(0, 5).join("\n")}`,

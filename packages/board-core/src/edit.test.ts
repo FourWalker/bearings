@@ -152,10 +152,37 @@ describe("editTask", () => {
     await edit("billing", { op: "createChild", title: "Retries", fromStep: "A1" });
     expect(await plan("billing")).toContain("A1 Retries → (task retries)");
 
-    const done = await edit("retries", { op: "update", status: "done" });
+    const git = {
+      ...noGit,
+      state: async (dir: string) => ({
+        repo: dir,
+        name: "nfx",
+        branch: "main",
+        head: "abc1234",
+        upstream: null,
+        ahead: null,
+        behind: null,
+        dirty: 0,
+        lastCommitAt: 0,
+        at: 0,
+      }),
+    };
+    const done = await editTask(
+      store,
+      "nefx",
+      "retries",
+      { op: "update", status: "done" },
+      actor,
+      git,
+    );
     expect(done.message).toContain("Ticked A1");
     expect(nextStep(await plan("billing"))?.id).toBe("A2");
+    // Done by a person in the app records the same evidence as done by an agent.
+    expect((await task("retries")).doneEvidence?.repos).toEqual([
+      { repo: norm(tmp), name: "nfx", branch: "main", head: "abc1234", dirty: 0 },
+    ]);
     await edit("retries", { op: "update", status: "active" });
+    expect((await task("retries")).doneEvidence).toBeUndefined();
     expect(nextStep(await plan("billing"))?.id).toBe("A1");
   });
 

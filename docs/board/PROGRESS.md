@@ -165,15 +165,13 @@ thread must agree on what's done, blocked and verified, and on the next action.
 - Model-behaviour evals were not run, and the live check used Codex only (no Claude thread, no web
   board pass). `vp run check:changed` cannot finish in this checkout: mobile and marketing
   dependencies are not installed.
-- Seen live, not fixed: a Goal task's reply still says "No plan yet: write one with board_plan",
-  against the Goal rule of no plan stub; the turn's checkpoint adds every file of the turn to the
-  last task taken (its done evidence is right, its file list is not); a one-workspace board lists its
-  own workspace as the "other workspace copies".
 - Goal Mode has no board UI yet (no Goal view or "part of a Goal" badge); it is driven from the
   executor thread. Delegated and parallel strategies, the server wake-up and releasing module
   ownership on pause are not built.
 - Search has no aliases, file-path search, roll-up, `superseded_by` link or first-turn hint yet.
-- Tasks marked done from the board UI record no evidence, so they read as "done, unverified".
+- A task marked done from the board UI records the repo state of its owning workspace (or of the
+  only workspace); on a board with several copies and no owner it records nothing. These fixes after
+  the live run are tested but were not re-run live.
 - The design for what comes next is in [NEXT-FEATURES.md](NEXT-FEATURES.md).
 
 - The board app still shows T3 threads unused since a restart as "offline", and its jump link
