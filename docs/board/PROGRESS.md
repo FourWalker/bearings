@@ -173,6 +173,14 @@ thread must agree on what's done, blocked and verified, and on the next action.
   worktree and could not commit there (the Codex sandbox denied the linked git metadata), so the
   executor committed its files. Several groups out at once (parallel) is rules text plus the same
   mechanism and was not run live. Two threads writing one Goal file at once is narrowed, not locked.
+- `board_show` ran live: a Codex thread asked for a task, the browser opened it with the view and
+  filter named, and the thread got the window's answer. Mobile does not act on it. `t3 board`
+  (list, find, show, link) was run by hand on the dev copy.
+- Board Assistant ran live from "Ask the board" (Codex `gpt-6-luna`, supervised): it found a task and
+  showed it, and created one only after a yes. Not built: a card, screen state with each message, an
+  instant matcher, an allowlist for T3's own tools, and voice beyond the composer microphone.
+- A thread's place on the board (Assistant, Goal executor, worker) used to be lost when its record
+  was reopened, as after a server restart; fixed and tested.
 - Search: other names for an item, file paths, roll-up, `level`, superseded tasks and the first-turn
   line are tested, not run live. Other names are saved through `board_find` only; the web board
   cannot list or remove them. `board_create_task` in a T3 thread now needs `parentId` or `topLevel`.
