@@ -1,7 +1,7 @@
 /**
  * The Project Board's context for a thread's next turn, whatever its provider: board placement,
- * the linked task's plan and handoff, Board Mode and the board's project rules. Sent inline ahead
- * of the user's words, and only when it changed since the thread last saw it.
+ * the linked task's state, and the rules (Board Mode, the board's project rules). Sent inline
+ * ahead of the user's words; state and rules each go only when new to the thread.
  *
  * @module board/BoardTurnContext
  */
@@ -38,7 +38,7 @@ const wrap = (context: string): string => `<project_board>\n${context}\n</projec
 
 export const make = Effect.fn("BoardTurnContext.make")(function* () {
   const chats = yield* BoardChats.BoardChats;
-  const lastSent = new Map<ThreadId, string>();
+  const lastSent = new Map<ThreadId, { readonly context: string; readonly rules: string }>();
 
   const forTurn = Effect.fn("BoardTurnContext.forTurn")(
     function* (input: { readonly threadId: ThreadId; readonly fresh: boolean }) {
@@ -46,11 +46,18 @@ export const make = Effect.fn("BoardTurnContext.make")(function* () {
       // Plans, handoffs and links can change between turns (other threads, the board app).
       yield* Effect.promise(() => chat.rebuildContext());
       const context = chat.context.trim();
-      if (context === "") return NONE;
-      if (!input.fresh && lastSent.get(input.threadId) === context) return NONE;
+      const rules = chat.rules.trim();
+      const last = lastSent.get(input.threadId);
+      // The task's state changes often and the rules almost never: each goes only when new.
+      const parts = [
+        (input.fresh || (last?.context !== context && chat.contextSeen.trim() !== context)) &&
+          context,
+        (input.fresh || (last?.rules !== rules && chat.rulesSeen.trim() !== rules)) && rules,
+      ].filter(Boolean);
+      if (parts.length === 0) return NONE;
       return {
-        text: wrap(context),
-        sent: Effect.sync(() => void lastSent.set(input.threadId, context)),
+        text: wrap(parts.join("\n\n")),
+        sent: Effect.sync(() => void lastSent.set(input.threadId, { context, rules })),
       } satisfies BoardTurnContextText;
     },
     // The board must never stop a turn: on any failure the turn goes ahead without it.
@@ -67,6 +74,10 @@ export const make = Effect.fn("BoardTurnContext.make")(function* () {
 
   const forget = Effect.fn("BoardTurnContext.forget")(function* (threadId: ThreadId) {
     yield* Effect.sync(() => lastSent.delete(threadId));
+    yield* chats.forThread(threadId).pipe(
+      Effect.map((chat) => chat.forgetSeen()),
+      Effect.ignoreCause,
+    );
   });
 
   return BoardTurnContext.of({ forTurn, forget });

@@ -81,7 +81,7 @@ it.effect("runs the board tools as the calling thread, on the board that holds i
 
     yield* Effect.gen(function* () {
       expect(yield* call("board_link", { newTaskTitle: "SFTP" })).toMatchObject({
-        text: expect.stringContaining('Linked this thread to the task.\n\nTask "SFTP"'),
+        text: expect.stringContaining("### Task: SFTP (id sftp, Level 1, active)"),
       });
       yield* call("board_plan", { markdown: "## Phase A\n- [ ] A1 Client" });
       expect(yield* call("board_read", {})).toMatchObject({

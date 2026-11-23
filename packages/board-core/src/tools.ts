@@ -50,6 +50,10 @@ export const SCHEMA = {
         type: "string",
         description: "Parent plan step id this subtask takes over (marks it in the parent plan).",
       },
+      createAnyway: {
+        type: "boolean",
+        description: "Create it although the board listed similar existing work.",
+      },
       kind: {
         type: "string",
         enum: ["feature", "backlog"],
@@ -196,7 +200,11 @@ export const SCHEMA = {
   find: {
     type: "object",
     properties: {
-      query: { type: "string", description: "Words to match in title/description." },
+      query: {
+        type: "string",
+        description:
+          "What you are looking for, in plain words. Matches titles, plan step names, decisions, docs and purposes.",
+      },
       service: { type: "string", description: "Only tasks tagged with this service id." },
       includeDone: { type: "boolean" },
     },
@@ -413,7 +421,7 @@ export const BOARD_TOOLS: ReadonlyArray<BoardToolDefinition> = [
   {
     name: "board_find",
     description:
-      "Find tasks on the board by words and/or service — check for an existing task before creating one.",
+      "Find existing work on the board by words and/or service: tasks, and plan steps not yet split into tasks. Best matches first; finished tasks come back as reference.",
     inputSchema: SCHEMA.find,
   },
   {

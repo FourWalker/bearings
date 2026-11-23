@@ -333,23 +333,59 @@ describe("BoardChat", () => {
     expect((await store.loadTask("nefx", "task"))?.services).toEqual(["api", "web"]);
   });
 
-  it("adds the reconciled Board Mode protocol for T3 threads and the mod's own for Claude chats", async () => {
+  it("gives T3 threads short rules apart from the task's state, and Claude chats the mod's protocol", async () => {
     const store = await seedBoard({ boardMode: true, rules: "Use pnpm." });
     const t3 = await openChat(store, "t1", ws, "t3");
     expect(t3.boardModeOn).toBe(false);
     expect(t3.context).toContain("standard conversation workflow");
+    expect(t3.rules).toMatch(/^Token hygiene/);
     await t3.createTask({ title: "Discussed feature" });
     expect(t3.sess?.taskId).toBeFalsy();
-    expect(t3.context).not.toContain("one phase per thread");
-    await t3.linkTask({ newTaskTitle: "Task" });
+    const linked = await t3.runTool("board_link", { newTaskTitle: "Task" });
     expect(t3.boardModeOn).toBe(true);
-    expect(t3.context).toContain("one phase per thread");
-    expect(t3.context).toContain("## Project rules for the NEFX board\nUse pnpm.");
+    expect(t3.context).not.toContain("Board Mode");
+    expect(t3.rules).toContain("## Board Mode");
+    expect(t3.rules).toContain("## Project rules for the NEFX board\nUse pnpm.");
+    // The link's reply carried both, so the next turn has nothing new to send.
+    expect(linked?.text).toContain(t3.rules);
+    expect(t3.rulesSeen).toBe(t3.rules);
+    expect(t3.contextSeen).toBe(t3.context);
+    // A situational rule arrives once, with the tool that meets the situation.
+    expect((await t3.findTasks({ query: "zzz" })).text).toContain("STOP and ask ONE question");
+    expect((await t3.findTasks({ query: "zzz" })).text).toBe("No matching tasks.");
+    // The thread's own answer doesn't change what it is sent.
+    const before = t3.context;
+    await t3.turnStart("go");
+    await t3.turnComplete("Did the thing.");
+    await t3.rebuildContext();
+    expect(t3.context).toBe(before);
+    t3.forgetSeen();
+    expect((await t3.findTasks({ query: "zzz" })).text).toContain("STOP and ask ONE question");
     const cc = await openChat(store, "c1", ws, "claude-code");
     expect(cc.context).not.toContain("one phase per chat");
     await cc.linkTask({ taskId: "task" });
     expect(cc.context).toContain("one phase per chat");
     expect(boardModeProtocol("t3")).not.toMatch(/\bchat\b/);
+  });
+
+  it("finds work by a question's words, in plan steps too, and stops a duplicate task", async () => {
+    const store = await seedBoard();
+    const chat = await openChat(store, "t1", ws, "t3");
+    await chat.createTask({ title: "Marketplace" });
+    await chat.createTask({
+      title: "Catalog",
+      parentId: "marketplace",
+      plan: "## Phase B\n- [ ] B2 Seller checkout flow",
+    });
+    expect((await chat.findTasks({ query: "do we have a plan for seller checkout" })).text).toBe(
+      "- catalog [L2, active] Marketplace › Catalog · planned as B2 – Seller checkout flow",
+    );
+    expect((await chat.findTasks({ query: "refunds" })).text).toBe("No matching tasks.");
+    const again = { title: "Checkout flow", parentId: "marketplace" };
+    expect((await chat.createTask(again)).text).toMatch(/^Not created: .*\n- catalog /s);
+    expect((await chat.createTask({ ...again, createAnyway: true })).text).toMatch(
+      /^Created Level 2/,
+    );
   });
 
   it("creates a board on request and moves an unassigned record into it", async () => {
@@ -446,7 +482,7 @@ describe("readBoardView", () => {
       ["t2", "A quick question", "t2"],
     ]);
     // A task with no owner of its own belongs to the nearest owned parent's workspace copy.
-    await linked.createTask({ title: "Retry", level: 3, parentId: "sftp" });
+    await linked.createTask({ title: "Retry", level: 3, parentId: "sftp", createAnyway: true });
     const sftp = (await store.loadTask("nefx", "sftp")) as Task;
     await store.saveTask("nefx", {
       ...sftp,

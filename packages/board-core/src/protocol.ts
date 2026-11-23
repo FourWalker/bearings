@@ -83,6 +83,68 @@ export function boardModeProtocol(host: BoardHost): string {
   return T3_RULES.reduce((text, [re, to]) => text.replace(re, to), BOARD_MODE_CLAUDE);
 }
 
+const HYGIENE =
+  "Token hygiene: redirect long builds, tests and logs to <workspace>/.local-run/logs/<name>.log (a folder per task id when linked), capture the exit code, read with tail/grep. Reference file:line instead of pasting. Replies: result, files changed, next step.";
+
+const T3_TOOL_CORE = `Board rules:
+- Name plan steps by id AND name ("A2 – Retry handling"), never the id alone.
+- After a meaningful piece of work, call board_update with a one-line lastAction. When blocked, record the obstacle and the next unblock action the same way, and link the task that tracks it with board_link_task "blocked_by".
+- When a plan step is finished, call board_handoff ONCE with that step's id, a short step note (what was done, files touched, how to test) and the whole rewritten living handoff. It saves both and ticks the step.
+- Save plan changes whole with board_plan (phases as "## Phase A — name" headings, steps as "- [ ] A1 name" checkboxes). Record todos and must-dos with board_update.add.
+- File decisions and recommendations with board_decision; never record a verdict the person hasn't given. Map documents with board_doc instead of copying them into handoffs.
+- When you find work outside this task, call board_find before acting on it.`;
+
+const T3_BOARD_MODE_CORE = `## Board Mode
+Continuity lives in the task's living handoff, not in thread history.
+- Start of a linked thread: continue from the task and its living handoff. Verify each affected repo's branch, HEAD and working changes before acting; if they differ from the handoff, reconcile first. The handoff does not authorize pending actions. Read code only where the next step needs it.
+- Living handoff: ONE per task, rewritten in place, never appended, no dated update sections. Shape: Objective · Workspace · Repository (each affected repo) · Branch / HEAD · Working changes · Verified results · Not verified · Decisions and constraints (with why; mark recommendations as such) · Next step (one concrete action) · Relevant references (path:line or commands) · Resume line. About 30-40 lines. Never copy secrets into it.
+- Checkpoint when a plan step finishes (board_handoff), and with board_checkpoint after an important decision, before suggesting a new thread, and when the person says "checkpoint". T3 records the checkpoint ref and repo state; mention anything not pushed or uncommitted. Then reply with the handoff path, the 3-5 lines that changed, and "Resume: Continue in new thread on task <task id>."
+- At phase boundaries suggest a new thread in one line. Never start, clear or settle threads yourself.`;
+
+/** One numbered Board Mode rule, as T3 words it, without its number. */
+function t3Rule(n: number): string {
+  const text = boardModeProtocol("t3");
+  const start = text.search(new RegExp(`^${n}\\. `, "m"));
+  if (start < 0) return "";
+  const rest = text.slice(start);
+  const end = rest.search(new RegExp(`^${n + 1}\\. `, "m"));
+  return (end < 0 ? rest : rest.slice(0, end)).replace(/^\d+\. /, "").trim();
+}
+
+export type T3OnDemandRule = "outOfScope" | "decisions" | "ownership";
+
+/** Rules a T3 thread gets in a tool's reply the first time the situation comes up. */
+export function t3OnDemandRule(rule: T3OnDemandRule): string {
+  switch (rule) {
+    case "outOfScope":
+      return `${t3Rule(7)}\n${t3Rule(9)}`;
+    case "decisions":
+      return `Decisions: give a title, the context (description), options or your recommendation, and references. YOU choose its level: the level of the narrowest task it affects, even if it came up here (it stays mapped to this task). A recommendation is not a verdict.\n${t3Rule(8)}`;
+    case "ownership":
+      return t3Rule(10);
+  }
+}
+
+/**
+ * What a T3 thread is told once (and again after compaction), apart from the task's state:
+ * nothing but hygiene for a plain thread, the short rules for a linked one.
+ */
+export function t3Rules(input: {
+  readonly linked: boolean;
+  readonly boardMode: boolean;
+  readonly planning: boolean;
+}): string {
+  if (!input.linked) return HYGIENE;
+  return [
+    T3_TOOL_CORE,
+    input.boardMode && T3_BOARD_MODE_CORE,
+    input.boardMode && input.planning && `- ${t3Rule(5)}`,
+    `- ${HYGIENE}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 /** How a host tells the person to pick a task up again. */
 export function resumeHint(host: BoardHost, taskId: string): string {
   return host === "t3"

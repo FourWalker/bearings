@@ -21,8 +21,17 @@ import {
 } from "./edit.ts";
 import type { BoardGit } from "./io.ts";
 import { nextStep, objectiveLine, planPhases, planProgress, tickStep } from "./plan.ts";
-import { type BoardHost, boardModeProtocol, resumeHint, toolRules } from "./protocol.ts";
+import {
+  type BoardHost,
+  boardModeProtocol,
+  resumeHint,
+  type T3OnDemandRule,
+  t3OnDemandRule,
+  t3Rules,
+  toolRules,
+} from "./protocol.ts";
 import { BoardStore, LEVEL_NAME, findBoard, levelOf } from "./store.ts";
+import { queryWords, searchTasks } from "./search.ts";
 import { checksForTask } from "./view.ts";
 import {
   base,
@@ -77,6 +86,8 @@ const IGNORED = /\/globalStorage\/|\/untrusted-start(\/|$)/i;
 const UNLINKED_TASKS = 8;
 /** The living handoff's share of a T3 thread's resume summary. */
 const RESUME_HANDOFF_CHARS = 3000;
+/** How many matches a search shows; the rest are a narrower query away. */
+const SEARCH_HITS = 5;
 
 const reply = (text: string, toast?: string): BoardReply => (toast ? { text, toast } : { text });
 const str = (v: unknown, fallback = ""): string =>
@@ -105,6 +116,12 @@ export class BoardChat {
   ignored = false;
   /** The context section the agent gets; "" when there is nothing to say. */
   context = "";
+  /** T3 threads: the rules that don't change with the task's state, sent apart from `context`. */
+  rules = "";
+  /** T3 threads: what the agent last got in a tool's reply, so it isn't sent again. */
+  contextSeen = "";
+  rulesSeen = "";
+  private readonly told = new Set<T3OnDemandRule>();
   /** A chat is written only once the person has spoken in it (or it was linked or set up). */
   reported = false;
   lastActionSetThisTurn = false;
@@ -672,7 +689,10 @@ Before creating any task, ask the person ONE question: create a new board (ask f
     const chat = this.host === "t3" ? "thread" : "chat";
     const chats = this.host === "t3" ? "threads" : "chats";
     if (!b) {
-      this.context = `## Claude Project Board\n${await this.unassignedHelp()}\nOnly raise this when the person wants a task tracked (or runs /task); don't interrupt one-off questions.`;
+      this.context =
+        this.host === "t3"
+          ? `## Claude Project Board\nThis thread's folder (${s.cwd}) is not on a board. Only if the person asks to track work: call board_find for the setup steps, and never create a board without asking.`
+          : `## Claude Project Board\n${await this.unassignedHelp()}\nOnly raise this when the person wants a task tracked (or runs /task); don't interrupt one-off questions.`;
       return;
     }
     const where = `workspace "${s.workspaceLabel}" (${s.workspace})${s.subfolder ? `, folder ${s.subfolder}` : ""}${s.branch ? `, branch ${s.branch}` : ""}`;
@@ -680,9 +700,11 @@ Before creating any task, ask the person ONE question: create a new board (ask f
     if (s.taskId) {
       const t = await this.loadTask(s.taskId);
       if (t) {
-        const body =
-          this.host === "t3" ? await this.resumeSummary(t) : await this.describeTask(t, true);
-        this.context = `${head}\nThis ${chat} is linked to a task. Continue from the plan and the latest handoff below without asking the person to re-explain them.\n\n${body}\n\n${toolRules(this.host)}`;
+        const linked = `${head}\nThis ${chat} is linked to a task. Continue from the plan and the latest handoff below without asking the person to re-explain them.`;
+        this.context =
+          this.host === "t3"
+            ? `${linked}\n\n${await this.resumeSummary(t)}`
+            : `${linked}\n\n${await this.describeTask(t, true)}\n\n${toolRules(this.host)}`;
         return;
       }
     }
@@ -771,7 +793,9 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
         `Recorded check results:\n${checks
           .map((check) => `- ${check.taskTitle}: ${check.command} exited ${check.exitCode}`)
           .join("\n")}`,
+      // The thread's own answers are in its history already, and would change this every turn.
       t.lastAction &&
+        t.lastAction.sessionId !== this.sess?.sessionId &&
         `Last action (${t.lastAction.workspaceLabel}): ${clip(t.lastAction.text, 260)}`,
       living
         ? `### Living handoff\n${clip(living, RESUME_HANDOFF_CHARS)}`
@@ -786,7 +810,8 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
     const b = this.board;
     if (this.context && this.sess?.pickupNote)
       this.context += `\n\n### Pickup point\n${this.sess.pickupNote}`;
-    if (this.context && b && this.boardModeOn) {
+    const extras = () => {
+      if (!b) return "";
       const services = b.services?.length
         ? `\nServices on this board (folder patterns): ${b.services.map((x) => `${x.id}=${x.match.join("|")}`).join(", ")}`
         : "";
@@ -796,8 +821,31 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
       const registers = b.registers?.length
         ? `\nExisting registers: ${b.registers.map((r) => `${r.topic} → ${r.url}`).join("; ")}`
         : "";
-      this.context += `\n\n${boardModeProtocol(this.host)}${services}${rules}${registers}`;
+      return `${services}${rules}${registers}`;
+    };
+    if (this.host === "t3") {
+      const t = this.sess?.taskId && b ? await this.loadTask(this.sess.taskId) : null;
+      this.rules = this.context
+        ? `${t3Rules({ linked: !!t, boardMode: this.boardModeOn, planning: !!t && levelOf(t) <= 2 })}${this.boardModeOn ? extras() : ""}`
+        : "";
+      return;
     }
+    if (this.context && b && this.boardModeOn)
+      this.context += `\n\n${boardModeProtocol(this.host)}${extras()}`;
+  }
+
+  /** The thread lost its history (compaction): nothing it was told can be assumed any more. */
+  forgetSeen(): void {
+    this.contextSeen = "";
+    this.rulesSeen = "";
+    this.told.clear();
+  }
+
+  /** Adds a situational rule to a tool's reply, the first time a T3 thread meets the situation. */
+  private once(rule: T3OnDemandRule, text: string): string {
+    if (this.host !== "t3" || this.told.has(rule)) return text;
+    this.told.add(rule);
+    return `${text}\n\n${t3OnDemandRule(rule)}`;
   }
   async setupBoard(a: Record<string, unknown>): Promise<BoardReply> {
     const s = this.sess;
@@ -921,9 +969,8 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
         ];
         ownerNote = `Working here by a one-time override: "${holder.title}" stays owned by workspace ${o.label}. Coordinate branches with that copy.`;
       } else {
-        return reply(
-          `BLOCKED: "${holder.title}" is owned by workspace ${o.label} (since ${new Date(o.since).toISOString().slice(0, 10)}). ${chat === "thread" ? "Threads" : "Chats"} in ${s.workspaceLabel} can't pick it up without the person's say-so. Ask them: (1) override once — call board_link again with override "once"; (2) take over — override "takeover" (ownership moves here); (3) leave it.`,
-        );
+        const blocked = `BLOCKED: "${holder.title}" is owned by workspace ${o.label} (since ${new Date(o.since).toISOString().slice(0, 10)}). ${chat === "thread" ? "Threads" : "Chats"} in ${s.workspaceLabel} can't pick it up without the person's say-so. Ask them: (1) override once — call board_link again with override "once"; (2) take over — override "takeover" (ownership moves here); (3) leave it.`;
+        return reply(this.board.boardMode ? this.once("ownership", blocked) : blocked);
       }
     } else if (!holder) {
       const node = await this.ownerNodeOf(t);
@@ -949,8 +996,17 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
       t,
     );
     await this.rebuildContext();
+    const linkedLine = `Linked this ${chat} to the task.${ownerNote ? ` ${ownerNote}` : ""}`;
+    if (this.host === "t3") {
+      // The rest of this turn needs the rules now, not at the next turn.
+      const text = `${linkedLine}\n\n${this.context}\n\n${this.rules}`;
+      return reply(
+        ownerNote && this.boardModeOn ? this.once("ownership", text) : text,
+        `Board: linked to ${t.title}`,
+      );
+    }
     return reply(
-      `Linked this ${chat} to the task.${ownerNote ? ` ${ownerNote}` : ""}\n\n${await this.describeTask(t, true)}\n\n${toolRules(this.host)}`,
+      `${linkedLine}\n\n${await this.describeTask(t, true)}\n\n${toolRules(this.host)}`,
       `Board: linked to ${t.title}`,
     );
   }
@@ -1133,6 +1189,15 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
 
   async createTask(a: Record<string, unknown>): Promise<BoardReply> {
     if (!this.board) return reply(await this.unassignedHelp());
+    // A step handed to a subtask matches its own step; anything else is checked for a duplicate.
+    if (!a.createAnyway && !a.fromStep) {
+      const { lines } = await this.searchBoard(str(a.title));
+      const similar = lines.slice(0, 3);
+      if (similar.length > 0)
+        return reply(
+          `Not created: the board may already have this.\n${similar.join("\n")}\nIf one of these is it, link or extend it (a planned step becomes a task with fromStep). If none is, call board_create_task again with createAnyway: true.`,
+        );
+    }
     let t: Task;
     try {
       t = await createTask(
@@ -1164,9 +1229,8 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
       this.host === "t3"
         ? `Start it with Continue in new thread on task ${t.id}.`
         : `A chat picks it up with /task ${t.id}.`;
-    return reply(
-      `Created Level ${level} ${LEVEL_NAME[level]} "${t.title}" (id ${t.id})${par ? ` under "${par.title}"` : ""}. ${pickUp}`,
-    );
+    const created = `Created Level ${level} ${LEVEL_NAME[level]} "${t.title}" (id ${t.id})${par ? ` under "${par.title}"` : ""}. ${pickUp}`;
+    return reply(this.boardModeOn ? this.once("outOfScope", created) : created);
   }
 
   async promoteTask(a: Record<string, unknown>): Promise<BoardReply> {
@@ -1300,12 +1364,13 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
       }
       const { decision: d, owner } = filed;
       await this.rebuildContext();
-      if (d.rec)
-        return reply(
-          `Recommendation ${d.rec.r} (${d.id}) recorded at Level ${d.level} on "${owner.title}"${d.rec.register ? ` — also add it to the ${d.rec.register} register as ${d.rec.r}` : ""}. Name ${d.rec.r} in your reply. It stays open until the person records the team's decision.`,
-        );
       return reply(
-        `Decision ${d.id} filed at Level ${d.level} on "${owner.title}"${d.raisedFrom ? `, mapped to "${cur.title}" where it was raised` : ""}. It is open until the person records a verdict.`,
+        this.once(
+          "decisions",
+          d.rec
+            ? `Recommendation ${d.rec.r} (${d.id}) recorded at Level ${d.level} on "${owner.title}"${d.rec.register ? ` — also add it to the ${d.rec.register} register as ${d.rec.r}` : ""}. Name ${d.rec.r} in your reply. It stays open until the person records the team's decision.`
+            : `Decision ${d.id} filed at Level ${d.level} on "${owner.title}"${d.raisedFrom ? `, mapped to "${cur.title}" where it was raised` : ""}. It is open until the person records a verdict.`,
+        ),
       );
     }
     // decide / update / drop: find it on this task, its parents, or (by id) anywhere on the board
@@ -1437,10 +1502,11 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
     );
   }
 
-  async findTasks(a: Record<string, unknown>): Promise<BoardReply> {
-    if (!this.board) return reply(await this.unassignedHelp());
-    const q = str(a.query).toLowerCase().split(/\s+/).filter(Boolean);
-    const svc = a.service ? str(a.service).toLowerCase() : "";
+  /** One line per search hit: where it sits, its state, and any plan steps that matched. */
+  private async searchBoard(
+    query: string,
+    service = "",
+  ): Promise<{ lines: string[]; all: Task[] }> {
     const all = await this.listTasks();
     const byId = new Map(all.map((x) => [x.id, x]));
     const pathOf = (x: Task) => {
@@ -1452,22 +1518,30 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
       }
       return p.join(" › ");
     };
-    const hits = all.filter(
-      (x) =>
-        (a.includeDone || x.status !== "done") &&
-        (!svc || (x.services ?? []).includes(svc) || x.mainService === svc) &&
-        q.every((w) => `${x.title} ${x.description} ${x.id}`.toLowerCase().includes(w)),
+    const line = (x: Task, steps: ReadonlyArray<{ id: string; text: string }> = []) =>
+      `- ${x.id} [L${levelOf(x)}${levelOf(x) === 1 ? ` ${x.kind ?? "feature"}` : ""}, ${x.status === "done" ? "done: reference only" : x.status}] ${pathOf(x)}${x.services?.length ? ` · services: ${x.services.join(", ")}` : ""}${steps.length ? ` · planned as ${steps.map((step) => `${step.id} – ${clip(step.text, 60)}`).join("; ")}` : ""}`;
+    const inService = all.filter(
+      (x) => !service || (x.services ?? []).includes(service) || x.mainService === service,
     );
-    if (!hits.length) return reply("No matching tasks.");
-    return reply(
-      hits
-        .slice(0, 25)
-        .map(
-          (x) =>
-            `- ${x.id} [L${levelOf(x)}${levelOf(x) === 1 ? ` ${x.kind ?? "feature"}` : ""}, ${x.status}] ${pathOf(x)}${x.services?.length ? ` · services: ${x.services.join(", ")}` : ""}`,
-        )
-        .join("\n"),
+    if (queryWords(query).length === 0) return { lines: inService.map((x) => line(x)), all };
+    const docs = await Promise.all(
+      inService.map(async (task) => ({ task, plan: await this.readPlan(task.id) })),
     );
+    return { lines: searchTasks(docs, query).map((hit) => line(hit.task, hit.steps)), all };
+  }
+
+  async findTasks(a: Record<string, unknown>): Promise<BoardReply> {
+    if (!this.board) return reply(await this.unassignedHelp());
+    const query = str(a.query);
+    const { lines } = await this.searchBoard(query, a.service ? str(a.service).toLowerCase() : "");
+    // A listing keeps to open work unless asked; a search shows finished work as reference.
+    const listing = queryWords(query).length === 0;
+    const shown = listing && !a.includeDone ? lines.filter((l) => !l.includes(", done: ")) : lines;
+    const limit = listing ? 25 : SEARCH_HITS;
+    const found = shown.length
+      ? `${shown.slice(0, limit).join("\n")}${shown.length > limit ? `\n…and ${shown.length - limit} more: add a word to narrow it. board_read shows a task in full.` : ""}`
+      : "No matching tasks.";
+    return reply(this.boardModeOn ? this.once("outOfScope", found) : found);
   }
 
   async releaseOwnership(a: Record<string, unknown>): Promise<BoardReply> {
@@ -1541,6 +1615,21 @@ When linked, the tool returns the task's plan and handoff: continue from them.`;
 
   /** Runs a board tool by its name (`board_link`, …); null for a name that isn't a board tool. */
   runTool(
+    name: string,
+    args: Record<string, unknown>,
+    extra?: { readonly t3Checkpoint?: string | undefined; readonly t3RunId?: string | undefined },
+  ): Promise<BoardReply> | null {
+    const run = this.dispatch(name, args, extra);
+    if (run === null) return null;
+    return run.then((result) => {
+      // What a tool changed on the board, the agent that called it already knows.
+      this.contextSeen = this.context;
+      if (this.rules && result.text.includes(this.rules)) this.rulesSeen = this.rules;
+      return result;
+    });
+  }
+
+  private dispatch(
     name: string,
     args: Record<string, unknown>,
     extra?: { readonly t3Checkpoint?: string | undefined; readonly t3RunId?: string | undefined },

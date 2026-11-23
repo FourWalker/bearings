@@ -42,7 +42,7 @@ const setup = (folder: (ws: string) => string | null) =>
       Layer.provide(Layer.merge(threads, projects)),
     );
     return Layer.effect(BoardTurnContext.BoardTurnContext, BoardTurnContext.make()).pipe(
-      Layer.provide(chats),
+      Layer.provideMerge(chats),
     );
   });
 
@@ -66,6 +66,22 @@ it.effect("sends the board context once, again when it changes, and again after 
 
       yield* board.forget(threadId);
       expect((yield* board.forTurn({ threadId, fresh: false })).text).toBe(first.text);
+      yield* first.sent;
+
+      // Linking through a board tool hands the agent the task and the rules in the reply.
+      const chat = yield* (yield* BoardChats.BoardChats).forThread(threadId);
+      yield* Effect.promise(
+        async () => void (await chat.runTool("board_link", { newTaskTitle: "Task" })),
+      );
+      expect((yield* board.forTurn({ threadId, fresh: false })).text).toBe("");
+
+      // A change from elsewhere sends the task's state again, without the rules.
+      yield* Effect.promise(() =>
+        chat.updateTask({ add: [{ text: "Sign off", kind: "mandatory" }] }),
+      );
+      const changed = yield* board.forTurn({ threadId, fresh: false });
+      expect(changed.text).toContain("Sign off");
+      expect(changed.text).not.toContain("Board rules:");
     }).pipe(Effect.provide(layer));
   }),
 );
