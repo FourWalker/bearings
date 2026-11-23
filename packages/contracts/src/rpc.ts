@@ -191,6 +191,8 @@ import {
   BoardEditResult,
   BoardSettings,
   BoardEditTaskInput,
+  BoardIntent,
+  BoardIntentAck,
   BoardLinkError,
   BoardLinkThreadInput,
   BoardReadError,
@@ -712,6 +714,8 @@ export const WS_METHODS = {
   boardExportFile: "board.exportFile",
   boardEditBoard: "board.editBoard",
   boardLinkThread: "board.linkThread",
+  boardSubscribeIntents: "board.subscribeIntents",
+  boardAckIntent: "board.ackIntent",
 
   sourceControlLookupRepository: "sourceControl.lookupRepository",
   sourceControlCloneRepository: "sourceControl.cloneRepository",
@@ -1589,6 +1593,20 @@ const WsBoardLinkThreadRpc = Rpc.make(WS_METHODS.boardLinkThread, {
   payload: BoardLinkThreadInput,
   success: Schema.Void,
   error: Schema.Union([BoardLinkError, EnvironmentAuthorizationError]),
+});
+
+/** Project Board fork: what the server asks this one window to show. */
+const WsBoardSubscribeIntentsRpc = Rpc.make(WS_METHODS.boardSubscribeIntents, {
+  payload: Schema.Struct({ clientId: Schema.String }),
+  success: BoardIntent,
+  error: EnvironmentAuthorizationError,
+  stream: true,
+});
+
+const WsBoardAckIntentRpc = Rpc.make(WS_METHODS.boardAckIntent, {
+  payload: BoardIntentAck,
+  success: Schema.Void,
+  error: EnvironmentAuthorizationError,
 });
 
 const IssueTrackerRpcError = Schema.Union([
@@ -2512,6 +2530,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsBoardExportFileRpc,
   WsBoardEditBoardRpc,
   WsBoardLinkThreadRpc,
+  WsBoardSubscribeIntentsRpc,
+  WsBoardAckIntentRpc,
   WsGuestShareCreateRpc,
   WsServerProbeRpc,
   WsServerGetConfigRpc,

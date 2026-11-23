@@ -160,6 +160,8 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.boardSettings]: AuthOrchestrationReadScope,
   [WS_METHODS.boardEditBoard]: AuthSettingsWriteScope,
   [WS_METHODS.boardLinkThread]: AuthOrchestrationOperateScope,
+  [WS_METHODS.boardSubscribeIntents]: AuthOrchestrationReadScope,
+  [WS_METHODS.boardAckIntent]: AuthOrchestrationReadScope,
   [WS_METHODS.issueTrackersConnect]: AuthSettingsWriteScope,
   [WS_METHODS.issueTrackersBindProject]: AuthSettingsWriteScope,
   [WS_METHODS.pullRequestsPreview]: AuthOrchestrationReadScope,

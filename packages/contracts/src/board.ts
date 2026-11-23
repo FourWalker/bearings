@@ -481,6 +481,44 @@ export class BoardEditFailure extends Schema.TaggedError<BoardEditFailure>()(
   { httpApiStatus: 409 },
 ) {}
 
+/**
+ * What a T3 window is asked to show. Commands navigate or pre-fill a composer; none writes board
+ * data, so a wrong one costs a click.
+ */
+export const BoardIntentCommand = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("board.open"),
+    boardId: Schema.String,
+    /** A task to open on that board. */
+    taskId: Schema.optional(Schema.String),
+    view: Schema.optional(Schema.Literals(["tree", "1", "2", "3", "svc", "register"])),
+    filter: Schema.optional(Schema.Literals(["active", "paused", "done", "all"])),
+  }),
+  Schema.Struct({ type: Schema.Literal("view.back") }),
+  Schema.Struct({
+    type: Schema.Literal("thread.draftPrompt"),
+    threadId: Schema.String,
+    /** Put in that thread's composer for the person to send; never sent for them. */
+    text: Schema.String,
+  }),
+]);
+export type BoardIntentCommand = typeof BoardIntentCommand.Type;
+
+export const BoardIntent = Schema.Struct({
+  id: Schema.String,
+  /** The one window this is for; a person's other devices don't navigate. */
+  clientId: Schema.String,
+  command: BoardIntentCommand,
+});
+export type BoardIntent = typeof BoardIntent.Type;
+
+export const BoardIntentAck = Schema.Struct({
+  id: Schema.String,
+  ok: Schema.Boolean,
+  detail: Schema.optional(Schema.String),
+});
+export type BoardIntentAck = typeof BoardIntentAck.Type;
+
 export const BoardViewInput = Schema.Struct({ boardId: Schema.String });
 export type BoardViewInput = typeof BoardViewInput.Type;
 

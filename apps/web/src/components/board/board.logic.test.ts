@@ -4,6 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   boardPickupTargets,
   boardSearchFromUrl,
+  boardSearchOfIntent,
   chatsForView,
   chatStatusOf,
   collisionsOf,
@@ -57,6 +58,22 @@ const chat = (sessionId: string, patch: Partial<BoardChat> = {}): BoardChat => (
   provider: null,
   turnStartedAt: 0,
   ...patch,
+});
+
+it("turns an open intent into the board address, naming only what was asked", () => {
+  expect(boardSearchOfIntent("env-1", { type: "board.open", boardId: "nefx" })).toEqual({
+    env: "env-1",
+    board: "nefx",
+  });
+  expect(
+    boardSearchOfIntent("env-1", {
+      type: "board.open",
+      boardId: "nefx",
+      taskId: "refunds",
+      view: "3",
+      filter: "all",
+    }),
+  ).toEqual({ env: "env-1", board: "nefx", open: "refunds", view: "3", filter: "all" });
 });
 
 it("reads a Goal's progress from its tasks and skips ones no longer on the board", () => {

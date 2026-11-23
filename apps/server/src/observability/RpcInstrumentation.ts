@@ -178,6 +178,8 @@ const RPC_AGGREGATES = {
   [WS_METHODS.boardExportFile]: "issues",
   [WS_METHODS.boardEditBoard]: "issues",
   [WS_METHODS.boardLinkThread]: "issues",
+  [WS_METHODS.boardSubscribeIntents]: "issues",
+  [WS_METHODS.boardAckIntent]: "issues",
   [WS_METHODS.sourceControlLookupRepository]: "source-control",
   [WS_METHODS.sourceControlCloneRepository]: "source-control",
   [WS_METHODS.sourceControlPublishRepository]: "source-control",

@@ -1,10 +1,12 @@
 import { WS_METHODS } from "@t3tools/contracts";
 import type { Atom } from "effect/reactivity";
+import * as Stream from "effect/Stream";
 
 import {
   createAtomCommandScheduler,
   createEnvironmentRpcCommand,
   createEnvironmentRpcQueryAtomFamily,
+  createEnvironmentRpcSubscriptionAtomFamily,
 } from "./runtime.ts";
 import type { EnvironmentRegistry } from "../connection/registry.ts";
 
@@ -83,6 +85,16 @@ export function createBoardEnvironmentAtoms<R, E>(
       tag: WS_METHODS.boardEditBoard,
       scheduler: editScheduler,
       concurrency: serialPerBoard,
+    }),
+    /** What the server asks this window to show; every one must arrive. */
+    intents: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      label: "environment-data:board:intents",
+      tag: WS_METHODS.boardSubscribeIntents,
+      transform: (stream) => stream.pipe(Stream.rechunk(1)),
+    }),
+    ackIntent: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:board:ack-intent",
+      tag: WS_METHODS.boardAckIntent,
     }),
     /** Puts a new thread on a task before its first turn. */
     linkThread: createEnvironmentRpcCommand(runtime, {

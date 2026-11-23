@@ -4,6 +4,7 @@ import * as Schema from "effect/Schema";
 import { McpSchema, Tool, Toolkit } from "effect/ai";
 
 import * as BoardChats from "../../../board/BoardChats.ts";
+import * as BoardIntents from "../../../board/BoardIntents.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 
@@ -68,8 +69,28 @@ const definition = (name: string) => {
   };
 };
 
+/** T3 only: the Claude Code mod has no window to steer, so this tool is not in board-core. */
+const BoardShowTool = Tool.make("board_show", {
+  ...shared,
+  dependencies: [...shared.dependencies, BoardIntents.BoardIntents],
+  description:
+    "Show something in the person's open T3 window. `open`: this board, or one task on it by `taskId`, with an optional `view` or `filter`. `back`: the page before. `draft`: put `text` in the composer of thread `threadId` for the person to send. Takes ids only, so find the task first with board_find. Changes no board data and sends nothing. With no window open it answers with a link to give the person.",
+  parameters: Schema.Struct({
+    action: Schema.Literals(["open", "back", "draft"]),
+    taskId: Schema.optionalKey(Schema.String),
+    view: Schema.optionalKey(Schema.Literals(["tree", "1", "2", "3", "svc", "register"])),
+    filter: Schema.optionalKey(Schema.Literals(["active", "paused", "done", "all"])),
+    threadId: Schema.optionalKey(Schema.String),
+    text: Schema.optionalKey(Schema.String),
+  }),
+})
+  .annotate(Tool.Readonly, true)
+  .annotate(Tool.Destructive, false)
+  .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromOutsideClients);
+
 /** Board tools act as the calling thread's chat, so outside MCP clients never see them. */
 export const BoardToolkit = Toolkit.make(
+  BoardShowTool,
   Tool.make("board_setup", definition("board_setup")).annotate(
     McpSchema.EnabledWhen,
     McpInvocationContext.hiddenFromOutsideClients,

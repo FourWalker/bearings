@@ -12,6 +12,7 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 
 import * as BoardChats from "../../../board/BoardChats.ts";
+import * as BoardIntents from "../../../board/BoardIntents.ts";
 import * as ThreadManagement from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as ProjectService from "../../../project/ProjectService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
@@ -59,12 +60,20 @@ it.effect("runs the board tools as the calling thread, on the board that holds i
     const chats = Layer.effect(BoardChats.BoardChats, BoardChats.make(store)).pipe(
       Layer.provide(Layer.merge(threads, projects)),
     );
+    const sent: Array<unknown> = [];
     const handlers = (thread: boolean) =>
       McpToolAccess.HandlersLayer.layer(BoardHandlers.layer).pipe(
         Layer.provideMerge(
           Layer.mergeAll(
             chats,
             threads,
+            Layer.mock(BoardIntents.BoardIntents)({
+              send: (command) =>
+                Effect.sync(() => {
+                  sent.push(command);
+                  return { shown: false, reason: "no-client" } as const;
+                }),
+            }),
             Layer.succeed(McpInvocationContext.McpInvocationContext, scope(thread)),
           ),
         ),
@@ -87,6 +96,15 @@ it.effect("runs the board tools as the calling thread, on the board that holds i
       expect(yield* call("board_read", {})).toMatchObject({
         text: expect.stringContaining("Next step: A1 – Client"),
       });
+      // Showing takes an id the board knows; with no window open the person gets a link.
+      expect(yield* call("board_show", { action: "open", taskId: "nope" })).toHaveProperty("code");
+      expect(sent).toEqual([]);
+      expect(
+        yield* call("board_show", { action: "open", taskId: "sftp", view: "3" }),
+      ).toMatchObject({
+        text: expect.stringMatching(/^No T3 window answered.*link instead: \S+sftp/),
+      });
+      expect(sent).toEqual([{ type: "board.open", boardId: "nefx", taskId: "sftp", view: "3" }]);
     }).pipe(Effect.provide(handlers(true)));
 
     const record = yield* Effect.promise(() => store.readSession("nefx", threadId));

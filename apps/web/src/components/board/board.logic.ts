@@ -1,5 +1,6 @@
 import type {
   BoardGoal,
+  BoardIntent,
   BoardChat,
   BoardTask,
   BoardTaskDetail,
@@ -359,6 +360,20 @@ export function panelOf(index: BoardIndex, unlinked: ReadonlyArray<BoardChat>): 
     ],
     todo: items("todo"),
     unlinked: unlinked.filter((chat) => chat.live === "working" || chat.live === "idle"),
+  };
+}
+
+/** Where a `board.open` intent sends the window: only what it names changes from the defaults. */
+export function boardSearchOfIntent(
+  environmentId: string,
+  command: Extract<BoardIntent["command"], { readonly type: "board.open" }>,
+): BoardSearch {
+  return {
+    env: environmentId,
+    board: command.boardId,
+    ...(command.taskId === undefined ? {} : { open: command.taskId }),
+    ...(command.view === undefined ? {} : { view: command.view }),
+    ...(command.filter === undefined ? {} : { filter: command.filter }),
   };
 }
 
