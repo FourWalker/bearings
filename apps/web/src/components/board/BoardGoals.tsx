@@ -230,8 +230,8 @@ function GoalLaunch(props: {
           {gt("Every open task is done or already in a Goal.")}
         </p>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="grid max-h-72 content-start gap-0.5 overflow-y-auto">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-4 @3xl/board:grid-cols-2">
+          <div className="grid max-h-72 grid-cols-[minmax(0,1fr)] content-start gap-0.5 overflow-y-auto">
             {rows.map(({ task, open }) => (
               <label
                 key={task.id}
