@@ -112,6 +112,24 @@ export interface BoardViewTask {
   } | null;
 }
 
+export interface BoardViewGoal {
+  readonly id: string;
+  readonly title: string;
+  readonly status: "running" | "paused";
+  readonly mode: "auto" | "ask";
+  readonly pausedReason: string | null;
+  /** The session running it now. */
+  readonly executor: string | null;
+  readonly taskIds: ReadonlyArray<string>;
+  readonly decisions: ReadonlyArray<{
+    readonly id: string;
+    readonly title: string;
+    /** "" while it waits for the person. */
+    readonly settled: string;
+    readonly by: "model" | "person";
+  }>;
+}
+
 export interface BoardView {
   readonly id: string;
   readonly name: string;
@@ -131,6 +149,8 @@ export interface BoardView {
   readonly tasks: ReadonlyArray<BoardViewTask>;
   /** Chats on the board that aren't linked to a task and haven't ended (offline ones too). */
   readonly unlinked: ReadonlyArray<BoardViewChat>;
+  /** Goals not finished yet, newest first. Progress is read from their tasks. */
+  readonly goals: ReadonlyArray<BoardViewGoal>;
 }
 
 export const liveOf = (s: Pick<Session, "status" | "heartbeatAt">, now: number): BoardChatLive =>
@@ -202,10 +222,23 @@ export async function readBoardView(
     return null;
   };
   const goals = new Map<string, BoardViewTask["goal"]>();
-  for (const goal of await listGoals(store, boardId))
-    if (goal.status !== "done")
-      for (const taskId of goal.groups.flatMap((group) => group.taskIds))
-        goals.set(taskId, { id: goal.id, title: goal.title, status: goal.status });
+  const openGoals: BoardViewGoal[] = [];
+  for (const goal of await listGoals(store, boardId)) {
+    if (goal.status === "done") continue;
+    const taskIds = goal.groups.flatMap((group) => group.taskIds);
+    for (const taskId of taskIds)
+      goals.set(taskId, { id: goal.id, title: goal.title, status: goal.status });
+    openGoals.push({
+      id: goal.id,
+      title: goal.title,
+      status: goal.status,
+      mode: goal.mode,
+      pausedReason: goal.pausedReason ?? null,
+      executor: goal.executor,
+      taskIds,
+      decisions: goal.decisions.map(({ id, title, settled, by }) => ({ id, title, settled, by })),
+    });
+  }
   const tasks = await Promise.all(
     all.map(async (t: Task): Promise<BoardViewTask> => {
       const plan = await store.readText(store.planPath(boardId, t.id));
@@ -271,6 +304,7 @@ export async function readBoardView(
     workspaces: board.roots.map((r) => ({ label: r.label, root: norm(r.path) })),
     tasks: tasks.toSorted((a, b) => b.updatedAt - a.updatedAt),
     unlinked: chats.filter((c) => c.taskId === null && c.live !== "ended"),
+    goals: openGoals.toSorted((a, b) => b.id.localeCompare(a.id)),
   };
 }
 

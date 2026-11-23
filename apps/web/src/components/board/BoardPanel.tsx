@@ -4,7 +4,11 @@ import type { ReactNode } from "react";
 
 import { cn } from "~/lib/utils";
 
-import type { BoardPanel as BoardPanelData, BoardPanelEntry } from "./board.logic";
+import type {
+  BoardGoalProgress,
+  BoardPanel as BoardPanelData,
+  BoardPanelEntry,
+} from "./board.logic";
 import { BoardDotMark } from "./BoardNotes";
 
 /**
@@ -13,6 +17,7 @@ import { BoardDotMark } from "./BoardNotes";
  */
 export function BoardPanel(props: {
   readonly panel: BoardPanelData;
+  readonly goals: ReadonlyArray<BoardGoalProgress>;
   readonly onOpenTask: (task: BoardTask) => void;
   readonly onOpenChat: (chat: BoardChat) => void;
 }) {
@@ -31,6 +36,48 @@ export function BoardPanel(props: {
           <T context="subheading of the board's summary panel">Where things stand</T>
         </span>
       </div>
+      {props.goals.length > 0 ? (
+        <PanelSection title={gt("Goals")} count={props.goals.length}>
+          {props.goals.map(({ goal, done, total, open }) => (
+            <div key={goal.id} data-board-panel-goal={goal.status} className="grid gap-0.5">
+              <div className="px-2 pt-1 text-sm">
+                <span className="font-medium">🎯 {goal.title}</span>
+                <span className="block text-muted-foreground text-xs">
+                  {gt("{done}/{total} done", { done, total })}
+                  {" · "}
+                  {goal.mode === "auto" ? gt("Auto mode") : gt("Ask mode")}
+                  {" · "}
+                  {goal.status === "running"
+                    ? gt("running")
+                    : gt("paused: {reason}", { reason: goal.pausedReason ?? "" })}
+                </span>
+              </div>
+              {open.map((task) => (
+                <PanelRow
+                  key={task.id}
+                  tone="todo"
+                  onClick={() => props.onOpenTask(task)}
+                  text={task.title}
+                  detail={task.lastAction?.text ?? gt("Not started")}
+                />
+              ))}
+              {goal.decisions.map((decision) => (
+                <p key={decision.id} className="px-2 py-1 text-xs">
+                  <span className="me-1 rounded bg-muted px-1 text-3xs">{decision.id}</span>
+                  {decision.title}
+                  <span className="block text-muted-foreground">
+                    {decision.settled === ""
+                      ? gt("Waiting for your answer")
+                      : decision.by === "model"
+                        ? gt("{settled} · settled by the model", { settled: decision.settled })
+                        : decision.settled}
+                  </span>
+                </p>
+              ))}
+            </div>
+          ))}
+        </PanelSection>
+      ) : null}
       {panel.blocked.length > 0 ? (
         <PanelSection title={gt("Blocked")} count={panel.blocked.length} tone="blocked">
           {panel.blocked.map(({ task, by }) => (

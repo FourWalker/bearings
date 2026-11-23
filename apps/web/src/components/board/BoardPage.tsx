@@ -49,6 +49,7 @@ import {
   boardPickupTargets,
   collisionsOf,
   indexBoard,
+  goalsOf,
   panelOf,
   serviceColumns,
   statusMatches,
@@ -629,6 +630,7 @@ function BoardScreen(props: {
         >
           <BoardPanel
             panel={panelOf(index, board.unlinked)}
+            goals={goalsOf(index, board.goals)}
             onOpenTask={actions.onOpenTask}
             onOpenChat={props.onOpenThread}
           />

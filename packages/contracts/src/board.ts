@@ -118,6 +118,27 @@ export const BoardTask = Schema.Struct({
 });
 export type BoardTask = typeof BoardTask.Type;
 
+export const BoardGoal = Schema.Struct({
+  id: Schema.String,
+  title: Schema.String,
+  status: Schema.Literals(["running", "paused"]),
+  mode: Schema.Literals(["auto", "ask"]),
+  pausedReason: Schema.NullOr(Schema.String),
+  /** The session running it now. */
+  executor: Schema.NullOr(Schema.String),
+  taskIds: Schema.Array(Schema.String),
+  decisions: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      title: Schema.String,
+      /** "" while it waits for the person. */
+      settled: Schema.String,
+      by: Schema.Literals(["model", "person"]),
+    }),
+  ),
+});
+export type BoardGoal = typeof BoardGoal.Type;
+
 export const BoardView = Schema.Struct({
   hasArchivedThreads: Schema.optional(Schema.Boolean),
   id: Schema.String,
@@ -145,6 +166,8 @@ export const BoardView = Schema.Struct({
   ),
   tasks: Schema.Array(BoardTask),
   unlinked: Schema.Array(BoardChat),
+  /** Goals not finished yet. Progress is read from their tasks. */
+  goals: Schema.Array(BoardGoal),
 });
 export type BoardView = typeof BoardView.Type;
 

@@ -510,8 +510,19 @@ describe("BoardChat", () => {
       (await readBoardView(store, "nefx", 0))?.tasks.find((task) => task.id === id)?.goal;
     expect(await goalOf("gamma")).toEqual({ id: "g-ship-it", title: "Ship it", status: "running" });
     expect(await goalOf("module")).toBeNull();
+    expect((await readBoardView(store, "nefx", 0))?.goals).toMatchObject([
+      {
+        id: "g-ship-it",
+        status: "running",
+        mode: "auto",
+        executor: "t2",
+        taskIds: ["alpha", "beta", "gamma"],
+        decisions: [{ id: "G1", title: "Retry count", settled: "3, the default", by: "model" }],
+      },
+    ]);
     expect((await other.goalTool({ action: "done" })).text).toContain("Goal g-ship-it is finished");
     expect(await goalOf("gamma")).toBeNull();
+    expect((await readBoardView(store, "nefx", 0))?.goals).toEqual([]);
   });
 
   it("creates a board on request and moves an unassigned record into it", async () => {

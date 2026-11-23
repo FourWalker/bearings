@@ -1,4 +1,5 @@
 import type {
+  BoardGoal,
   BoardChat,
   BoardTask,
   BoardTaskDetail,
@@ -359,6 +360,26 @@ export function panelOf(index: BoardIndex, unlinked: ReadonlyArray<BoardChat>): 
     todo: items("todo"),
     unlinked: unlinked.filter((chat) => chat.live === "working" || chat.live === "idle"),
   };
+}
+
+export interface BoardGoalProgress {
+  readonly goal: BoardGoal;
+  readonly done: number;
+  readonly total: number;
+  /** Its unfinished tasks, in the Goal's order. */
+  readonly open: ReadonlyArray<BoardTask>;
+}
+
+/** Each open Goal with its progress, read from its tasks: a Goal keeps no status copy. */
+export function goalsOf(
+  index: BoardIndex,
+  goals: ReadonlyArray<BoardGoal>,
+): ReadonlyArray<BoardGoalProgress> {
+  return goals.map((goal) => {
+    const tasks = goal.taskIds.flatMap((id) => index.byId.get(id) ?? []);
+    const open = tasks.filter((task) => task.status !== "done");
+    return { goal, done: tasks.length - open.length, total: tasks.length, open };
+  });
 }
 
 /** Workspace copies with more than one chat working at once: they edit the same clone. */

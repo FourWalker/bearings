@@ -9,6 +9,7 @@ import {
   collisionsOf,
   externalLinksOf,
   flagsOf,
+  goalsOf,
   indexBoard,
   levelKindOf,
   openDecisionCount,
@@ -56,6 +57,27 @@ const chat = (sessionId: string, patch: Partial<BoardChat> = {}): BoardChat => (
   provider: null,
   turnStartedAt: 0,
   ...patch,
+});
+
+it("reads a Goal's progress from its tasks and skips ones no longer on the board", () => {
+  const index = indexBoard([
+    task("a", { status: "done" }),
+    task("b"),
+    task("c", { status: "paused" }),
+  ]);
+  const goal = {
+    id: "g-1",
+    title: "Ship",
+    status: "running" as const,
+    mode: "auto" as const,
+    pausedReason: null,
+    executor: null,
+    taskIds: ["c", "a", "gone", "b"],
+    decisions: [],
+  };
+  expect(goalsOf(index, [goal])).toMatchObject([
+    { done: 1, total: 3, open: [{ id: "c" }, { id: "b" }] },
+  ]);
 });
 
 describe("board tree", () => {
