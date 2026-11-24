@@ -5,6 +5,7 @@ import type {
   BoardTaskDetail,
   BoardView,
   EnvironmentId,
+  ThreadId,
 } from "@t3tools/contracts";
 import { promptLinkDeepLink } from "@t3tools/shared/promptLinks";
 import { T, useGT } from "gt-react";
@@ -63,7 +64,9 @@ import {
   WorkspaceControls,
   useBoardEdit,
 } from "./BoardTaskEditors";
+import { BoardTaskTack } from "./BoardTaskTack";
 import { PlotterCardDraw } from "./PlotterCardDraw";
+import { useTaskTackSize } from "./useTaskChat";
 
 /**
  * Project Board fork: the board app's task views. A master task opens as a page with its
@@ -109,6 +112,23 @@ export function BoardTaskView(props: BoardTaskViewProps) {
   );
   const kids = index.kidsOf(task.id);
   const openDecisions = openDecisionCount(index, task);
+  // Tack in the task: the threads it can load, and the one it shows. A thread that waits for an
+  // answer or is working is shown when the task opens; after that the person chooses.
+  const [tackSize, setTackSize] = useTaskTackSize();
+  const tackChats = chatsForView(index, task, master)
+    .map(({ chat }) => chat)
+    .filter((chat) => chat.threadId !== null);
+  const [tackThread, setTackThread] = useState<ThreadId | null>(
+    () =>
+      (
+        tackChats.find((chat) => index.attention.get(chat.sessionId)?.kind === "needs") ??
+        tackChats.find((chat) => chat.live === "working")
+      )?.threadId ?? null,
+  );
+  const openHere = (chat: BoardChat) => {
+    setTackThread(chat.threadId);
+    setTackSize("panel");
+  };
   const tabs: ReadonlyArray<readonly [Tab, string]> = [
     ...(master
       ? [["overview", gt("Overview")] as const]
@@ -137,7 +157,8 @@ export function BoardTaskView(props: BoardTaskViewProps) {
   const data = detail.data;
   const body = (which: Tab) => {
     if (which === "overview") return <OverviewTab {...props} onTab={setTab} />;
-    if (which === "threads") return <ThreadsTab {...props} detail={data} rollUp={master} />;
+    if (which === "threads")
+      return <ThreadsTab {...props} detail={data} rollUp={master} onOpenHere={openHere} />;
     if (which === "subtasks") return <SubtasksTab {...props} />;
     if (data === null)
       return detail.error !== null ? (
@@ -163,36 +184,51 @@ export function BoardTaskView(props: BoardTaskViewProps) {
       <div data-board-task-view className="relative flex h-full min-h-0 flex-col">
         <PlotterCardDraw />
         <TaskHeader {...props} detail={data} tab={tab} />
-        <Tabs.Root
-          value={tab}
-          onValueChange={(next) => setTab(next as Tab)}
-          className="flex min-h-0 flex-1 flex-col"
-        >
-          <Tabs.List
-            data-board-task-tabs
-            className="flex shrink-0 gap-1 overflow-x-auto border-b px-4"
+        {/* One Tack in both sizes, so switching keeps what was typed: a row under, or a column beside. */}
+        <div className={cn("flex min-h-0 flex-1", tackSize === "panel" ? "flex-row" : "flex-col")}>
+          <Tabs.Root
+            value={tab}
+            onValueChange={(next) => setTab(next as Tab)}
+            className="@container/task flex min-h-0 min-w-0 flex-1 flex-col"
           >
-            {tabs.map(([value, label]) => (
-              <Tabs.Tab
-                key={value}
-                value={value}
-                className="shrink-0 border-transparent border-b-2 px-2 py-2 text-muted-foreground text-sm data-active:border-primary data-active:text-foreground"
-              >
-                {label}
-              </Tabs.Tab>
-            ))}
-          </Tabs.List>
-          <div className="min-h-0 flex-1 overflow-y-auto p-4">
-            {tab === "overview" ? (
-              body("overview")
-            ) : (
-              <div className="grid gap-4 @3xl/task:grid-cols-[minmax(0,1fr)_18rem]">
-                <div className="grid min-w-0 content-start gap-4">{body(tab)}</div>
-                <SideColumn {...props} detail={data} onTab={setTab} />
-              </div>
-            )}
-          </div>
-        </Tabs.Root>
+            <Tabs.List
+              data-board-task-tabs
+              className="flex shrink-0 gap-1 overflow-x-auto border-b px-4"
+            >
+              {tabs.map(([value, label]) => (
+                <Tabs.Tab
+                  key={value}
+                  value={value}
+                  className="shrink-0 border-transparent border-b-2 px-2 py-2 text-muted-foreground text-sm data-active:border-primary data-active:text-foreground"
+                >
+                  {label}
+                </Tabs.Tab>
+              ))}
+            </Tabs.List>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              {tab === "overview" ? (
+                body("overview")
+              ) : (
+                <div className="grid gap-4 @3xl/task:grid-cols-[minmax(0,1fr)_18rem]">
+                  <div className="grid min-w-0 content-start gap-4">{body(tab)}</div>
+                  <SideColumn {...props} detail={data} onTab={setTab} />
+                </div>
+              )}
+            </div>
+          </Tabs.Root>
+          <BoardTaskTack
+            environmentId={props.environmentId}
+            boardId={props.board.id}
+            task={task}
+            chats={tackChats}
+            attention={index.attention}
+            targets={props.continueTargets}
+            threadId={tackThread}
+            onThread={setTackThread}
+            size={tackSize}
+            onSize={setTackSize}
+          />
+        </div>
       </div>
     </BoardEditProvider>
   );
@@ -645,6 +681,8 @@ function ThreadsTab(
   props: BoardTaskViewProps & {
     readonly detail: BoardTaskDetail | null;
     readonly rollUp: boolean;
+    /** Loads the thread into Tack, beside the task. */
+    readonly onOpenHere: (chat: BoardChat) => void;
   },
 ) {
   const gt = useGT();
@@ -703,9 +741,14 @@ function ThreadsTab(
                         : liveLabel(gt, chat.live)}
                 </Badge>
                 {chat.threadId !== null ? (
-                  <Button size="xs" onClick={() => props.onOpenThread(chat)}>
-                    <T>Open thread</T>
-                  </Button>
+                  <>
+                    <Button size="xs" onClick={() => props.onOpenHere(chat)}>
+                      <T>Open here</T>
+                    </Button>
+                    <Button size="xs" variant="outline" onClick={() => props.onOpenThread(chat)}>
+                      <T>Full thread</T>
+                    </Button>
+                  </>
                 ) : null}
               </div>
               <p className="text-muted-foreground text-xs">

@@ -38,38 +38,22 @@ import type { TackMotion, TackSkin } from "./tackAvatar.logic";
 import type { PlotterInk, PlotterSpeed } from "./tackPlotter.logic";
 import type { TackShowMode } from "./BoardTack";
 import type { TackPlace } from "./tackPlace.logic";
-import {
-  type TackChat,
-  type TackChatProps,
-  type TackView,
-  useTackChat,
-  useTackKey,
-} from "./useTackChat";
+import { type TackChat, type TackChatProps, useTackChat, useTackKey } from "./useTackChat";
 
 /**
  * Project Board fork: Tack as a chat that floats over the board, the original way Tack sits on
- * the board and the one used on a task page.
+ * the board. In an open task Tack is `BoardTaskTack`.
  */
 export function BoardAssistant(
   props: TackChatProps & {
     readonly place?: TackPlace;
     readonly onPlace?: (place: TackPlace) => void;
-    /** On a task's page of a board Tack lives on: as awake here as it was on the board. */
-    readonly awake?: boolean;
-    readonly onAwake?: (awake: boolean) => void;
     /** A task is open in a dialog, which takes every key and click: the chat waits out of sight. */
     readonly covered?: boolean;
   },
 ) {
   const gt = useGT();
-  const stored = useTackChat(props, { follow: false, asleep: props.awake === false });
-  const chat: TackChat = {
-    ...stored,
-    setView: (next: TackView) => {
-      props.onAwake?.(next !== "closed");
-      stored.setView(next);
-    },
-  };
+  const chat = useTackChat(props, { follow: false });
   const [look, setLook] = useTackLook();
   useTackKey(() => {
     if (props.covered !== true && chat.view === "closed") chat.setView("open");
@@ -184,10 +168,16 @@ export function TackThreadButtons(props: { readonly chat: TackChat }) {
 
 /** Tack's messages, newest at the bottom, with its welcome before the first question. */
 export function TackMessages(props: {
-  readonly chat: TackChat;
+  readonly chat: Pick<TackChat, "threadRef" | "waiting" | "busy"> & {
+    readonly send: (text: string) => unknown;
+  };
   readonly environmentId: EnvironmentId;
   readonly bubbles: ReadonlyArray<BoardAssistantBubble>;
   readonly className?: string;
+  /** Shown before the first message, in place of the board's welcome. */
+  readonly empty?: React.ReactNode;
+  /** Said while a turn runs, in place of "checking the board". */
+  readonly working?: string;
 }) {
   const { chat } = props;
   return (
@@ -200,7 +190,11 @@ export function TackMessages(props: {
     >
       <div className="grid gap-2">
         {props.bubbles.length === 0 ? (
-          <AssistantWelcome onAsk={(question) => void chat.send(question)} />
+          props.empty !== undefined ? (
+            props.empty
+          ) : (
+            <AssistantWelcome onAsk={(question) => void chat.send(question)} />
+          )
         ) : (
           props.bubbles.map((bubble) => (
             <div
@@ -229,7 +223,7 @@ export function TackMessages(props: {
           <AssistantApprovals environmentId={props.environmentId} threadRef={chat.threadRef} />
         ) : chat.busy ? (
           <p className="text-muted-foreground text-xs">
-            <T>Tack is checking the board…</T>
+            {props.working ?? <T>Tack is checking the board…</T>}
           </p>
         ) : null}
       </div>

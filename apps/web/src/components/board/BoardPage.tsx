@@ -417,8 +417,8 @@ function BoardScreen(props: {
   });
   const canLink = useAtomValue(boardEnvironment.linkThread.permissionAtom(props.environmentId));
   const [tackPlace, setTackPlace] = useTackPlace();
-  // Tack sleeps whenever the board opens, even if its chat was left open last time. Held here, so
-  // it carries between the board and a master task's page.
+  // Tack sleeps whenever the board opens, even if its chat was left open last time. Held here,
+  // because opening a task from the board sends it home.
   const [tackAwake, setTackAwake] = useState(false);
   // As in the board app: a master task opens as a page in place of the board; a module or task
   // opens in a modal over whatever is showing. Both are in the URL, so back and shared links work.
@@ -551,18 +551,6 @@ function BoardScreen(props: {
     return (
       <div className="@container/task h-full min-h-0">
         {taskView(pageTask, closePage)}
-        {props.assistantProjectId !== null ? (
-          <BoardAssistant
-            environmentId={props.environmentId}
-            boardId={board.id}
-            boardName={board.name}
-            projectId={props.assistantProjectId}
-            place={tackPlace}
-            onPlace={setTackPlace}
-            covered={modalTask !== null}
-            {...(tackPlace === "float" ? {} : { awake: tackAwake, onAwake: setTackAwake })}
-          />
-        ) : null}
         {modal}
       </div>
     );
