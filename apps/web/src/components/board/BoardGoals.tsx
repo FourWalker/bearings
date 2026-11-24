@@ -30,6 +30,7 @@ import { formatRelativeTimeLabel } from "~/timestampFormat";
 import {
   assistantBubbles,
   type BoardGoalLane,
+  type BoardGoalStanding,
   type BoardIndex,
   GOAL_GO_PROMPT,
   goalAnswerPrompt,
@@ -41,10 +42,12 @@ import {
   goalResumePrompt,
   goalScopeRows,
   goalStartPrompt,
+  goalStandingOf,
   goalThreadOf,
   isAssistantBusy,
   latestExchange,
 } from "./board.logic";
+import { useGoalStandingLabel } from "./BoardNotes";
 import { boardThreadModelSelection } from "./boardThread";
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -221,6 +224,7 @@ export function BoardGoals(props: {
               key={goal.id}
               environmentId={environmentId}
               goal={goal}
+              standing={goalStandingOf(index, goal)}
               lanes={goalLanes(index, goal)}
               onTell={(text) => tell(goal, text)}
               onOpenTask={props.onOpenTask}
@@ -239,6 +243,7 @@ export function BoardGoals(props: {
               key={goal.id}
               environmentId={environmentId}
               goal={goal}
+              standing={goalStandingOf(index, goal)}
               lanes={goalLanes(index, goal)}
               onTell={(text) => tell(goal, text)}
               onOpenTask={props.onOpenTask}
@@ -522,12 +527,14 @@ function GoalChat(props: {
 function GoalCard(props: {
   readonly environmentId: EnvironmentId;
   readonly goal: BoardGoal;
+  readonly standing: BoardGoalStanding;
   readonly lanes: ReadonlyArray<BoardGoalLane>;
   readonly onTell: (text: string) => Promise<boolean>;
   readonly onOpenTask: (task: BoardTask) => void;
   readonly onOpenThread: (chat: BoardChat) => void;
 }) {
   const gt = useGT();
+  const standingLabel = useGoalStandingLabel();
   const { goal, lanes } = props;
   const [asked, setAsked] = useState<"pause" | "resume" | null>(null);
   // The thread's messages are followed only while its chat is open.
@@ -539,13 +546,12 @@ function GoalCard(props: {
   const waiting = goal.decisions.filter((decision) => decision.settled === "");
   const settled = goal.decisions.filter((decision) => decision.settled !== "");
   const status =
-    goal.status === "running"
-      ? thread?.live === "working"
-        ? gt("running")
-        : gt("running · thread idle")
-      : goal.status === "paused"
-        ? gt("paused: {reason}", { reason: goal.pausedReason ?? "" })
-        : gt("finished {when}", { when: formatRelativeTimeLabel(iso(goal.updatedAt)) });
+    standingLabel(props.standing) ??
+    gt("finished {when}", { when: formatRelativeTimeLabel(iso(goal.updatedAt)) });
+  const wantsYou =
+    props.standing.kind === "needs" ||
+    props.standing.kind === "stopped" ||
+    props.standing.kind === "stalled";
   const ask = async (kind: "pause" | "resume") => {
     setAsked(kind);
     const sent = await props.onTell(
@@ -564,7 +570,12 @@ function GoalCard(props: {
             {" · "}
             {goal.mode === "auto" ? gt("Auto mode") : gt("Ask mode")}
             {" · "}
-            {status}
+            <span
+              data-board-goal-standing={props.standing.kind}
+              className={cn(wantsYou && "font-medium text-foreground")}
+            >
+              {status}
+            </span>
           </span>
         </span>
         {threadId !== null ? (

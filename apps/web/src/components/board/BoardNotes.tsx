@@ -7,7 +7,9 @@ import { cn } from "~/lib/utils";
 import { formatElapsedDurationLabel, formatRelativeTimeLabel } from "~/timestampFormat";
 
 import {
+  type BoardChatAttention,
   type BoardDot,
+  type BoardGoalStanding,
   type BoardIndex,
   ancestorsOf,
   chatStatusOf,
@@ -81,20 +83,65 @@ export function BoardDotMark(props: {
       aria-hidden
       className={cn(
         "inline-block size-2 shrink-0 rounded-full",
-        props.dot === "working"
-          ? "bg-success"
-          : props.dot === "idle"
-            ? "bg-warning"
-            : "bg-muted-foreground/40",
+        props.dot === "needs"
+          ? "rotate-45 rounded-none bg-board-attention"
+          : props.dot === "stopped"
+            ? "rounded-none bg-destructive"
+            : props.dot === "working"
+              ? "bg-success"
+              : props.dot === "finished"
+                ? "bg-success ring-2 ring-success/35"
+                : props.dot === "idle"
+                  ? "bg-warning"
+                  : "bg-muted-foreground/40",
         props.className,
       )}
     />
   );
 }
 
+/** The mark a chat's attention gets wherever a single chat is listed. */
+export function attentionDot(
+  attention: BoardChatAttention | undefined,
+  live: BoardDot | "ended",
+): BoardDot {
+  if (attention !== undefined) return attention.kind;
+  return live === "ended" ? "offline" : live;
+}
+
+/** How a Goal's standing reads in a line; null for a finished Goal, which says when instead. */
+export function useGoalStandingLabel() {
+  const gt = useGT();
+  return (standing: BoardGoalStanding): string | null => {
+    switch (standing.kind) {
+      case "running":
+        return gt("running");
+      case "needs":
+        return standing.why === "approval"
+          ? gt("halted, needs you: an approval is waiting")
+          : gt("halted, needs you: it asked a question");
+      case "stopped":
+        return gt("stopped on an error");
+      case "stalled":
+        return gt("stalled: its thread stopped with {count} tasks open", { count: standing.open });
+      case "paused":
+        return standing.waiting > 0
+          ? gt("paused: {reason} · {count} decisions wait for you", {
+              reason: standing.reason,
+              count: standing.waiting,
+            })
+          : gt("paused: {reason}", { reason: standing.reason });
+      case "done":
+        return null;
+    }
+  };
+}
+
 function NoteFlags(props: { readonly index: BoardIndex; readonly task: BoardTask }) {
   const gt = useGT();
   const flags = flagsOf(props.index, props.task);
+  const goalStanding =
+    props.task.goal === null ? undefined : props.index.goalStanding.get(props.task.goal.id)?.kind;
   const [firstBlocker, ...moreBlockers] = flags.blockedBy;
   return (
     <>
@@ -113,10 +160,25 @@ function NoteFlags(props: { readonly index: BoardIndex; readonly task: BoardTask
         </div>
       ) : null}
       {props.task.goal !== null ? (
-        <div data-board-stamp="goal" className="text-xs">
-          {props.task.goal.status === "paused"
-            ? gt("🎯 Goal paused · {goal}", { goal: props.task.goal.title })
-            : gt("🎯 Goal · {goal}", { goal: props.task.goal.title })}
+        <div
+          data-board-stamp="goal"
+          className={cn(
+            "text-xs",
+            (goalStanding === "needs" ||
+              goalStanding === "stopped" ||
+              goalStanding === "stalled") &&
+              "font-semibold",
+          )}
+        >
+          {goalStanding === "needs"
+            ? gt("🎯 Goal halted, needs you · {goal}", { goal: props.task.goal.title })
+            : goalStanding === "stopped"
+              ? gt("🎯 Goal stopped on an error · {goal}", { goal: props.task.goal.title })
+              : goalStanding === "stalled"
+                ? gt("🎯 Goal stalled · {goal}", { goal: props.task.goal.title })
+                : props.task.goal.status === "paused"
+                  ? gt("🎯 Goal paused · {goal}", { goal: props.task.goal.title })
+                  : gt("🎯 Goal · {goal}", { goal: props.task.goal.title })}
         </div>
       ) : null}
       {props.task.bug ? (
@@ -190,35 +252,67 @@ function StatusStrip(props: { readonly index: BoardIndex; readonly task: BoardTa
   // A minute's tick is enough for "Working · 12m".
   const now = Date.parse(`${useNowMinute()}:00Z`);
   const status = chatStatusOf(props.index, props.task, now);
+  const wants =
+    status.kind === "needs"
+      ? status.count > 1
+        ? gt("{count} chats need you", { count: status.count })
+        : status.why === "approval"
+          ? gt("1 chat needs you · approval")
+          : gt("1 chat needs you · a question")
+      : status.kind === "stopped"
+        ? status.count > 1
+          ? gt("{count} chats stopped on an error", { count: status.count })
+          : gt("Stopped on an error")
+        : status.kind === "finished"
+          ? status.count > 1
+            ? gt("{count} turns finished · not seen", { count: status.count })
+            : gt("Turn finished · not seen")
+          : null;
+  const when =
+    status.kind === "needs"
+      ? gt("waiting {duration}", {
+          duration: formatElapsedDurationLabel(iso(status.since), now),
+        })
+      : status.kind === "stopped"
+        ? formatRelativeTimeLabel(iso(status.since))
+        : status.kind === "finished"
+          ? formatRelativeTimeLabel(iso(status.at))
+          : null;
   const text =
-    status.kind === "working"
+    status.kind === "needs" || status.kind === "stopped" || status.kind === "finished"
       ? status.inSubtasks > 0
-        ? gt("Working · {where} · {duration} · {count} in subtasks", {
-            where: status.workspaces.join(", "),
-            duration: formatElapsedDurationLabel(iso(status.since), now),
-            count: status.inSubtasks,
-          })
-        : gt("Working · {where} · {duration}", {
-            where: status.workspaces.join(", "),
-            duration: formatElapsedDurationLabel(iso(status.since), now),
-          })
-      : status.kind === "idle"
-        ? gt("Idle · {count} chats open", { count: status.open })
-        : status.kind === "offline"
-          ? gt("No chat open")
-          : gt("No chats linked yet");
+        ? gt("{what} · {count} in subtasks", { what: wants ?? "", count: status.inSubtasks })
+        : (wants ?? "")
+      : status.kind === "working"
+        ? status.inSubtasks > 0
+          ? gt("Working · {where} · {duration} · {count} in subtasks", {
+              where: status.workspaces.join(", "),
+              duration: formatElapsedDurationLabel(iso(status.since), now),
+              count: status.inSubtasks,
+            })
+          : gt("Working · {where} · {duration}", {
+              where: status.workspaces.join(", "),
+              duration: formatElapsedDurationLabel(iso(status.since), now),
+            })
+        : status.kind === "idle"
+          ? gt("Idle · {count} chats open", { count: status.open })
+          : status.kind === "offline"
+            ? gt("No chat open")
+            : gt("No chats linked yet");
   return (
     <div
-      data-board-note-strip
+      data-board-note-strip={status.kind}
       className={cn(
         "-mx-3 -mb-3 mt-1 flex h-7 items-center gap-2 rounded-b-lg bg-foreground/8 px-3 text-xs",
         status.kind === "working" && "bg-success/25 font-medium",
+        status.kind === "needs" && "bg-board-attention/25 font-semibold",
+        status.kind === "stopped" && "bg-destructive/20 font-semibold",
+        status.kind === "finished" && "bg-success/20",
       )}
     >
-      <BoardDotMark
-        dot={status.kind === "working" ? "working" : status.kind === "idle" ? "idle" : "offline"}
-      />
-      <span className="truncate">{text}</span>
+      <BoardDotMark dot={status.kind === "none" ? "offline" : status.kind} />
+      <span className="min-w-0 flex-1 truncate">{text}</span>
+      {when !== null ? <span className="shrink-0 font-normal opacity-70">{when}</span> : null}
     </div>
   );
 }

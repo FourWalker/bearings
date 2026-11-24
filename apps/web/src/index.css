@@ -2679,6 +2679,7 @@ code {
   --color-board-note-5: var(--board-note-5);
   --color-board-note-6: var(--board-note-6);
   --color-board-note-ink: var(--board-note-ink);
+  --color-board-attention: var(--board-attention);
 }
 
 :root {
@@ -2689,6 +2690,8 @@ code {
   --board-note-5: #e6ddf7;
   --board-note-6: #fde2c3;
   --board-note-ink: #2a2721;
+  /* A chat halted on the person's answer. A theme with an accent of its own uses that. */
+  --board-attention: var(--warning);
 }
 
 .dark {

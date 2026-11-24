@@ -17,6 +17,7 @@ html[data-theme-id="plotter"] {
   --board-note-5: #f6efe2;
   --board-note-6: #f6efe2;
   --board-note-ink: #1f2a48;
+  --board-attention: var(--plotter-rust);
 }
 
 html.dark[data-theme-id="plotter"] {

@@ -90,15 +90,36 @@ export function recommendationsOf(index: BoardIndex) {
     .toSorted((a, b) => numberOf(a.r) - numberOf(b.r));
 }
 
+/**
+ * What a chat on the board wants from the person. Only threads this app holds can say; a chat
+ * running elsewhere is just working or idle.
+ */
+export type BoardChatAttention =
+  | { readonly kind: "needs"; readonly why: "approval" | "question" }
+  | { readonly kind: "stopped" }
+  | { readonly kind: "finished"; readonly at: number };
+/** By chat session id. */
+export type BoardAttention = ReadonlyMap<string, BoardChatAttention>;
+
 /** The board's tasks, with the lookups every view needs. Built once per board read. */
 export interface BoardIndex {
   readonly tasks: ReadonlyArray<BoardTask>;
   readonly byId: ReadonlyMap<string, BoardTask>;
   /** Children oldest first, as the board app lists them. */
   readonly kidsOf: (id: string) => ReadonlyArray<BoardTask>;
+  readonly attention: BoardAttention;
+  /** Where each open Goal stands, by Goal id. */
+  readonly goalStanding: ReadonlyMap<string, BoardGoalStanding>;
 }
 
-export function indexBoard(tasks: ReadonlyArray<BoardTask>): BoardIndex {
+export function indexBoard(
+  tasks: ReadonlyArray<BoardTask>,
+  live: {
+    readonly attention?: BoardAttention;
+    readonly goals?: ReadonlyArray<BoardGoal>;
+  } = {},
+): BoardIndex {
+  const attention = live.attention ?? new Map<string, BoardChatAttention>();
   const byId = new Map(tasks.map((task) => [task.id, task]));
   const kids = new Map<string, Array<BoardTask>>();
   for (const task of tasks) {
@@ -108,7 +129,10 @@ export function indexBoard(tasks: ReadonlyArray<BoardTask>): BoardIndex {
     kids.set(task.parentId, list);
   }
   for (const list of kids.values()) list.sort((a, b) => a.createdAt - b.createdAt);
-  return { tasks, byId, kidsOf: (id) => kids.get(id) ?? [] };
+  const goalStanding = new Map(
+    (live.goals ?? []).map((goal) => [goal.id, goalStandingOf({ byId, attention }, goal)]),
+  );
+  return { tasks, byId, kidsOf: (id) => kids.get(id) ?? [], attention, goalStanding };
 }
 
 export function subtreeOf(index: BoardIndex, task: BoardTask): ReadonlyArray<BoardTask> {
@@ -236,19 +260,56 @@ function rolledChats(index: BoardIndex, task: BoardTask): ReadonlyArray<BoardCha
   return subtreeOf(index, task).flatMap((other) => other.chats);
 }
 
-export type BoardDot = "working" | "idle" | "offline";
+export type BoardDot = "needs" | "stopped" | "working" | "finished" | "idle" | "offline";
 
+/** The chats among these that want this from the person. */
+function wanting<Kind extends BoardChatAttention["kind"]>(
+  index: Pick<BoardIndex, "attention">,
+  chats: ReadonlyArray<BoardChat>,
+  kind: Kind,
+) {
+  return chats.flatMap((chat) => {
+    const attention = index.attention.get(chat.sessionId);
+    return attention?.kind === kind
+      ? [{ chat, attention: attention as Extract<BoardChatAttention, { readonly kind: Kind }> }]
+      : [];
+  });
+}
+
+/** A waiting answer outranks work under way, which outranks a result nobody has looked at. */
 export function dotOf(index: BoardIndex, task: BoardTask): BoardDot {
   const chats = rolledChats(index, task);
-  return chats.some((chat) => chat.live === "working")
-    ? "working"
-    : chats.some((chat) => chat.live === "idle")
-      ? "idle"
-      : "offline";
+  if (wanting(index, chats, "needs").length > 0) return "needs";
+  if (wanting(index, chats, "stopped").length > 0) return "stopped";
+  if (chats.some((chat) => chat.live === "working")) return "working";
+  if (wanting(index, chats, "finished").length > 0) return "finished";
+  return chats.some((chat) => chat.live === "idle") ? "idle" : "offline";
 }
 
 /** The status strip at a note's foot, from every chat in its subtree. */
 export type BoardChatStatus =
+  | {
+      /** A turn halted on an approval or a question. */
+      readonly kind: "needs";
+      readonly count: number;
+      readonly why: "approval" | "question" | "both";
+      readonly since: number;
+      readonly inSubtasks: number;
+    }
+  | {
+      /** A turn failed; nobody has opened it since. */
+      readonly kind: "stopped";
+      readonly count: number;
+      readonly since: number;
+      readonly inSubtasks: number;
+    }
+  | {
+      /** A turn ended by itself and nobody has looked at it. */
+      readonly kind: "finished";
+      readonly count: number;
+      readonly at: number;
+      readonly inSubtasks: number;
+    }
   | {
       readonly kind: "working";
       readonly workspaces: ReadonlyArray<string>;
@@ -261,9 +322,30 @@ export type BoardChatStatus =
 
 export function chatStatusOf(index: BoardIndex, task: BoardTask, now: number): BoardChatStatus {
   const chats = rolledChats(index, task);
+  const own = new Set(task.chats.map((chat) => chat.sessionId));
+  const below = (list: ReadonlyArray<{ readonly chat: BoardChat }>) =>
+    list.filter(({ chat }) => !own.has(chat.sessionId)).length;
+  const needs = wanting(index, chats, "needs");
+  if (needs.length > 0) {
+    const whys = new Set(needs.map(({ attention }) => attention.why));
+    return {
+      kind: "needs",
+      count: needs.length,
+      why: whys.size > 1 ? "both" : needs[0]!.attention.why,
+      since: Math.min(...needs.map(({ chat }) => chat.updatedAt)),
+      inSubtasks: below(needs),
+    };
+  }
+  const stopped = wanting(index, chats, "stopped");
+  if (stopped.length > 0)
+    return {
+      kind: "stopped",
+      count: stopped.length,
+      since: Math.max(...stopped.map(({ chat }) => chat.updatedAt)),
+      inSubtasks: below(stopped),
+    };
   const working = chats.filter((chat) => chat.live === "working");
   if (working.length > 0) {
-    const own = new Set(task.chats.map((chat) => chat.sessionId));
     return {
       kind: "working",
       workspaces: [...new Set(working.map((chat) => chat.workspaceLabel))],
@@ -271,6 +353,14 @@ export function chatStatusOf(index: BoardIndex, task: BoardTask, now: number): B
       inSubtasks: working.filter((chat) => !own.has(chat.sessionId)).length,
     };
   }
+  const finished = wanting(index, chats, "finished");
+  if (finished.length > 0)
+    return {
+      kind: "finished",
+      count: finished.length,
+      at: Math.max(...finished.map(({ attention }) => attention.at)),
+      inSubtasks: below(finished),
+    };
   const idle = chats.filter((chat) => chat.live === "idle").length;
   if (idle > 0) return { kind: "idle", open: idle };
   return chats.length > 0 ? { kind: "offline" } : { kind: "none" };
@@ -321,7 +411,18 @@ export interface BoardPanelEntry {
   readonly raisedIn?: string | undefined;
 }
 
+/** A chat that wants something from the person, and the task it is on (null: on no task). */
+export interface BoardPanelChat {
+  readonly chat: BoardChat;
+  readonly task: BoardTask | null;
+  readonly attention: BoardChatAttention;
+}
+
 export interface BoardPanel {
+  /** Halted on an answer first, then stopped on an error. */
+  readonly needsYou: ReadonlyArray<BoardPanelChat>;
+  /** Newest first. */
+  readonly finished: ReadonlyArray<BoardPanelChat>;
   readonly blocked: ReadonlyArray<{ readonly task: BoardTask; readonly by: string }>;
   readonly mandatory: ReadonlyArray<BoardPanelEntry>;
   readonly decisions: ReadonlyArray<BoardPanelEntry>;
@@ -338,7 +439,23 @@ export function panelOf(index: BoardIndex, unlinked: ReadonlyArray<BoardChat>): 
         .filter((item) => item.kind === kind && !item.done)
         .map((item) => ({ key: `${task.id}:${item.id}`, text: item.text, task })),
     );
+  const wants = [
+    ...index.tasks.flatMap((task) => task.chats.map((chat) => ({ chat, task }))),
+    ...unlinked.map((chat) => ({ chat, task: null })),
+  ].flatMap(({ chat, task }): ReadonlyArray<BoardPanelChat> => {
+    const attention = index.attention.get(chat.sessionId);
+    return attention === undefined ? [] : [{ chat, task, attention }];
+  });
+  const at = (entry: BoardPanelChat) =>
+    entry.attention.kind === "finished" ? entry.attention.at : 0;
   return {
+    needsYou: [
+      ...wants.filter(({ attention }) => attention.kind === "needs"),
+      ...wants.filter(({ attention }) => attention.kind === "stopped"),
+    ],
+    finished: wants
+      .filter(({ attention }) => attention.kind === "finished")
+      .toSorted((a, b) => at(b) - at(a)),
     blocked: active.flatMap((task) => {
       const by = blockersOf(index, task);
       return by.length > 0 ? [{ task, by: by.map((other) => other.title).join(", ") }] : [];
@@ -429,6 +546,7 @@ export interface BoardGoalProgress {
   readonly total: number;
   /** Its unfinished tasks, in the Goal's order. */
   readonly open: ReadonlyArray<BoardTask>;
+  readonly standing: BoardGoalStanding;
 }
 
 /** Each open Goal with its progress, read from its tasks: a Goal keeps no status copy. */
@@ -439,7 +557,13 @@ export function goalsOf(
   return goals.map((goal) => {
     const tasks = goal.taskIds.flatMap((id) => index.byId.get(id) ?? []);
     const open = tasks.filter((task) => task.status !== "done");
-    return { goal, done: tasks.length - open.length, total: tasks.length, open };
+    return {
+      goal,
+      done: tasks.length - open.length,
+      total: tasks.length,
+      open,
+      standing: goalStandingOf(index, goal),
+    };
   });
 }
 
@@ -634,6 +758,43 @@ export function goalLanes(index: BoardIndex, goal: BoardGoal): ReadonlyArray<Boa
 }
 
 /** The thread to talk to about a Goal: its executor, or the last thread that ran it. */
+/** Why a Goal is, or is not, moving. "running · thread idle" told none of these apart. */
+export type BoardGoalStanding =
+  | { readonly kind: "running" }
+  /** Its thread halted on an approval or a question. */
+  | { readonly kind: "needs"; readonly why: "approval" | "question" }
+  /** Its thread's turn failed. */
+  | { readonly kind: "stopped" }
+  /** Its thread ended a turn with tasks still open, and nothing is waiting on the person. */
+  | { readonly kind: "stalled"; readonly open: number }
+  | { readonly kind: "paused"; readonly reason: string; readonly waiting: number }
+  | { readonly kind: "done" };
+
+export function goalStandingOf(
+  index: Pick<BoardIndex, "byId" | "attention">,
+  goal: BoardGoal,
+): BoardGoalStanding {
+  if (goal.status === "done") return { kind: "done" };
+  if (goal.status === "paused")
+    return {
+      kind: "paused",
+      reason: goal.pausedReason ?? "",
+      waiting: goal.decisions.filter((decision) => decision.settled === "").length,
+    };
+  // A Goal run from outside the app has no thread here: its executor's chat is all there is.
+  const runner =
+    goalThreadOf(goal) ?? goal.chats.find((chat) => chat.sessionId === goal.executor) ?? null;
+  if (runner === null) return { kind: "running" };
+  const attention = index.attention.get(runner.sessionId);
+  if (attention?.kind === "needs") return attention;
+  if (attention?.kind === "stopped") return attention;
+  if (runner.live === "working") return { kind: "running" };
+  return {
+    kind: "stalled",
+    open: goal.taskIds.filter((id) => index.byId.get(id)?.status !== "done").length,
+  };
+}
+
 export function goalThreadOf(goal: BoardGoal): BoardChat | null {
   const held = goal.chats.filter((chat) => chat.threadId !== null);
   return (

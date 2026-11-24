@@ -7,9 +7,10 @@ import { cn } from "~/lib/utils";
 import type {
   BoardGoalProgress,
   BoardPanel as BoardPanelData,
+  BoardPanelChat,
   BoardPanelEntry,
 } from "./board.logic";
-import { BoardDotMark } from "./BoardNotes";
+import { attentionDot, BoardDotMark, useGoalStandingLabel } from "./BoardNotes";
 
 /**
  * Project Board fork: the board app's right panel. Every open must-do, decision and to-do across
@@ -20,9 +21,46 @@ export function BoardPanel(props: {
   readonly goals: ReadonlyArray<BoardGoalProgress>;
   readonly onOpenTask: (task: BoardTask) => void;
   readonly onOpenChat: (chat: BoardChat) => void;
+  /** Stops listing finished turns the person has not opened. */
+  readonly onSeenAll: () => void;
 }) {
   const gt = useGT();
+  const standingLabel = useGoalStandingLabel();
   const { panel } = props;
+  const wants = new Map(
+    [...panel.needsYou, ...panel.finished].map(({ chat, attention }) => [
+      chat.sessionId,
+      attention,
+    ]),
+  );
+  const chatRows = (entries: ReadonlyArray<BoardPanelChat>) =>
+    entries.map(({ chat, task, attention }) => (
+      <button
+        key={chat.sessionId}
+        type="button"
+        data-board-panel-chat={attention.kind}
+        disabled={task === null && chat.threadId === null}
+        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-sm enabled:hover:bg-accent disabled:cursor-default"
+        onClick={() => (task === null ? props.onOpenChat(chat) : props.onOpenTask(task))}
+      >
+        <BoardDotMark dot={attention.kind} />
+        <span className="grid min-w-0 flex-1">
+          <span className="truncate">{task?.title ?? (chat.title || gt("New chat"))}</span>
+          {task !== null && chat.title ? (
+            <span className="truncate text-muted-foreground text-xs">{chat.title}</span>
+          ) : null}
+        </span>
+        <span className="shrink-0 text-muted-foreground text-xs">
+          {attention.kind === "needs"
+            ? attention.why === "approval"
+              ? gt("approval")
+              : gt("question")
+            : attention.kind === "stopped"
+              ? gt("stopped")
+              : chat.workspaceLabel}
+        </span>
+      </button>
+    ));
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-5">
       {/* Shown by themes that head the panel, as Clay Post's ledger does. */}
@@ -36,9 +74,36 @@ export function BoardPanel(props: {
           <T context="subheading of the board's summary panel">Where things stand</T>
         </span>
       </div>
+      <PanelSection title={gt("Needs you")} count={panel.needsYou.length}>
+        {panel.needsYou.length === 0 ? (
+          <PanelNone>
+            <T>None</T>
+          </PanelNone>
+        ) : (
+          chatRows(panel.needsYou)
+        )}
+      </PanelSection>
+      {panel.finished.length > 0 ? (
+        <PanelSection
+          title={gt("Finished, not seen")}
+          count={panel.finished.length}
+          action={
+            <button
+              type="button"
+              data-board-panel-seen-all
+              className="ms-auto me-2 font-normal normal-case tracking-normal hover:text-foreground hover:underline"
+              onClick={props.onSeenAll}
+            >
+              {gt("Mark all seen")}
+            </button>
+          }
+        >
+          {chatRows(panel.finished)}
+        </PanelSection>
+      ) : null}
       {props.goals.length > 0 ? (
         <PanelSection title={gt("Goals")} count={props.goals.length}>
-          {props.goals.map(({ goal, done, total, open }) => (
+          {props.goals.map(({ goal, done, total, open, standing }) => (
             <div key={goal.id} data-board-panel-goal={goal.status} className="grid gap-0.5">
               <div className="px-2 pt-1 text-sm">
                 <span className="font-medium">🎯 {goal.title}</span>
@@ -47,9 +112,16 @@ export function BoardPanel(props: {
                   {" · "}
                   {goal.mode === "auto" ? gt("Auto mode") : gt("Ask mode")}
                   {" · "}
-                  {goal.status === "running"
-                    ? gt("running")
-                    : gt("paused: {reason}", { reason: goal.pausedReason ?? "" })}
+                  <span
+                    data-board-goal-standing={standing.kind}
+                    className={cn(
+                      standing.kind !== "running" &&
+                        standing.kind !== "paused" &&
+                        "font-medium text-foreground",
+                    )}
+                  >
+                    {standingLabel(standing)}
+                  </span>
                 </span>
               </div>
               {open.map((task) => (
@@ -123,7 +195,12 @@ export function BoardPanel(props: {
               className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-sm enabled:hover:bg-accent disabled:cursor-default"
               onClick={() => props.onOpenChat(chat)}
             >
-              <BoardDotMark dot={chat.live === "working" ? "working" : "idle"} />
+              <BoardDotMark
+                dot={attentionDot(
+                  wants.get(chat.sessionId),
+                  chat.live === "working" ? "working" : "idle",
+                )}
+              />
               <span className="min-w-0 flex-1 truncate">{chat.title || gt("New chat")}</span>
               <span className="text-muted-foreground text-xs">
                 {chat.provider ?? chat.workspaceLabel}
@@ -178,6 +255,7 @@ function PanelSection(props: {
   readonly title: string;
   readonly count: number;
   readonly tone?: "blocked";
+  readonly action?: ReactNode;
   readonly children: ReactNode;
 }) {
   return (
@@ -190,6 +268,7 @@ function PanelSection(props: {
         className="flex items-center justify-between font-medium text-muted-foreground text-xs uppercase tracking-wide"
       >
         {props.title}
+        {props.action}
         <span data-board-panel-count={props.count} className="rounded-full bg-muted px-2 text-2xs">
           {props.count}
         </span>

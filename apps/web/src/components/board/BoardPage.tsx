@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type {
   BoardChat,
   BoardSummary,
@@ -34,10 +34,13 @@ import { WorkspaceBreadcrumb, WorkspaceBreadcrumbItem } from "~/components/Works
 import { WorkspacePageHeader } from "~/components/WorkspacePageHeader";
 import { isElectron } from "~/env";
 import { useNewThreadHandler } from "~/hooks/useHandleNewThread";
+import { useAcknowledgeThreadWoke } from "~/hooks/useThreadActions";
 import { boardEnvironment } from "~/state/board";
+import { useQuietThreadShells } from "~/state/entities";
 import { useEnvironments } from "~/state/environments";
 import { formatEnvironmentQueryError, useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
+import { useUiStateStore } from "~/uiStateStore";
 import { buildThreadRouteParams } from "~/threadRoutes";
 
 import {
@@ -54,6 +57,7 @@ import {
   panelOf,
   serviceColumns,
   statusMatches,
+  subtreeOf,
   treeRoots,
 } from "./board.logic";
 import { type BoardNoteActions, BoardModuleNote, BoardNote, BoardServiceRow } from "./BoardNotes";
@@ -69,11 +73,14 @@ import {
 } from "./BoardTack";
 import { BoardPanel } from "./BoardPanel";
 import { BoardFileActions } from "./BoardFileActions";
+import { boardAttentionOf } from "./boardAttention.logic";
 import { BoardSettingsButton } from "./BoardSettingsDialog";
 import { BoardGoals } from "./BoardGoals";
 import { BoardTaskView } from "./BoardTaskView";
 import { ChoiceSelect } from "./BoardTaskEditors";
 import { BoardRecommendations } from "./BoardRecommendations";
+
+const nowIso = () => new Date().toISOString();
 
 /**
  * Project Board fork: the board app's main screen inside T3. One board of the machine a connected
@@ -392,7 +399,22 @@ function BoardScreen(props: {
   const gt = useGT();
   const navigate = useNavigate({ from: "/board" });
   const { board } = props;
-  const index = indexBoard(board.tasks);
+  // What each chat wants from the person, as the sidebar reads its thread.
+  const threads = useQuietThreadShells();
+  const localVisits = useUiStateStore((state) => state.threadLastVisitedAtById);
+  const index = indexBoard(board.tasks, {
+    attention: boardAttentionOf(
+      props.environmentId,
+      [
+        ...board.tasks.flatMap((task) => task.chats),
+        ...board.unlinked,
+        ...board.goals.flatMap((goal) => goal.chats),
+      ],
+      threads,
+      localVisits,
+    ),
+    goals: board.goals,
+  });
   const canLink = useAtomValue(boardEnvironment.linkThread.permissionAtom(props.environmentId));
   const [tackPlace, setTackPlace] = useTackPlace();
   // Tack sleeps whenever the board opens, even if its chat was left open last time. Held here, so
@@ -411,9 +433,21 @@ function BoardScreen(props: {
       : linked !== null && linked.level > 1
         ? linked
         : null;
+  const acknowledge = useAcknowledgeThreadWoke();
+  // A result or a failure the person has now looked at stops being news, here and in the sidebar.
+  const markSeen = (chats: ReadonlyArray<BoardChat>) => {
+    const visitedAt = nowIso();
+    for (const chat of chats) {
+      const kind = index.attention.get(chat.sessionId)?.kind;
+      if (chat.threadId !== null && (kind === "finished" || kind === "stopped"))
+        acknowledge(scopeThreadRef(props.environmentId, chat.threadId), visitedAt);
+    }
+  };
   const openTask = (task: BoardTask, tab?: BoardTaskTab) => {
     // Opening a task from the board is turning away from Tack, like any press beside its bubble.
     if (pageTask === null) setTackAwake(false);
+    // Everything its strip counted: the task's own chats and those of the tasks under it.
+    markSeen(subtreeOf(index, task).flatMap((under) => under.chats));
     void navigate({
       search: (previous) =>
         task.level === 1
@@ -690,6 +724,7 @@ function BoardScreen(props: {
               <BoardPanel
                 panel={panel}
                 goals={goalsOf(index, board.goals)}
+                onSeenAll={() => markSeen(panel.finished.map(({ chat }) => chat))}
                 onOpenTask={actions.onOpenTask}
                 onOpenChat={props.onOpenThread}
               />

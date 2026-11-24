@@ -26,6 +26,7 @@ import { formatRelativeTimeLabel } from "~/timestampFormat";
 
 import {
   type BoardContinueTarget,
+  type BoardChatAttention,
   type BoardIndex,
   type BoardLinkGroup,
   type BoardTaskTab,
@@ -43,7 +44,7 @@ import {
   subtreeOf,
   tagsOf,
 } from "./board.logic";
-import { BoardDotMark, BoardModuleNote, type BoardNoteActions } from "./BoardNotes";
+import { attentionDot, BoardDotMark, BoardModuleNote, type BoardNoteActions } from "./BoardNotes";
 import {
   AddRow,
   BoardEditProvider,
@@ -547,6 +548,7 @@ function OverviewTab(props: BoardTaskViewProps & { readonly onTab: (tab: Tab) =>
               <MiniChat
                 key={chat.sessionId}
                 chat={chat}
+                attention={index.attention.get(chat.sessionId)}
                 owner={owner}
                 here={task}
                 onOpenThread={props.onOpenThread}
@@ -597,6 +599,7 @@ function liveLabel(gt: ReturnType<typeof useGT>, live: BoardChat["live"]) {
 
 function MiniChat(props: {
   readonly chat: BoardChat;
+  readonly attention: BoardChatAttention | undefined;
   readonly owner: BoardTask;
   readonly here: BoardTask;
   readonly onOpenThread: (chat: BoardChat) => void;
@@ -606,10 +609,7 @@ function MiniChat(props: {
   const { chat } = props;
   return (
     <div className="flex items-start gap-2 rounded-md border p-2">
-      <BoardDotMark
-        className="mt-1.5"
-        dot={chat.live === "working" ? "working" : chat.live === "idle" ? "idle" : "offline"}
-      />
+      <BoardDotMark className="mt-1.5" dot={attentionDot(props.attention, chat.live)} />
       <div className="grid min-w-0 flex-1 gap-0.5">
         {chat.threadId !== null ? (
           <button
@@ -665,6 +665,7 @@ function ThreadsTab(
       ) : (
         chats.map(({ chat, task: owner }) => {
           const more = extra.get(chat.sessionId);
+          const wants = index.attention.get(chat.sessionId);
           return (
             <Card key={chat.sessionId}>
               <div className="flex flex-wrap items-center gap-2">
@@ -680,8 +681,26 @@ function ThreadsTab(
                     </button>
                   ) : null}
                 </span>
-                <Badge variant={chat.live === "working" ? "success" : "outline"}>
-                  {liveLabel(gt, chat.live)}
+                <Badge
+                  variant={
+                    wants?.kind === "needs"
+                      ? "warning"
+                      : wants?.kind === "stopped"
+                        ? "error"
+                        : chat.live === "working" || wants?.kind === "finished"
+                          ? "success"
+                          : "outline"
+                  }
+                >
+                  {wants?.kind === "needs"
+                    ? wants.why === "approval"
+                      ? gt("Needs you · approval")
+                      : gt("Needs you · a question")
+                    : wants?.kind === "stopped"
+                      ? gt("Stopped on an error")
+                      : wants?.kind === "finished"
+                        ? gt("Finished · not seen")
+                        : liveLabel(gt, chat.live)}
                 </Badge>
                 {chat.threadId !== null ? (
                   <Button size="xs" onClick={() => props.onOpenThread(chat)}>

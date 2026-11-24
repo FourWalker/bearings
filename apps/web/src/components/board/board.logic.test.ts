@@ -8,6 +8,7 @@ import {
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  type BoardAttention,
   assistantBubbles,
   latestExchange,
   boardPickupTargets,
@@ -16,6 +17,7 @@ import {
   chatsForView,
   chatStatusOf,
   collisionsOf,
+  dotOf,
   externalLinksOf,
   flagsOf,
   goalChatText,
@@ -283,6 +285,73 @@ describe("chat status", () => {
     });
   });
 
+  it("puts a waiting answer above work under way, and an unseen result below it", () => {
+    const tasks = [
+      task("feature", { chats: [chat("own", { live: "working", turnStartedAt: 50 })] }),
+      task("module", {
+        level: 2,
+        parentId: "feature",
+        chats: [chat("asks", { updatedAt: 70 }), chat("ended", { updatedAt: 80 })],
+      }),
+    ];
+    const waiting = indexBoard(tasks, {
+      attention: new Map([
+        ["asks", { kind: "needs", why: "approval" }],
+        ["ended", { kind: "finished", at: 90 }],
+      ]),
+    });
+    expect(chatStatusOf(waiting, waiting.byId.get("feature")!, 100)).toEqual({
+      kind: "needs",
+      count: 1,
+      why: "approval",
+      since: 70,
+      inSubtasks: 1,
+    });
+    expect(dotOf(waiting, waiting.byId.get("feature")!)).toBe("needs");
+    const seen = indexBoard(tasks, {
+      attention: new Map([["ended", { kind: "finished", at: 90 }]]),
+    });
+    expect(chatStatusOf(seen, seen.byId.get("feature")!, 100).kind).toBe("working");
+    expect(chatStatusOf(seen, seen.byId.get("module")!, 100)).toEqual({
+      kind: "finished",
+      count: 1,
+      at: 90,
+      inSubtasks: 0,
+    });
+  });
+
+  it("says why a running Goal is not moving", () => {
+    const goal = (patch: Partial<BoardGoal>): BoardGoal => ({
+      id: "g",
+      title: "g",
+      status: "running",
+      mode: "auto",
+      pausedReason: null,
+      executor: "runner",
+      taskIds: ["a", "b"],
+      decisions: [],
+      groups: [],
+      chats: [chat("runner", { threadId: ThreadId.make("t1") })],
+      createdAt: 0,
+      updatedAt: 0,
+      ...patch,
+    });
+    const tasks = [task("a", { status: "done" }), task("b")];
+    const standing = (attention: BoardAttention, patch: Partial<BoardGoal> = {}) =>
+      indexBoard(tasks, { attention, goals: [goal(patch)] }).goalStanding.get("g");
+    expect(standing(new Map([["runner", { kind: "needs", why: "question" }]]))).toEqual({
+      kind: "needs",
+      why: "question",
+    });
+    // Its thread ended a turn and one task is still open: stalled, not "running · thread idle".
+    expect(standing(new Map())).toEqual({ kind: "stalled", open: 1 });
+    expect(standing(new Map(), { chats: [chat("runner", { live: "working" })] })).toEqual({
+      kind: "running",
+    });
+    // Run from outside the app, with no chat to read: nothing says it stopped.
+    expect(standing(new Map(), { chats: [] })).toEqual({ kind: "running" });
+  });
+
   it("warns when two chats work in one workspace copy", () => {
     const tasks = [task("t", { chats: [chat("s1", { live: "working" })] })];
     expect(collisionsOf(tasks, [chat("s2", { live: "working" })])).toEqual([
@@ -293,6 +362,32 @@ describe("chat status", () => {
 });
 
 describe("panelOf", () => {
+  it("lists the chats that want the person, a waiting answer first", () => {
+    const index = indexBoard(
+      [
+        task("t", {
+          chats: [chat("failed"), chat("asks"), chat("old"), chat("new"), chat("quiet")],
+        }),
+      ],
+      {
+        attention: new Map([
+          ["failed", { kind: "stopped" }],
+          ["asks", { kind: "needs", why: "question" }],
+          ["old", { kind: "finished", at: 10 }],
+          ["new", { kind: "finished", at: 20 }],
+          ["loose", { kind: "needs", why: "approval" }],
+        ]),
+      },
+    );
+    const panel = panelOf(index, [chat("loose")]);
+    expect(panel.needsYou.map(({ chat, task }) => [chat.sessionId, task?.id ?? null])).toEqual([
+      ["asks", "t"],
+      ["loose", null],
+      ["failed", "t"],
+    ]);
+    expect(panel.finished.map(({ chat }) => chat.sessionId)).toEqual(["new", "old"]);
+  });
+
   it("collects open items and decisions from unfinished tasks, and open unlinked chats", () => {
     const index = indexBoard([
       task("live", {
