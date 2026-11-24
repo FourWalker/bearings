@@ -628,6 +628,20 @@ export function ringTack(playback: TackPlayback, motion: TackMotion): TackPlayba
   return { ...playback, clip: "alert", run: playback.run + 1, held: false };
 }
 
+/** Fired on the window once Tack's release has played and its Sub Tack may leave. */
+export const TACK_RELEASED = "t3:tack-released";
+
+/** Tack sends a Sub Tack off and stays where it is: a pixel Tack jolts, the Plotter takes its quill. */
+export function releaseTack(
+  playback: TackPlayback,
+  motion: TackMotion,
+  skin: TackSkin,
+): TackPlayback {
+  const clip: TackClip = skin === "plotter" ? "write" : "alert";
+  if (!clipMoves(clip, motion)) return playback;
+  return { ...playback, clip, run: playback.run + 1, held: false };
+}
+
 /** Good news, or the last notice dealt with: the "done" flourish, unless Tack is busy. */
 export function cheerTack(playback: TackPlayback, motion: TackMotion): TackPlayback {
   if (!clipMoves("done", motion) || (playback.clip !== "idle" && playback.clip !== "sleep"))

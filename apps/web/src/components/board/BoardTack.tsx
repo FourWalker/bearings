@@ -101,6 +101,8 @@ interface TackBoard {
   readonly openNotice: (notice: BoardNotice) => void;
   readonly hold: TackHold | null;
   readonly signal: TackSignal;
+  /** Tack sends a Sub Tack off (to the Pin bar) and stays where it is. */
+  readonly release: () => void;
 }
 
 const TackBoardContext = createContext<TackBoard | null>(null);
@@ -258,6 +260,7 @@ export function TackBoardProvider(
     },
     hold: notices.length === 0 ? null : urgent ? "needs" : "calm",
     signal,
+    release: () => setSignal((previous) => ({ at: previous.at + 1, kind: "release" })),
   };
   if (!chat.canAsk) return props.children;
   return (
@@ -266,6 +269,11 @@ export function TackBoardProvider(
       <TackBubble />
     </TackBoardContext>
   );
+}
+
+/** Asks Tack to release a Sub Tack; null where no Tack lives on the board. */
+export function useTackRelease(): (() => void) | null {
+  return use(TackBoardContext)?.release ?? null;
 }
 
 function useTackBoard() {
@@ -481,6 +489,7 @@ function TackFigure(props: { readonly kind: AnchorKind; readonly scale: number }
     <button
       type="button"
       data-tack-figure={props.kind}
+      data-tack-self
       aria-label={gt("Tack")}
       draggable
       className="block cursor-pointer rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"

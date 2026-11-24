@@ -4,12 +4,19 @@ import { useStableCallback } from "~/hooks/useStableCallback";
 import { cn } from "~/lib/utils";
 import { observeVisibleAnimation } from "~/lib/visibleAnimation";
 
-import { clipRuns, type TackClip, type TackMood, type TackMotion } from "./tackAvatar.logic";
+import {
+  clipRuns,
+  TACK_RELEASED,
+  type TackClip,
+  type TackMood,
+  type TackMotion,
+} from "./tackAvatar.logic";
 import {
   PLOTTER_CHASE_MS,
   PLOTTER_CLIP_SECONDS,
   PLOTTER_DRAWING_OF,
   PLOTTER_DRAWINGS,
+  PLOTTER_SUB_BIRD,
   type PlotterDrawing,
   type PlotterPen,
   plotterPenPath,
@@ -93,6 +100,8 @@ export function TackPlotter(props: {
   /** Width and height in screen pixels. */
   readonly size: number;
   readonly onClipEnd: () => void;
+  /** Tack is releasing a Sub Tack: the note's script gives way to a sketch of the bird. */
+  readonly sketch?: boolean;
   readonly onClick?: () => void;
   readonly className?: string;
 }) {
@@ -141,6 +150,7 @@ export function TackPlotter(props: {
   const runs = clipRuns(props.clip, props.mood);
   const live = !still && !props.held && (props.motion === "full" || runs !== null);
   const width = (1.4 * 200) / props.size;
+  const sketching = props.sketch === true && sheet.shown === "quill" && !still;
 
   const style = {
     width: props.size,
@@ -185,6 +195,7 @@ export function TackPlotter(props: {
       data-hold={attentive ? (props.hold ?? undefined) : undefined}
       data-motion={still ? "still" : "moving"}
       data-live={live ? "" : undefined}
+      data-sketch={sketching ? "" : undefined}
       className={cn("tack-plotter relative block shrink-0", props.className)}
       style={style}
       onClick={props.onClick}
@@ -231,6 +242,28 @@ export function TackPlotter(props: {
         <g key={`draw-${sheet.epoch}`} className="tp-sheet" data-mode="draw">
           {strokes}
         </g>
+        {sketching ? (
+          // Inside the note's sheet, facing left: the way the bird will fly.
+          <g
+            key={`sketch-${clipKey}`}
+            className="tp-sketch"
+            transform="translate(117 106) rotate(-5) scale(-1.05 1.05)"
+            onAnimationEnd={(event) => {
+              if (event.animationName === "tp-sketch-off")
+                window.dispatchEvent(new Event(TACK_RELEASED));
+            }}
+          >
+            {PLOTTER_SUB_BIRD.map((stroke, i) => (
+              <path
+                key={stroke.d}
+                d={stroke.d}
+                pathLength={1}
+                data-tone={stroke.tone}
+                style={{ "--i": i } as CSSProperties}
+              />
+            ))}
+          </g>
+        ) : null}
         {fresh ? (
           <circle
             key={`pen-${sheet.epoch}`}

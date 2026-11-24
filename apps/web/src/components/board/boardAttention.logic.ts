@@ -27,6 +27,10 @@ export function chatAttentionOf(thread: ThreadStatus): BoardChatAttention | null
   return null;
 }
 
+/** A thread sitting on background work it started, or on another thread: not done, not busy. */
+export const isThreadWaiting = (thread: ThreadStatus): boolean =>
+  resolveSidebarRowStatus(thread) === "waiting";
+
 /** The board's chats that want something, by session id. Chats the app holds no thread for say nothing. */
 export function boardAttentionOf(
   environmentId: EnvironmentId,

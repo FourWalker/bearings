@@ -240,6 +240,23 @@ const INKWELL: ReadonlyArray<PlotterStroke> = [
   { d: "M30 160L120 168", tone: "rust" },
 ];
 
+/**
+ * The Plotter's Sub Tack: a small bird in a 60-unit box, drawn to read at the size it has on the
+ * Pin bar. The Plotter sketches it in its note before it flies off.
+ */
+export const PLOTTER_SUB_BIRD: ReadonlyArray<PlotterStroke> = [
+  { d: "M14 39C14 29 24 25 33 28C42 31 43 41 35 45C26 49 14 47 14 39Z" },
+  { d: circ(40, 24, 6.2) },
+  { d: circ(41.5, 23, 1), tone: "fill-ink" },
+  { d: "M46 22L54 25L46 27.5Z", tone: "fill-rust" },
+  { d: "M15 38L5 33" },
+  { d: "M15 41L4 42" },
+  { d: "M25 46L25 56L21 57" },
+  { d: "M31 46L31 56L35 57" },
+  { d: "M22 34C28 27 37 31 35 40C31 38 26 37 22 34Z", part: "wing" },
+  { d: "M26 34L32 37", tone: "rust", part: "wing" },
+];
+
 export const PLOTTER_DRAWINGS = {
   face: FACE,
   attention: ATTENTION,

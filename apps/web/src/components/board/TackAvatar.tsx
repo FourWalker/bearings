@@ -16,8 +16,10 @@ import {
   paintTackSign,
   paintTackStrip,
   pokeTack,
+  releaseTack,
   ringTack,
   startTackPlayback,
+  TACK_RELEASED,
   TACK_CELL,
   TACK_CLIPS,
   TACK_SIGN,
@@ -66,7 +68,8 @@ export function useTackPen() {
 export type TackHold = "needs" | "calm";
 export interface TackSignal {
   readonly at: number;
-  readonly kind: "ring" | "cheer";
+  /** release: Tack sends a Sub Tack off and stays where it is. */
+  readonly kind: "ring" | "cheer" | "release";
 }
 
 const strips = new Map<string, string>();
@@ -167,12 +170,19 @@ export function TackAvatar(props: {
   );
   const signalAt = props.signal?.at ?? 0;
   const [signalled, setSignalled] = useState(signalAt);
+  // The run that releases a Sub Tack: it shows the release on top of its clip.
+  const [releaseRun, setReleaseRun] = useState(-1);
   let reacted = stored;
   if (signalAt !== signalled) {
     setSignalled(signalAt);
-    if (signalAt > signalled)
-      reacted =
-        props.signal?.kind === "cheer" ? cheerTack(stored, motion) : ringTack(stored, motion);
+    if (signalAt > signalled) {
+      if (props.signal?.kind === "release") {
+        reacted = releaseTack(stored, motion, props.skin);
+        if (reacted !== stored) setReleaseRun(reacted.run);
+      } else
+        reacted =
+          props.signal?.kind === "cheer" ? cheerTack(stored, motion) : ringTack(stored, motion);
+    }
   }
   const playback = advanceTackPlayback(reacted, props.mood, notes, motion);
   if (playback !== stored) setPlayback(playback);
@@ -199,6 +209,7 @@ export function TackAvatar(props: {
         hold={props.hold ?? null}
         size={Math.round(TACK_CELL.height * props.scale * 1.3)}
         onClipEnd={() => setPlayback((current) => finishTackClip(current, motion))}
+        sketch={playback.clip === "write" && playback.run === releaseRun}
         {...(poke === undefined ? {} : { onClick: poke })}
         {...(props.className === undefined ? {} : { className: props.className })}
       />
@@ -209,16 +220,18 @@ export function TackAvatar(props: {
   const width = TACK_CELL.width * props.scale;
   const height = TACK_CELL.height * props.scale;
   const moving = clipMoves(clip, motion) && !playback.held;
+  const releasing = moving && clip === "alert" && playback.run === releaseRun;
   const style = {
     width,
     height,
     backgroundImage: `url(${stripUrl(props.skin, clip)})`,
     backgroundSize: `${frames * width}px ${height}px`,
     "--tack-strip-end": `-${frames * width}px`,
-    animationName: moving ? "tack-strip" : "none",
-    animationDuration: `${frames / TACK_CLIPS[clip].fps}s`,
-    animationTimingFunction: `steps(${frames})`,
-    animationIterationCount: clipRuns(clip, playback.mood) ?? "infinite",
+    // Releasing a Sub Tack, the strip plays under a squash of the whole sprite.
+    animationName: releasing ? "tack-strip, tack-squash" : moving ? "tack-strip" : "none",
+    animationDuration: `${frames / TACK_CLIPS[clip].fps}s${releasing ? ", 0.55s" : ""}`,
+    animationTimingFunction: `steps(${frames})${releasing ? ", ease-out" : ""}`,
+    animationIterationCount: `${clipRuns(clip, playback.mood) ?? "infinite"}${releasing ? ", 1" : ""}`,
   } as CSSProperties;
   return (
     <span
@@ -226,9 +239,14 @@ export function TackAvatar(props: {
       ref={observeVisibleAnimation}
       aria-hidden
       data-tack-clip={clip}
-      className={cn("tack-avatar block shrink-0", props.className)}
+      data-tack-release={releasing ? "" : undefined}
+      className={cn("tack-avatar relative block shrink-0", props.className)}
       style={style}
-      onAnimationEnd={() => setPlayback((current) => finishTackClip(current, motion))}
+      onAnimationEnd={(event) => {
+        if (event.animationName === "tack-squash") window.dispatchEvent(new Event(TACK_RELEASED));
+        else if (event.target === event.currentTarget)
+          setPlayback((current) => finishTackClip(current, motion));
+      }}
       onClick={poke}
     />
   );

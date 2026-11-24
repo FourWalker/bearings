@@ -1,0 +1,757 @@
+/* Project Board fork: the Pin bar. Its look follows the theme; nothing here repaints continuously:
+   every motion is a short one-shot that replays when its element is keyed anew. */
+[data-board-pin] {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: auto minmax(7rem, 1fr) minmax(10rem, 1.15fr) minmax(0, 1.5fr) auto;
+  align-items: center;
+  gap: 0.25rem 0.875rem;
+  padding: 0.375rem 0.75rem 0.375rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+  container-type: inline-size;
+  --pin-attention: var(--board-attention);
+  --pin-accent: var(--app-theme-accent, var(--primary));
+}
+
+[data-board-pin]::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--pin-accent);
+}
+
+[data-board-pin]:is([data-pin-tone="needs"], [data-pin-tone="blocked"]) {
+  background: color-mix(in oklab, var(--pin-attention) 12%, var(--card));
+}
+
+[data-board-pin]:is([data-pin-tone="needs"], [data-pin-tone="blocked"])::before {
+  width: 4px;
+  background: var(--pin-attention);
+}
+
+[data-board-pin][data-pin-tone="stopped"]::before {
+  width: 4px;
+  background: var(--destructive);
+}
+
+[data-board-pin-what] {
+  position: relative;
+  min-width: 0;
+  text-align: left;
+}
+
+[data-board-pin-what]:hover [data-board-task-title] {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+[data-board-pin-plan] {
+  display: grid;
+  min-width: 0;
+  gap: 0.125rem;
+  padding-left: 0.875rem;
+  border-left: 1px solid var(--border);
+}
+
+[data-board-pin-pip] {
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--muted-foreground);
+  border-radius: 50%;
+  opacity: 0.55;
+}
+
+[data-board-pin-pip="done"] {
+  border-color: var(--success);
+  background: var(--success);
+  opacity: 1;
+}
+
+[data-board-pin-pip="next"] {
+  border-color: var(--pin-accent);
+  opacity: 1;
+}
+
+[data-board-pin-step] {
+  animation: pin-step 0.45s ease-out 1;
+}
+
+@keyframes pin-step {
+  from {
+    opacity: 0;
+    translate: 0 5px;
+  }
+}
+
+[data-board-pin-chip] {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.125rem 0.5625rem;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--muted-foreground) 14%, transparent);
+  font-size: 0.71875rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+[data-board-pin-chip]::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted-foreground);
+}
+
+[data-board-pin-chip="working"]::before {
+  background: var(--success);
+}
+
+[data-board-pin-chip="waiting"]::before {
+  border: 1.5px solid var(--muted-foreground);
+  background: transparent;
+}
+
+[data-board-pin-chip]:is([data-board-pin-chip="needs"], [data-board-pin-chip="blocked"]) {
+  background: var(--pin-attention);
+  color: var(--background);
+}
+
+[data-board-pin-chip="stopped"] {
+  background: var(--destructive);
+  color: var(--background);
+}
+
+[data-board-pin-chip]:is(
+    [data-board-pin-chip="needs"],
+    [data-board-pin-chip="blocked"],
+    [data-board-pin-chip="stopped"]
+  )::before {
+  background: var(--background);
+}
+
+[data-board-pin-chip="finished"] {
+  background: color-mix(in oklab, var(--pin-accent) 18%, transparent);
+  color: var(--pin-accent);
+}
+
+[data-board-pin-chip="finished"]::before {
+  background: var(--pin-accent);
+}
+
+@container (max-width: 44rem) {
+  [data-board-pin] {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  [data-board-pin-plan] {
+    grid-row: 2;
+    grid-column: 2 / 4;
+    padding-left: 0;
+    border-left: 0;
+  }
+  [data-board-pin-now] {
+    grid-row: 3;
+    grid-column: 2 / 4;
+  }
+  [data-board-pin-acts] {
+    grid-row: 1;
+    grid-column: 3;
+  }
+  [data-board-pin-pips] {
+    display: none;
+  }
+}
+
+/* ---------- Plotter theme: a paper strip, square pips, a stamp ---------- */
+
+html[data-theme-id="plotter"] [data-board-pin] {
+  background: var(--board-note-1);
+}
+
+html[data-theme-id="plotter"] [data-board-pin-pip] {
+  border-width: 1px;
+  border-radius: 2px;
+}
+
+html[data-theme-id="plotter"] [data-board-pin-pip="done"] {
+  border-color: var(--plotter-ink);
+  background: var(--plotter-ink);
+}
+
+html[data-theme-id="plotter"] [data-board-pin-chip] {
+  border: 1px solid var(--plotter-line);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--plotter-ink-soft);
+  font-family: var(--plotter-mono);
+  font-size: 0.65625rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+html[data-theme-id="plotter"] [data-board-pin-chip]::before {
+  border-radius: 1px;
+}
+
+html[data-theme-id="plotter"] [data-board-pin-chip="working"] {
+  border-color: var(--plotter-ink);
+  color: var(--plotter-ink);
+}
+
+html[data-theme-id="plotter"] [data-board-pin-chip="finished"] {
+  border-color: var(--plotter-rust);
+}
+
+html[data-theme-id="plotter"]
+  [data-board-pin-chip]:is([data-board-pin-chip="needs"], [data-board-pin-chip="blocked"]) {
+  border-color: var(--plotter-rust);
+  background: var(--plotter-rust);
+  color: var(--app-theme-canvas);
+}
+
+html[data-theme-id="plotter"] [data-board-pin-chip="stopped"] {
+  border-color: var(--destructive);
+  background: transparent;
+  color: var(--destructive);
+}
+
+html[data-theme-id="plotter"] [data-board-pin-chip="stopped"]::before {
+  background: var(--destructive);
+}
+
+/* ---------- Catch my eye: the pen's marks (Plotter theme, or the Plotter's Sub Tack) ---------- */
+
+[data-pin-mark] {
+  position: absolute;
+  display: none;
+  overflow: visible;
+  pointer-events: none;
+}
+
+[data-pin-mark] path {
+  fill: none;
+  stroke: var(--pin-attention);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+[data-pin-mark="ring"] {
+  inset: -7px -11px;
+  width: calc(100% + 22px);
+  height: calc(100% + 14px);
+}
+
+[data-pin-mark="scribble"] {
+  bottom: -5px;
+  left: 0;
+  width: min(100%, 8.5em);
+  height: 7px;
+}
+
+[data-pin-mark="rule"] {
+  right: 0;
+  bottom: -3px;
+  left: 0;
+  width: 100%;
+  height: 6px;
+}
+
+[data-pin-mark="rays"] {
+  inset: -16px -26px;
+  width: calc(100% + 52px);
+  height: calc(100% + 32px);
+}
+
+html[data-theme-id="plotter"]
+  [data-pin-catch="theme"]
+  :is([data-pin-mark="ring"], [data-pin-mark="scribble"]),
+[data-pin-catch="tack"][data-pin-skin="plotter"]
+  :is([data-pin-mark="ring"], [data-pin-mark="rule"], [data-pin-mark="rays"]) {
+  display: block;
+}
+
+:is(
+    html[data-theme-id="plotter"] [data-pin-catch="theme"],
+    [data-pin-catch="tack"][data-pin-skin="plotter"]
+  )
+  [data-board-pin-chip] {
+  rotate: -2deg;
+}
+
+[data-pin-moving] [data-pin-mark="rule"] path {
+  animation: pin-pen 1.3s cubic-bezier(0.5, 0, 0.3, 1) 1 both;
+}
+
+[data-pin-moving] [data-pin-mark="ring"] path {
+  animation: pin-pen 0.8s cubic-bezier(0.5, 0, 0.3, 1) 0.3s 1 both;
+}
+
+[data-pin-moving] [data-pin-mark="scribble"] path {
+  animation: pin-pen 0.5s linear 1.1s 1 both;
+}
+
+[data-pin-moving] [data-pin-mark="rays"] path {
+  animation: pin-pen 0.2s linear calc(1.1s + var(--i) * 0.12s) 1 both;
+}
+
+:is(
+    html[data-theme-id="plotter"] [data-pin-catch="theme"],
+    [data-pin-catch="tack"][data-pin-skin="plotter"]
+  )[data-pin-moving]
+  [data-board-pin-chip] {
+  animation: pin-stamp 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) 1.2s 1 both;
+}
+
+@keyframes pin-pen {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes pin-stamp {
+  0% {
+    scale: 1.7;
+    rotate: -9deg;
+    opacity: 0;
+  }
+  55% {
+    scale: 0.93;
+    opacity: 1;
+  }
+  100% {
+    scale: 1;
+    rotate: -2deg;
+  }
+}
+
+/* ---------- Catch my eye by theme, every other theme: a swell, a beacon, a buoy ---------- */
+
+[data-pin-swell] {
+  position: absolute;
+  inset: 0;
+  display: none;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+[data-pin-swell]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 0 30%,
+    color-mix(in oklab, var(--pin-attention) 42%, transparent) 50%,
+    transparent 70% 100%
+  );
+  translate: -100% 0;
+}
+
+html:not([data-theme-id="plotter"]) [data-pin-catch="theme"][data-pin-moving] [data-pin-swell] {
+  display: block;
+}
+
+html:not([data-theme-id="plotter"])
+  [data-pin-catch="theme"][data-pin-moving]
+  [data-pin-swell]::after {
+  animation: pin-swell 1.15s cubic-bezier(0.4, 0, 0.2, 1) 2 both;
+}
+
+html:not([data-theme-id="plotter"])
+  [data-pin-catch="theme"][data-pin-moving]
+  [data-pin-swell]::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--pin-attention);
+  animation: pin-beacon 1.15s ease-out 2 both;
+}
+
+html:not([data-theme-id="plotter"])
+  [data-pin-catch="theme"][data-pin-moving]
+  [data-board-pin-chip] {
+  animation: pin-bob 1.15s ease-in-out 2 both;
+}
+
+@keyframes pin-swell {
+  from {
+    translate: -100% 0;
+  }
+  to {
+    translate: 100% 0;
+  }
+}
+
+@keyframes pin-beacon {
+  0%,
+  100% {
+    width: 4px;
+    box-shadow: none;
+  }
+  35% {
+    width: 9px;
+    box-shadow: 0 0 14px 2px var(--pin-attention);
+  }
+}
+
+@keyframes pin-bob {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  30% {
+    translate: 0 -4px;
+  }
+  60% {
+    translate: 0 2px;
+  }
+}
+
+/* ---------- Sub Tacks: a small Tack on top of the bar, above the state chip ---------- */
+
+[data-subtack] {
+  position: absolute;
+  bottom: calc(100% + 0.25rem);
+  left: 50%;
+  z-index: 6;
+  margin-left: calc(var(--sub-w) / -2);
+  pointer-events: none;
+}
+
+[data-subtack][data-phase="wait"] {
+  opacity: 0;
+}
+
+/* Leaving Tack: from where Tack is, facing the way it goes. */
+[data-subtack][data-phase="fly"] {
+  animation: subtack-fly var(--sub-fly, 1.5s) cubic-bezier(0.45, 0, 0.25, 1) 1 both;
+}
+
+[data-subtack][data-phase="fly"] [data-subtack-face] {
+  scale: -1 1;
+}
+
+@keyframes subtack-fly {
+  from {
+    translate: var(--sub-fx, 0) var(--sub-fy, 0);
+    scale: var(--sub-from-scale, 0.5);
+  }
+}
+
+[data-subtack-walk],
+[data-subtack-jump],
+[data-subtack-face] {
+  display: block;
+}
+
+[data-subtack-jump] {
+  transform-origin: 50% 100%;
+}
+
+/* Pixel skins: it runs the bar and back, then stomps on the chip. */
+[data-subtack="pixel"][data-phase="land"] [data-subtack-walk] {
+  animation: subtack-patrol 2s linear 1 both;
+}
+
+[data-subtack="pixel"][data-phase="land"] [data-subtack-face] {
+  animation: subtack-turn 2s steps(1) 1 both;
+}
+
+[data-subtack="pixel"][data-phase="land"] [data-subtack-jump] {
+  animation: subtack-stomp 1.5s linear 2s 1 both;
+}
+
+@keyframes subtack-patrol {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  46%,
+  54% {
+    translate: calc(var(--sub-run, 0px) * -1) 0;
+  }
+}
+
+@keyframes subtack-turn {
+  0% {
+    scale: -1 1;
+  }
+  50% {
+    scale: 1 1;
+  }
+}
+
+@keyframes subtack-stomp {
+  0%,
+  33%,
+  66%,
+  100% {
+    translate: 0 0;
+  }
+  14%,
+  47%,
+  80% {
+    translate: 0 -17px;
+  }
+  30%,
+  63%,
+  96% {
+    translate: 0 3px;
+    scale: 1.12 0.86;
+  }
+}
+
+[data-pin-catch="tack"][data-pin-skin="pixel"][data-pin-moving] [data-pin-quake] {
+  animation: pin-quake 1.5s linear 2s 1;
+}
+
+[data-pin-catch="tack"][data-pin-skin="pixel"][data-pin-moving] [data-board-pin-chip] {
+  animation: pin-flash 1.5s steps(1) 2s 1;
+}
+
+@keyframes pin-quake {
+  0%,
+  28%,
+  36%,
+  61%,
+  69%,
+  94%,
+  100% {
+    translate: 0 0;
+  }
+  31%,
+  64%,
+  97% {
+    translate: 0 3px;
+  }
+}
+
+@keyframes pin-flash {
+  0%,
+  36%,
+  69%,
+  100% {
+    filter: none;
+    scale: 1;
+  }
+  30%,
+  63%,
+  96% {
+    filter: brightness(1.5) saturate(1.4);
+    scale: 1.14;
+  }
+}
+
+[data-subtack-bang] {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  display: grid;
+  width: 18px;
+  height: 22px;
+  margin: 0 0 2px -9px;
+  place-items: center;
+  background: var(--pin-attention);
+  box-shadow: 2px 2px 0 var(--foreground);
+  color: var(--background);
+  font: 800 15px/1 var(--font-mono);
+  animation: subtack-bang 0.35s cubic-bezier(0.3, 1.6, 0.5, 1) 2.4s 1 both;
+}
+
+@keyframes subtack-bang {
+  from {
+    scale: 0;
+    translate: 0 10px;
+  }
+}
+
+/* The Plotter's bird: it hops and beats its wing. */
+[data-subtack-bird] {
+  display: block;
+  overflow: visible;
+  color: var(--foreground);
+}
+
+[data-subtack-bird] path,
+.tp-sketch path {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+[data-subtack-bird] path {
+  stroke-width: 2;
+}
+
+:is([data-subtack-bird], .tp-sketch) path[data-tone="rust"] {
+  stroke: var(--app-theme-accent, var(--primary));
+}
+
+:is([data-subtack-bird], .tp-sketch) path[data-tone="fill-rust"] {
+  fill: var(--app-theme-accent, var(--primary));
+  stroke: var(--app-theme-accent, var(--primary));
+}
+
+:is([data-subtack-bird], .tp-sketch) path[data-tone="fill-ink"] {
+  fill: currentColor;
+}
+
+[data-subtack-bird] [data-part="wing"] {
+  transform-box: view-box;
+  transform-origin: 22px 34px;
+}
+
+[data-subtack="plotter"][data-phase="fly"] [data-part="wing"] {
+  animation: subtack-flap-soft 1.6s ease-in-out 1;
+}
+
+[data-subtack="plotter"][data-phase="land"] [data-part="wing"] {
+  animation: subtack-flap 1.8s ease-in-out 1;
+}
+
+[data-subtack="plotter"][data-phase="land"] [data-subtack-walk] {
+  animation: subtack-hop 1.8s ease-in-out 1;
+}
+
+@keyframes subtack-flap-soft {
+  0%,
+  100% {
+    rotate: 0deg;
+  }
+  25%,
+  65% {
+    rotate: -30deg;
+  }
+  45%,
+  85% {
+    rotate: 4deg;
+  }
+}
+
+@keyframes subtack-flap {
+  0%,
+  100% {
+    rotate: 0deg;
+  }
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    rotate: -58deg;
+  }
+  20%,
+  40%,
+  60%,
+  80% {
+    rotate: 8deg;
+  }
+}
+
+@keyframes subtack-hop {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    translate: 0 -5px;
+  }
+}
+
+/* ---------- Tack releasing a Sub Tack ---------- */
+
+/* The Plotter sketches the bird inside its note, where the lines of script would be. */
+.tack-plotter[data-sketch] [data-part="script"] {
+  display: none;
+}
+
+.tp-sketch {
+  animation: tp-sketch-off 0.3s linear calc(var(--tp-live) + 2.5s) 1 forwards;
+  animation-play-state: var(--visible-animation-state, paused);
+}
+
+.tp-sketch path {
+  stroke-width: 2;
+  stroke-dasharray: 1;
+  animation: pin-pen 0.26s linear calc(var(--tp-live) + var(--i) * 0.2s) 1 both;
+}
+
+@keyframes tp-sketch-off {
+  to {
+    opacity: 0;
+  }
+}
+
+/* A pixel Tack squashes and a small one pops out in a puff of pixels. */
+.tack-avatar[data-tack-release] {
+  transform-origin: 50% 100%;
+}
+
+.tack-avatar[data-tack-release]::after {
+  content: "";
+  position: absolute;
+  top: 30%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  margin-left: -2px;
+  opacity: 0;
+  animation: tack-puff 0.6s ease-out 0.15s 1;
+}
+
+@keyframes tack-squash {
+  0%,
+  100% {
+    scale: 1 1;
+  }
+  30% {
+    scale: 1.18 0.72;
+  }
+  60% {
+    scale: 0.86 1.2;
+  }
+}
+
+@keyframes tack-puff {
+  from {
+    opacity: 1;
+    box-shadow:
+      0 0 0 var(--app-theme-accent, var(--primary)),
+      0 0 0 var(--app-theme-accent, var(--primary)),
+      0 0 0 var(--app-theme-accent, var(--primary)),
+      0 0 0 var(--app-theme-accent, var(--primary));
+  }
+  to {
+    opacity: 0;
+    box-shadow:
+      -30px -22px 0 var(--app-theme-accent, var(--primary)),
+      -14px -34px 0 var(--app-theme-accent, var(--primary)),
+      14px -34px 0 var(--app-theme-accent, var(--primary)),
+      30px -22px 0 var(--app-theme-accent, var(--primary));
+  }
+}
+
+/* Still (Tack's motion setting, or the system's): the colour and the marks stay, nothing moves. */
+@media (prefers-reduced-motion: reduce) {
+  [data-board-pin] *,
+  [data-board-pin] *::before,
+  [data-board-pin] *::after {
+    animation: none !important;
+  }
+}

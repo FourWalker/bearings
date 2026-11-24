@@ -5,6 +5,7 @@
 @import "./clay-post.css";
 @import "./plotter.css";
 @import "./tack-plotter.css";
+@import "./board-pin.css";
 
 @custom-variant dark (&:is(.dark, .dark *));
 @custom-variant light (&:not(.dark, .dark *));

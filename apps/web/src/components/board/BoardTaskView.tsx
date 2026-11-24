@@ -10,6 +10,8 @@ import type {
 import { promptLinkDeepLink } from "@t3tools/shared/promptLinks";
 import { T, useGT } from "gt-react";
 import { ArrowLeftIcon, MessageSquarePlusIcon, XIcon } from "lucide-react";
+
+import { BoardPinToggle } from "./BoardPinBar";
 import { useState, type ReactNode } from "react";
 
 import ChatMarkdown from "~/components/ChatMarkdown";
@@ -344,6 +346,7 @@ function TaskHeader(props: BoardTaskViewProps & { readonly detail: BoardTaskDeta
                 : gt("done")}
           </Badge>
         )}
+        <BoardPinToggle boardId={props.board.id} taskId={task.id} />
         {task.level > 1 ? (
           <Button
             variant="ghost-muted"

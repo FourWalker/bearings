@@ -74,7 +74,8 @@ import {
 } from "./BoardTack";
 import { BoardPanel } from "./BoardPanel";
 import { BoardFileActions } from "./BoardFileActions";
-import { boardAttentionOf } from "./boardAttention.logic";
+import { boardAttentionOf, isThreadWaiting } from "./boardAttention.logic";
+import { BoardPinBar, useBoardPin } from "./BoardPinBar";
 import { BoardSettingsButton } from "./BoardSettingsDialog";
 import { BoardGoals } from "./BoardGoals";
 import { BoardTaskView } from "./BoardTaskView";
@@ -422,6 +423,7 @@ function BoardScreen(props: {
   // Tack sleeps whenever the board opens, even if its chat was left open last time. Held here,
   // because opening a task from the board sends it home.
   const [tackAwake, setTackAwake] = useState(false);
+  const [pinnedId, setPinnedId] = useBoardPin(board.id);
   // As in the board app: a master task opens as a page in place of the board; a module or task
   // opens in a modal over whatever is showing. Both are in the URL, so back and shared links work.
   const byId = (id: string | null) => (id === null ? null : (index.byId.get(id) ?? null));
@@ -501,6 +503,34 @@ function BoardScreen(props: {
       }),
     });
 
+  const pinned = byId(pinnedId);
+  const waitingThreads = new Set(
+    threads.flatMap((thread) =>
+      thread.environmentId === props.environmentId && isThreadWaiting(thread) ? [thread.id] : [],
+    ),
+  );
+  // Under the header of whatever the board shows, so the pinned item is in view everywhere on it.
+  const pinBar =
+    pinned === null ? null : (
+      <BoardPinBar
+        key={pinned.id}
+        environmentId={props.environmentId}
+        boardId={board.id}
+        index={index}
+        task={pinned}
+        waiting={
+          new Set(
+            [...chatsById.values()].flatMap((chat) =>
+              chat.threadId !== null && waitingThreads.has(chat.threadId) ? [chat.sessionId] : [],
+            ),
+          )
+        }
+        onOpenTask={openTask}
+        onUnpin={() => setPinnedId(null)}
+        onChanged={props.onChanged}
+      />
+    );
+
   const taskView = (task: BoardTask, onClose: () => void) => (
     <BoardTaskView
       key={task.id}
@@ -551,8 +581,9 @@ function BoardScreen(props: {
 
   if (pageTask !== null)
     return (
-      <div className="@container/task h-full min-h-0">
-        {taskView(pageTask, closePage)}
+      <div className="flex h-full min-h-0 flex-col">
+        {pinBar}
+        <div className="@container/task min-h-0 flex-1">{taskView(pageTask, closePage)}</div>
         {modal}
       </div>
     );
@@ -663,6 +694,7 @@ function BoardScreen(props: {
           ) : null}
         </div>
       </header>
+      {pinBar}
       <div className="flex min-h-0 flex-1 flex-col @container/board lg:flex-row">
         <TackDropSurface tasks={board.tasks} className="min-h-0 min-w-0 flex-1 overflow-auto p-4">
           {props.mode === "register" ? (
