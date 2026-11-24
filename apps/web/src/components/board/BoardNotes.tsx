@@ -17,6 +17,7 @@ import {
   ownerHolderOf,
   tagsOf,
 } from "./board.logic";
+import { TackPerch } from "./BoardTack";
 
 /**
  * Project Board fork: the board app's sticky notes. Each task keeps one colour across visits
@@ -278,6 +279,7 @@ function NoteFrame(props: {
       role="button"
       tabIndex={0}
       data-board-note={props.kind}
+      data-board-task={props.task.id}
       data-note-status={props.task.status}
       data-note-colour={colourIndexOf(props.task.id) + 1}
       onClick={props.onOpen}
@@ -288,13 +290,14 @@ function NoteFrame(props: {
         }
       }}
       className={cn(
-        "grid min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)] gap-1.5 rounded-lg p-3 text-board-note-ink shadow-sm outline-none ring-ring wrap-anywhere focus-visible:ring-2 focus-visible:ring-inset",
+        "relative grid min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)] gap-1.5 rounded-lg p-3 text-board-note-ink shadow-sm outline-none ring-ring wrap-anywhere focus-visible:ring-2 focus-visible:ring-inset",
         NOTE_COLOURS[colourIndexOf(props.task.id)],
         props.task.status === "done" && "opacity-60",
         props.className,
       )}
     >
       {props.children}
+      <TackPerch taskId={props.task.id} />
     </div>
   );
 }

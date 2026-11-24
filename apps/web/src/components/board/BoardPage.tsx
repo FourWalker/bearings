@@ -58,6 +58,14 @@ import {
 } from "./board.logic";
 import { type BoardNoteActions, BoardModuleNote, BoardNote, BoardServiceRow } from "./BoardNotes";
 import { BoardAssistant } from "./BoardAssistant";
+import {
+  TackBoardProvider,
+  TackCorner,
+  TackDropSurface,
+  TackHost,
+  TackPanelTabs,
+  useTackPlace,
+} from "./BoardTack";
 import { BoardPanel } from "./BoardPanel";
 import { BoardFileActions } from "./BoardFileActions";
 import { BoardSettingsButton } from "./BoardSettingsDialog";
@@ -385,6 +393,7 @@ function BoardScreen(props: {
   const { board } = props;
   const index = indexBoard(board.tasks);
   const canLink = useAtomValue(boardEnvironment.linkThread.permissionAtom(props.environmentId));
+  const [tackPlace, setTackPlace] = useTackPlace();
   // As in the board app: a master task opens as a page in place of the board; a module or task
   // opens in a modal over whatever is showing. Both are in the URL, so back and shared links work.
   const byId = (id: string | null) => (id === null ? null : (index.byId.get(id) ?? null));
@@ -505,13 +514,16 @@ function BoardScreen(props: {
             boardId={board.id}
             boardName={board.name}
             projectId={props.assistantProjectId}
+            place={tackPlace}
+            onPlace={setTackPlace}
           />
         ) : null}
         {modal}
       </div>
     );
 
-  return (
+  const panel = panelOf(index, board.unlinked);
+  const page = (
     <div className="flex h-full min-h-0 flex-col">
       <header data-board-masthead className="grid gap-2 border-b px-4 py-2">
         <BoardMastheadTitle name={board.name} />
@@ -617,7 +629,7 @@ function BoardScreen(props: {
         </div>
       </header>
       <div className="flex min-h-0 flex-1 flex-col @container/board lg:flex-row">
-        <div data-board-surface className="min-h-0 min-w-0 flex-1 overflow-auto p-4">
+        <TackDropSurface tasks={board.tasks} className="min-h-0 min-w-0 flex-1 overflow-auto p-4">
           {props.mode === "register" ? (
             <BoardRecommendations
               key={board.id}
@@ -650,30 +662,56 @@ function BoardScreen(props: {
               actions={actions}
             />
           )}
-        </div>
+        </TackDropSurface>
         <aside
           data-board-panel
           aria-label={gt("Board panel")}
           className="shrink-0 overflow-y-auto border-t bg-card/40 p-4 lg:w-80 lg:border-t-0 lg:border-l"
         >
-          <BoardPanel
-            panel={panelOf(index, board.unlinked)}
-            goals={goalsOf(index, board.goals)}
-            onOpenTask={actions.onOpenTask}
-            onOpenChat={props.onOpenThread}
+          <TackHost
+            active={index.tasks.filter((task) => task.status !== "done").length}
+            blocked={panel.blocked.length}
+            todo={panel.todo.length}
           />
+          <TackPanelTabs
+            stand={
+              <BoardPanel
+                panel={panel}
+                goals={goalsOf(index, board.goals)}
+                onOpenTask={actions.onOpenTask}
+                onOpenChat={props.onOpenThread}
+              />
+            }
+          />
+          <TackCorner />
         </aside>
       </div>
-      {props.assistantProjectId !== null ? (
+      {props.assistantProjectId !== null && tackPlace === "float" ? (
         <BoardAssistant
           environmentId={props.environmentId}
           boardId={board.id}
           boardName={board.name}
           projectId={props.assistantProjectId}
+          place={tackPlace}
+          onPlace={setTackPlace}
         />
       ) : null}
       {modal}
     </div>
+  );
+  if (props.assistantProjectId === null || tackPlace === "float") return page;
+  return (
+    <TackBoardProvider
+      environmentId={props.environmentId}
+      boardId={board.id}
+      boardName={board.name}
+      projectId={props.assistantProjectId}
+      place={tackPlace}
+      setPlace={setTackPlace}
+      tasks={board.tasks}
+    >
+      {page}
+    </TackBoardProvider>
   );
 }
 

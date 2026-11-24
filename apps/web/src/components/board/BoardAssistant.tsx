@@ -1,13 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import {
-  type EnvironmentId,
-  type ProjectId,
-  type ScopedThreadRef,
-  ThreadId,
-} from "@t3tools/contracts";
+import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import * as Schema from "effect/Schema";
 import { T, useGT } from "gt-react";
 import {
   ArrowUpIcon,
@@ -18,7 +11,6 @@ import {
   PaletteIcon,
   RotateCcwIcon,
 } from "lucide-react";
-import { useRef, useState } from "react";
 
 import ChatMarkdown from "~/components/ChatMarkdown";
 import { Button } from "~/components/ui/button";
@@ -33,171 +25,35 @@ import {
   MenuTrigger,
 } from "~/components/ui/menu";
 import { Textarea } from "~/components/ui/textarea";
-import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-import { useLocalStorage } from "~/hooks/useLocalStorage";
-import { cn, newMessageId, newThreadId } from "~/lib/utils";
-import { boardEnvironment } from "~/state/board";
-import { readThreadShell, useThreadProjection, useThreadShell } from "~/state/entities";
-import { formatEnvironmentQueryError } from "~/state/query";
+import { cn } from "~/lib/utils";
 import { environmentThreadDetails, threadEnvironment } from "~/state/threads";
-import { useAtomCommand } from "~/state/use-atom-command";
 import { useOrchestrationCommand } from "~/state/use-orchestration-command";
 import { buildThreadRouteParams } from "~/threadRoutes";
 
-import { assistantBubbles, isAssistantBusy, latestExchange } from "./board.logic";
-import { boardThreadModelSelection } from "./boardThread";
+import { type BoardAssistantBubble, latestExchange } from "./board.logic";
 import { TackAvatar, useTackLook } from "./TackAvatar";
-import { tackMood, tackNoteCount, type TackMotion, type TackSkin } from "./tackAvatar.logic";
-
-/** How long after the last keystroke Tack still counts as being typed to. */
-const TYPING_LINGER_MS = 800;
-
-const AssistantState = Schema.Struct({
-  threadId: Schema.NullOr(Schema.String),
-  view: Schema.Literals(["closed", "open", "expanded"]),
-});
-const CLOSED: typeof AssistantState.Type = { threadId: null, view: "closed" };
+import type { TackMotion, TackSkin } from "./tackAvatar.logic";
+import type { TackPlace } from "./tackPlace.logic";
+import { type TackChat, type TackChatProps, useTackChat } from "./useTackChat";
 
 /**
- * Project Board fork: Tack, the board's Assistant, as a chat that floats over the board. It is a
- * real thread marked as the Assistant, so its history is kept and it can open as a full thread;
- * the board stays in view while the person talks to it.
+ * Project Board fork: Tack as a chat that floats over the board, the original way Tack sits on
+ * the board and the one used on a task page.
  */
-export function BoardAssistant(props: {
-  readonly environmentId: EnvironmentId;
-  readonly boardId: string;
-  readonly boardName: string;
-  /** A T3 project in one of the board's workspaces: where the Assistant's thread lives. */
-  readonly projectId: ProjectId;
-}) {
+export function BoardAssistant(
+  props: TackChatProps & {
+    readonly place?: TackPlace;
+    readonly onPlace?: (place: TackPlace) => void;
+  },
+) {
   const gt = useGT();
-  const navigate = useNavigate();
-  const { environmentId, boardId, projectId } = props;
-  const [state, setState] = useLocalStorage(
-    `t3.board.assistant:${environmentId}:${boardId}`,
-    CLOSED,
-    AssistantState,
-  );
-  const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
-  const [typing, setTyping] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const typingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const chat = useTackChat(props, { follow: false });
   const [look, setLook] = useTackLook();
-  const canAsk = useAtomValue(boardEnvironment.linkThread.permissionAtom(environmentId));
-  const linkThread = useAtomCommand(boardEnvironment.linkThread, { reportFailure: false });
-  const startTurn = useOrchestrationCommand(threadEnvironment.startTurn, { reportFailure: false });
-  const threadRef =
-    state.threadId === null ? null : scopeThreadRef(environmentId, ThreadId.make(state.threadId));
-  const shell = useThreadShell(threadRef);
-  // The thread's messages are followed only while the chat is open.
-  const thread = useThreadProjection(state.view === "closed" ? null : threadRef);
-  const bubbles = assistantBubbles(thread?.projection.messages ?? []);
-  const busy = sending || isAssistantBusy(shell?.runtime?.status);
-  const waiting = shell?.hasPendingApprovals === true || shell?.hasPendingUserInput === true;
-  if (!canAsk) return null;
-  const avatar = {
-    skin: look.skin,
-    motion: look.motion,
-    mood: tackMood({ open: state.view !== "closed", busy, waiting, typing, failed }),
-    notes: tackNoteCount(thread?.projection.turnItems ?? []),
-  };
+  if (!chat.canAsk) return null;
+  const avatar = { skin: look.skin, motion: look.motion, mood: chat.mood, notes: chat.notes };
 
-  const fail = (description: string) => {
-    setFailed(true);
-    toastManager.add({
-      type: "error",
-      title: gt("Could not start the Board Assistant"),
-      description,
-    });
-  };
-  const noteTyping = () => {
-    setTyping(true);
-    clearTimeout(typingTimer.current);
-    typingTimer.current = setTimeout(() => setTyping(false), TYPING_LINGER_MS);
-  };
-
-  const send = async (text: string) => {
-    const message = text.trim();
-    if (!message || sending) return;
-    setSending(true);
-    setFailed(false);
-    setTyping(false);
-    setDraft("");
-    try {
-      const createdAt = new Date().toISOString();
-      const turn = {
-        messageId: newMessageId(),
-        role: "user" as const,
-        text: message,
-        attachments: [],
-      };
-      const existing = threadRef === null ? null : readThreadShell(threadRef);
-      if (threadRef !== null && existing !== null) {
-        const result = await startTurn({
-          environmentId,
-          input: {
-            threadId: threadRef.threadId,
-            message: turn,
-            runtimeMode: existing.runtimeMode,
-            interactionMode: existing.interactionMode,
-            createdAt,
-          },
-        });
-        if (result._tag === "Failure") fail(gt("The message could not be sent."));
-        return;
-      }
-      const modelSelection = boardThreadModelSelection(environmentId, projectId);
-      if (modelSelection === null) {
-        fail(gt("No model is set up for this project."));
-        return;
-      }
-      const threadId = newThreadId();
-      // Marked as the Assistant before its first turn, so that turn already gets its rules.
-      const linked = await linkThread({
-        environmentId,
-        input: { boardId, taskId: null, threadId, projectId },
-      });
-      if (linked._tag === "Failure") {
-        fail(formatEnvironmentQueryError(linked.cause));
-        return;
-      }
-      // Supervised: the Assistant answers and shows; it is not there to change code.
-      const modes = { runtimeMode: "approval-required", interactionMode: "default" } as const;
-      const title = gt("Tack · {board}", { board: props.boardName });
-      const result = await startTurn({
-        environmentId,
-        input: {
-          threadId,
-          message: turn,
-          modelSelection,
-          ...modes,
-          bootstrap: {
-            createThread: {
-              projectId,
-              title,
-              modelSelection,
-              ...modes,
-              branch: null,
-              worktreePath: null,
-              createdAt,
-            },
-          },
-          createdAt,
-        },
-      });
-      if (result._tag === "Failure") {
-        fail(gt("The message could not be sent."));
-        return;
-      }
-      setState((previous) => ({ ...previous, threadId }));
-    } finally {
-      setSending(false);
-    }
-  };
-
-  if (state.view === "closed")
+  if (chat.view === "closed")
     return (
       <div className="pointer-events-none fixed end-4 bottom-4 z-[70]">
         <button
@@ -205,23 +61,22 @@ export function BoardAssistant(props: {
           data-board-assistant="closed"
           aria-label={gt("Ask the board")}
           className="pointer-events-auto flex items-center gap-2 rounded-full border bg-popover py-2 ps-3 pe-4 text-sm shadow-lg hover:bg-accent"
-          onClick={() => setState((previous) => ({ ...previous, view: "open" }))}
+          onClick={() => chat.setView("open")}
         >
           {/* The sprite's cell has empty rows around the body; the margins trim them in the pill. */}
           <TackAvatar {...avatar} scale={2} className="-my-3 -ms-3 -me-2" />
           <span className="font-medium">{gt("Ask Tack")}</span>
-          {busy || waiting ? (
+          {chat.busy || chat.waiting ? (
             <span
               aria-hidden
-              className={cn("size-2 rounded-full", waiting ? "bg-warning" : "bg-success")}
+              className={cn("size-2 rounded-full", chat.waiting ? "bg-warning" : "bg-success")}
             />
           ) : null}
         </button>
       </div>
     );
 
-  const expanded = state.view === "expanded";
-  const shown = expanded ? bubbles : latestExchange(bubbles);
+  const expanded = chat.view === "expanded";
   return (
     <div className="pointer-events-none fixed end-4 bottom-4 z-[70]">
       {look.skin === "emoji" ? null : (
@@ -231,7 +86,7 @@ export function BoardAssistant(props: {
         </div>
       )}
       <section
-        data-board-assistant={state.view}
+        data-board-assistant={chat.view}
         aria-label={gt("Board Assistant")}
         className={cn(
           "pointer-events-auto flex flex-col overflow-hidden rounded-xl border bg-popover shadow-xl",
@@ -251,122 +106,158 @@ export function BoardAssistant(props: {
             motion={look.motion}
             onSkin={(skin) => setLook((previous) => ({ ...previous, skin }))}
             onMotion={(motion) => setLook((previous) => ({ ...previous, motion }))}
+            {...(props.place !== undefined && props.onPlace !== undefined
+              ? { place: props.place, onPlace: props.onPlace }
+              : {})}
           />
           <HeaderButton
             label={expanded ? gt("Hide history") : gt("Show history")}
-            onClick={() =>
-              setState((previous) => ({ ...previous, view: expanded ? "open" : "expanded" }))
-            }
+            onClick={() => chat.setView(expanded ? "open" : "expanded")}
           >
             {expanded ? <Minimize2Icon /> : <Maximize2Icon />}
           </HeaderButton>
-          {threadRef !== null ? (
-            <>
-              <HeaderButton
-                label={gt("Open as a thread")}
-                onClick={() =>
-                  void navigate({
-                    to: "/$environmentId/$threadId",
-                    params: buildThreadRouteParams(threadRef),
-                  })
-                }
-              >
-                <ExternalLinkIcon />
-              </HeaderButton>
-              <HeaderButton
-                label={gt("New conversation")}
-                onClick={() => setState((previous) => ({ ...previous, threadId: null }))}
-              >
-                <RotateCcwIcon />
-              </HeaderButton>
-            </>
-          ) : null}
-          <HeaderButton
-            label={gt("Minimize")}
-            onClick={() => setState((previous) => ({ ...previous, view: "closed" }))}
-          >
+          <TackThreadButtons chat={chat} />
+          <HeaderButton label={gt("Minimize")} onClick={() => chat.setView("closed")}>
             <MinusIcon />
           </HeaderButton>
         </header>
-        {/* Reversed, so the newest message stays in view as replies grow, with no scroll effect. */}
-        <div className="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto px-3 py-2">
-          <div className="grid gap-2">
-            {shown.length === 0 ? (
-              <AssistantWelcome onAsk={(question) => void send(question)} />
-            ) : (
-              shown.map((bubble) => (
-                <div
-                  key={bubble.id}
-                  data-board-assistant-bubble={bubble.role}
-                  className={cn(
-                    "max-w-[90%] rounded-lg px-3 py-1.5 text-sm",
-                    bubble.role === "user" ? "justify-self-end bg-primary/15" : "bg-muted",
-                  )}
-                >
-                  {bubble.role === "user" ? (
-                    <span className="whitespace-pre-wrap">{bubble.text}</span>
-                  ) : (
-                    <ChatMarkdown
-                      text={bubble.text}
-                      cwd={undefined}
-                      environmentId={environmentId}
-                      isStreaming={bubble.streaming}
-                      headingLevelOffset={3}
-                    />
-                  )}
-                </div>
-              ))
-            )}
-            {threadRef !== null && waiting ? (
-              <AssistantApprovals environmentId={environmentId} threadRef={threadRef} />
-            ) : busy ? (
-              <p className="text-muted-foreground text-xs">
-                <T>Tack is checking the board…</T>
-              </p>
-            ) : null}
-          </div>
-        </div>
-        <form
-          className="flex items-end gap-2 border-t p-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void send(draft);
-          }}
-        >
-          <div className="min-w-0 flex-1">
-            <Textarea
-              size="sm"
-              rows={1}
-              value={draft}
-              aria-label={gt("Message to the Board Assistant")}
-              placeholder={gt("Ask Tack about this board…")}
-              onChange={(event) => {
-                setDraft(event.target.value);
-                noteTyping();
-              }}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing)
-                  return;
-                event.preventDefault();
-                void send(draft);
-              }}
-            />
-          </div>
-          <Button
-            type="submit"
-            size="icon-sm"
-            aria-label={gt("Send")}
-            disabled={sending || draft.trim().length === 0}
-          >
-            <ArrowUpIcon />
-          </Button>
-        </form>
+        <TackMessages
+          chat={chat}
+          environmentId={props.environmentId}
+          bubbles={expanded ? chat.bubbles : latestExchange(chat.bubbles)}
+        />
+        <TackComposer chat={chat} className="border-t p-2" />
       </section>
     </div>
   );
 }
 
-function HeaderButton(props: {
+/** Opens Tack's thread in full, or starts a new conversation. */
+export function TackThreadButtons(props: { readonly chat: TackChat }) {
+  const gt = useGT();
+  const navigate = useNavigate();
+  const { threadRef } = props.chat;
+  if (threadRef === null) return null;
+  return (
+    <>
+      <HeaderButton
+        label={gt("Open as a thread")}
+        onClick={() =>
+          void navigate({
+            to: "/$environmentId/$threadId",
+            params: buildThreadRouteParams(threadRef),
+          })
+        }
+      >
+        <ExternalLinkIcon />
+      </HeaderButton>
+      <HeaderButton label={gt("New conversation")} onClick={props.chat.reset}>
+        <RotateCcwIcon />
+      </HeaderButton>
+    </>
+  );
+}
+
+/** Tack's messages, newest at the bottom, with its welcome before the first question. */
+export function TackMessages(props: {
+  readonly chat: TackChat;
+  readonly environmentId: EnvironmentId;
+  readonly bubbles: ReadonlyArray<BoardAssistantBubble>;
+  readonly className?: string;
+}) {
+  const { chat } = props;
+  return (
+    // Reversed, so the newest message stays in view as replies grow, with no scroll effect.
+    <div
+      className={cn(
+        "flex min-h-0 flex-1 flex-col-reverse overflow-y-auto px-3 py-2",
+        props.className,
+      )}
+    >
+      <div className="grid gap-2">
+        {props.bubbles.length === 0 ? (
+          <AssistantWelcome onAsk={(question) => void chat.send(question)} />
+        ) : (
+          props.bubbles.map((bubble) => (
+            <div
+              key={bubble.id}
+              data-board-assistant-bubble={bubble.role}
+              className={cn(
+                "max-w-[90%] rounded-lg px-3 py-1.5 text-sm",
+                bubble.role === "user" ? "justify-self-end bg-primary/15" : "bg-muted",
+              )}
+            >
+              {bubble.role === "user" ? (
+                <span className="whitespace-pre-wrap">{bubble.text}</span>
+              ) : (
+                <ChatMarkdown
+                  text={bubble.text}
+                  cwd={undefined}
+                  environmentId={props.environmentId}
+                  isStreaming={bubble.streaming}
+                  headingLevelOffset={3}
+                />
+              )}
+            </div>
+          ))
+        )}
+        {chat.threadRef !== null && chat.waiting ? (
+          <AssistantApprovals environmentId={props.environmentId} threadRef={chat.threadRef} />
+        ) : chat.busy ? (
+          <p className="text-muted-foreground text-xs">
+            <T>Tack is checking the board…</T>
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/** The box a person types to Tack in. */
+export function TackComposer(props: {
+  readonly chat: TackChat;
+  readonly className?: string;
+  readonly autoFocus?: boolean;
+}) {
+  const gt = useGT();
+  const { chat } = props;
+  return (
+    <form
+      className={cn("flex items-end gap-2", props.className)}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void chat.send(chat.draft);
+      }}
+    >
+      <div className="min-w-0 flex-1">
+        <Textarea
+          size="sm"
+          rows={1}
+          value={chat.draft}
+          autoFocus={props.autoFocus}
+          aria-label={gt("Message to the Board Assistant")}
+          placeholder={gt("Ask Tack about this board…")}
+          onChange={(event) => chat.setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+            event.preventDefault();
+            void chat.send(chat.draft);
+          }}
+        />
+      </div>
+      <Button
+        type="submit"
+        size="icon-sm"
+        aria-label={gt("Send")}
+        disabled={chat.sending || chat.draft.trim().length === 0}
+      >
+        <ArrowUpIcon />
+      </Button>
+    </form>
+  );
+}
+
+export function HeaderButton(props: {
   readonly label: string;
   readonly onClick: () => void;
   readonly children: React.ReactNode;
@@ -391,13 +282,20 @@ function HeaderButton(props: {
 }
 
 /** Picks Tack's avatar and how much it moves; kept on this device. */
-function TackLookMenu(props: {
+export function TackLookMenu(props: {
   readonly skin: TackSkin;
   readonly motion: TackMotion;
   readonly onSkin: (skin: TackSkin) => void;
   readonly onMotion: (motion: TackMotion) => void;
+  readonly place?: TackPlace;
+  readonly onPlace?: (place: TackPlace) => void;
 }) {
   const gt = useGT();
+  const places: ReadonlyArray<readonly [TackPlace, string]> = [
+    ["roam", gt("Roamer: sleeps in its corner, walks to notes")],
+    ["host", gt("Panel host: says where things stand")],
+    ["float", gt("Floating chat")],
+  ];
   const skins: ReadonlyArray<readonly [TackSkin, string]> = [
     ["claude", gt("Claude")],
     ["ivory", gt("Claude Ivory")],
@@ -420,6 +318,24 @@ function TackLookMenu(props: {
         <PaletteIcon />
       </MenuTrigger>
       <MenuPopup align="end">
+        {props.place !== undefined && props.onPlace !== undefined ? (
+          <>
+            <MenuGroup>
+              <MenuGroupLabel>{gt("Where Tack lives")}</MenuGroupLabel>
+              <MenuRadioGroup
+                value={props.place}
+                onValueChange={(next) => props.onPlace?.(next as TackPlace)}
+              >
+                {places.map(([place, label]) => (
+                  <MenuRadioItem key={place} value={place}>
+                    {label}
+                  </MenuRadioItem>
+                ))}
+              </MenuRadioGroup>
+            </MenuGroup>
+            <MenuSeparator />
+          </>
+        ) : null}
         <MenuGroup>
           <MenuGroupLabel>{gt("Avatar")}</MenuGroupLabel>
           <MenuRadioGroup
@@ -456,7 +372,7 @@ function TackLookMenu(props: {
 }
 
 /** What Tack says before the first question, with a few to start from. */
-function AssistantWelcome(props: { readonly onAsk: (question: string) => void }) {
+export function AssistantWelcome(props: { readonly onAsk: (question: string) => void }) {
   const gt = useGT();
   const starters = [
     gt("What is in progress?"),
@@ -488,7 +404,7 @@ function AssistantWelcome(props: { readonly onAsk: (question: string) => void })
 }
 
 /** A tool call waiting for the person: answered here, without leaving the board. */
-function AssistantApprovals(props: {
+export function AssistantApprovals(props: {
   readonly environmentId: EnvironmentId;
   readonly threadRef: ScopedThreadRef;
 }) {
