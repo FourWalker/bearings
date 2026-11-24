@@ -163,6 +163,9 @@ export class BoardChat {
   reported = false;
   lastActionSetThisTurn = false;
   private readonly warnedServices = new Set<string>();
+  /** Said once in the next tool reply after the chat was put on a task by its own work. */
+  private adoptedNote = "";
+  private claimOnLink = true;
   private projectRoot: string | undefined;
 
   constructor(store: BoardStore, git: BoardGit, host: BoardHost) {
@@ -375,6 +378,7 @@ export class BoardChat {
         goalGroup: prev.goalGroup,
         assistant: prev.assistant,
         pendingWrite: prev.pendingWrite,
+        autoLinked: prev.autoLinked,
         turnStartedAt: prev.turnStartedAt ?? 0,
       };
     await this.save({});
@@ -416,11 +420,16 @@ export class BoardChat {
     await this.rebuildContext().catch(() => {});
   }
 
-  /** A turn finished: the answer's first paragraph is the last action unless a tool set one. */
-  async turnComplete(answer: string): Promise<void> {
+  /**
+   * A turn finished: the answer's first paragraph is the last action unless a tool set one.
+   * `busy`: the chat is not done (a newer turn runs, or background work it waits on).
+   */
+  async turnComplete(answer: string, busy = false): Promise<void> {
     if (!this.sess || this.ignored) return;
     const summary = clip(firstPara(answer), 300);
-    await this.save({ status: "idle", lastAnswer: clip(answer, 800) }).catch(() => {});
+    await this.save({ status: busy ? "working" : "idle", lastAnswer: clip(answer, 800) }).catch(
+      () => {},
+    );
     if (this.board && this.sess.taskId && !this.lastActionSetThisTurn && summary) {
       const t = await this.loadTask(this.sess.taskId);
       if (t) {
@@ -433,6 +442,45 @@ export class BoardChat {
         await this.saveTask(t).catch(() => {});
       }
     }
+  }
+
+  /** What the host sees the chat doing now, when that differs from the last turn event. */
+  async setLive(busy: boolean): Promise<void> {
+    const s = this.sess;
+    if (!s || this.ignored || s.status === "ended") return;
+    if (busy === (s.status === "working")) return;
+    await this.save(
+      busy
+        ? { status: "working", turnStartedAt: s.turnStartedAt || this.now() }
+        : { status: "idle" },
+    ).catch(() => {});
+  }
+
+  /** A chat on no task, free to be put on one: "stay unlinked" is the person's and wins. */
+  private get free(): boolean {
+    const s = this.sess;
+    return !!s && !this.ignored && !s.taskId && !s.linkDeclined && !s.assistant && !s.goalId;
+  }
+
+  /**
+   * Puts a chat on no task onto the item it just created or records work on by id, so the item
+   * leads back to the conversation behind it and the board shows who is on it.
+   */
+  private async adopt(taskId: string, why: "created it" | "recorded work on it"): Promise<void> {
+    const s = this.sess;
+    const made = why === "created it";
+    if (!s || !this.board || !(this.free || (made && s.autoLinked))) return;
+    const saved = await this.store.readSession(this.board.id, s.sessionId);
+    if (saved?.linkDeclined || (saved?.taskId ?? null) !== s.taskId) return;
+    const t = await this.lookupTask(taskId);
+    if (!t || t.status === "done") return;
+    // Creating an item is not working on it: the module is claimed when its work is taken up.
+    this.claimOnLink = !made;
+    await this.linkTask({ taskId: t.id }).finally(() => (this.claimOnLink = true));
+    if (this.sess?.taskId !== t.id) return;
+    if (made) await this.save({ autoLinked: true });
+    const chat = this.host === "t3" ? "thread" : "chat";
+    this.adoptedNote = `Board: this ${chat} is now linked to ${t.id} "${t.title}", because it ${why}. Its plan and rules come with the next turn (board_read has them now). If the person wants it kept off the item, call board_link with decline: true.`;
   }
 
   async end(resumeId?: string): Promise<void> {
@@ -475,6 +523,8 @@ export class BoardChat {
   /** Records the files a turn changed on the linked task: the evidence a later "done" rests on. */
   async filesChanged(files: ReadonlyArray<string>): Promise<void> {
     if (!this.board || !this.sess?.taskId || this.ignored || files.length === 0) return;
+    // Work has begun on the item: what the chat creates from here is other work.
+    if (this.sess.autoLinked) await this.save({ autoLinked: undefined });
     const t = await this.loadTask(this.sess.taskId);
     // A turn's checkpoint lists its files after the task may be done; those are not its work.
     if (!t || t.status === "done") return;
@@ -850,8 +900,8 @@ Before creating any task, ask the person ONE question: create a new board (ask f
         : "";
     this.context = `${head}
 This ${chat} is not linked to a board task yet.${recent.length ? `\nRecently active tasks on the board:\n${recent.join("\n")}${more}` : " The board has no active tasks."}
-Use the standard conversation workflow for questions, debugging and planning. Keep this ${chat} unlinked until the person asks you to take or work on a board task. Do not prompt them to link just because the discussion involves multi-step work.
-When the person asks to create board items, use board_create_task to create features, modules, tasks or bugs with the requested parent hierarchy. Creating items keeps this conversation unlinked. When they ask you to take a task, call board_link with its taskId and continue from its plan and handoff.
+Use the standard conversation workflow for questions, debugging and planning. Keep this ${chat} unlinked until the person asks you to take or work on a board task, or to create one. Do not prompt them to link just because the discussion involves multi-step work.
+When the person asks to create board items, use board_create_task to create features, modules, tasks or bugs with the requested parent hierarchy. This ${chat} is linked to the last item it creates. When they ask you to take a task, call board_link with its taskId and continue from its plan and handoff.
 When linked, the tool returns the task's plan and handoff: continue from them.${
       this.related
         ? `
@@ -1036,6 +1086,17 @@ ${this.related}`
     const all = await this.listTasks();
     const byId = new Map(all.map((task) => [task.id, task]));
     const action = str(a.action);
+    // A Goal takes its tasks one at a time: the item this thread created last is not in hand.
+    if (s.autoLinked && (action === "start" || action === "resume" || action === "work")) {
+      this.sess = await setSessionTask(
+        this.store,
+        this.boardId,
+        { ...s, autoLinked: undefined },
+        null,
+      );
+      await this.save({ linkDeclined: false });
+      return this.goalTool(a);
+    }
     const withRules = () => `${this.context}\n\n${this.rules}`;
 
     if (action === "start") {
@@ -1610,7 +1671,7 @@ ${this.related}`
         const blocked = `BLOCKED: "${holder.title}" is owned by workspace ${o.label} (since ${new Date(o.since).toISOString().slice(0, 10)}). ${chat === "thread" ? "Threads" : "Chats"} in ${s.workspaceLabel} can't pick it up without the person's say-so. Ask them: (1) override once — call board_link again with override "once"; (2) take over — override "takeover" (ownership moves here); (3) leave it.`;
         return reply(this.board.boardMode ? this.once("ownership", blocked) : blocked);
       }
-    } else if (!holder) {
+    } else if (!holder && this.claimOnLink) {
       const node = await this.ownerNodeOf(t);
       // Only modules are claimed automatically; a master task is owned only when set on purpose.
       if (levelOf(node) === 2) {
@@ -1630,7 +1691,7 @@ ${this.related}`
     this.sess = await setSessionTask(
       this.store,
       this.boardId,
-      { ...s, pickupNote, heartbeatAt: this.now() },
+      { ...s, pickupNote, autoLinked: undefined, heartbeatAt: this.now() },
       t,
     );
     await this.rebuildContext();
@@ -1797,6 +1858,8 @@ ${this.related}`
     t3Checkpoint?: string,
     t3RunId?: string,
   ): Promise<BoardReply> {
+    if (a.taskId) await this.adopt(str(a.taskId), "recorded work on it");
+    if (this.sess?.autoLinked) await this.save({ autoLinked: undefined });
     const t = await this.requireTask(a);
     if (typeof t === "string") return reply(t);
     const step = safeFileName(str(a.step)) || `note-${this.now()}`;
@@ -1873,12 +1936,16 @@ ${this.related}`
     const level = levelOf(t);
     const par = t.parentId ? await this.loadTask(t.parentId) : null;
     this.reported = true;
+    // A chat on no task moves along the items it creates: a module, then the task under it.
+    await this.adopt(t.id, "created it");
     await this.rebuildContext();
     const pickUp =
-      this.host === "t3"
-        ? `Start it with Continue in new thread on task ${t.id}.`
-        : `A chat picks it up with /task ${t.id}.`;
-    const created = `Created Level ${level} ${LEVEL_NAME[level]} "${t.title}" (id ${t.id})${par ? ` under "${par.title}"` : ""}. ${pickUp}`;
+      this.sess?.taskId === t.id
+        ? ""
+        : this.host === "t3"
+          ? ` Start it with Continue in new thread on task ${t.id}.`
+          : ` A chat picks it up with /task ${t.id}.`;
+    const created = `Created Level ${level} ${LEVEL_NAME[level]} "${t.title}" (id ${t.id})${par ? ` under "${par.title}"` : ""}.${pickUp}`;
     return reply(this.boardModeOn ? this.once("outOfScope", created) : created);
   }
 
@@ -1907,6 +1974,7 @@ ${this.related}`
     t3Checkpoint?: string,
     t3RunId?: string,
   ): Promise<BoardReply> {
+    if (a.taskId) await this.adopt(str(a.taskId), "recorded work on it");
     const t = await this.requireTask(a);
     if (typeof t === "string") return reply(t);
     const md = str(a.markdown).trim();
@@ -2299,6 +2367,12 @@ ${this.related}`
     const run = this.dispatch(name, args, extra);
     if (run === null) return null;
     return run.then((result) => {
+      if (this.adoptedNote) {
+        // The linked task's context stays unseen, so the next turn brings it.
+        const note = this.adoptedNote;
+        this.adoptedNote = "";
+        return { ...result, text: `${result.text}\n\n${note}` };
+      }
       // What a tool changed on the board, the agent that called it already knows.
       this.contextSeen = this.context;
       if (this.rules && result.text.includes(this.rules)) this.rulesSeen = this.rules;

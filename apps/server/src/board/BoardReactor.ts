@@ -87,6 +87,11 @@ export const make = Effect.gen(function* () {
 
   const chatOf = (threadId: ThreadId) => chats.forThread(threadId);
 
+  const busyNow = (threadId: ThreadId) =>
+    engine
+      .getThreadShell(threadId)
+      .pipe(Effect.map((shell) => shell !== null && BoardChats.threadBusy(shell)));
+
   const boardIssuesOf = (links: ReadonlyArray<ThreadIssueLink> | undefined, boardId: string) =>
     (links ?? []).filter(
       (link) =>
@@ -161,10 +166,11 @@ export const make = Effect.gen(function* () {
             const prompts = yield* projections.getMessagesById(run.threadId, [run.userMessageId]);
             const prompt = prompts.get(run.userMessageId);
             const chat = yield* chatOf(run.threadId);
-            // Server wakes aren't the work's brief; people, the CLI and delegating agents' are.
-            yield* Effect.promise(() =>
-              chat.turnStart(prompt?.creationSource === "server" ? "" : (prompt?.text ?? "")),
-            );
+            // Wakes (the server's, a provider's buffered one) aren't the work's brief; people,
+            // the CLI and delegating agents' are.
+            const wake =
+              prompt?.creationSource === "server" || prompt?.creationSource === "provider";
+            yield* Effect.promise(() => chat.turnStart(wake ? "" : (prompt?.text ?? "")));
             yield* mirrorToThread(run.threadId, chat);
             return;
           }
@@ -180,7 +186,9 @@ export const make = Effect.gen(function* () {
                 ? (messages.filter((message) => !message.streaming).at(-1)?.text ?? "")
                 : "";
             const chat = yield* chatOf(run.threadId);
-            yield* Effect.promise(() => chat.turnComplete(answer));
+            // A newer run may already be going, or this one waits on background work.
+            const busy = yield* busyNow(run.threadId);
+            yield* Effect.promise(() => chat.turnComplete(answer, busy));
             // The agent may have linked or relinked the thread during the run.
             yield* mirrorToThread(run.threadId, chat);
           }
@@ -224,6 +232,15 @@ export const make = Effect.gen(function* () {
               at: DateTime.toEpochMillis(completedAt),
             }),
           );
+          return;
+        }
+        // Background work ending with no wake is the only sign that the chat is done.
+        case "provider-thread.updated":
+        case "run.background-work-cancelled": {
+          const chat = yield* chatOf(event.threadId);
+          if (chat.sess?.status !== "working") return;
+          const busy = yield* busyNow(event.threadId);
+          yield* Effect.promise(() => chat.setLive(busy));
           return;
         }
         case "thread.issue-synced": {

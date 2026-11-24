@@ -89,10 +89,12 @@ it.effect("records a thread's turns, answers and changed files on its board task
     );
     // The thread's T3 issue links, as the reactor mirrors the board task onto them.
     let issues: Array<ThreadIssueLink> = [];
+    // What the thread is doing beyond its settled runs.
+    let live: object = {};
     const issueLink = (key: string) =>
       ({ tracker: "board", host: "local", scope: "nefx", key }) as ThreadIssueLink;
     const engine = Layer.mock(Orchestrator.OrchestratorV2)({
-      getThreadShell: () => Effect.succeed({ ...liveThreadShell(threadId), issues }),
+      getThreadShell: () => Effect.succeed({ ...liveThreadShell(threadId), issues, ...live }),
     });
     const threadIssues = Layer.mock(ThreadIssueService.ThreadIssueService)({
       link: (input) =>
@@ -255,6 +257,45 @@ it.effect("records a thread's turns, answers and changed files on its board task
       yield* reactor.handle(run("completed"));
       expect((yield* session())?.status).toBe("idle");
       expect((yield* task())?.lastAction?.text).toBe("Reviewed by hand");
+
+      // A turn that ends waiting on background work is not done; that work ending with no wake is.
+      const second = (status: string) =>
+        event("run.updated", {
+          id: RunId.make("run:board-reactor:2"),
+          threadId,
+          status,
+          userMessageId: promptId,
+        });
+      live = { pendingBackgroundTasks: [{ kind: "background_task" }] };
+      yield* reactor.handle(second("running"));
+      yield* reactor.handle(second("completed"));
+      expect((yield* session())?.status).toBe("working");
+      live = {};
+      yield* reactor.handle(event("provider-thread.updated", {}));
+      expect((yield* session())?.status).toBe("idle");
+      // A run that settles after the next one started doesn't end the chat.
+      live = { activityRunStatus: "running" };
+      yield* reactor.handle(run("failed"));
+      yield* reactor.handle(
+        event("run.updated", {
+          id: RunId.make("run:board-reactor:3"),
+          threadId,
+          status: "running",
+          userMessageId: promptId,
+        }),
+      );
+      yield* reactor.handle(second("interrupted"));
+      expect((yield* session())?.status).toBe("working");
+      live = {};
+      yield* reactor.handle(
+        event("run.updated", {
+          id: RunId.make("run:board-reactor:3"),
+          threadId,
+          status: "completed",
+          userMessageId: promptId,
+        }),
+      );
+      expect((yield* session())?.status).toBe("idle");
 
       // Unlinking the board issue in T3 unlinks the task; linking it again relinks it.
       issues = [];

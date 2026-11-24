@@ -6,7 +6,12 @@
  */
 import { BoardChat, BoardStore } from "@t3tools/board-core";
 import { defaultBoardHome, nodeGit, nodeIO } from "@t3tools/board-core/node";
-import { OrchestratorMcpFailure, type ThreadId } from "@t3tools/contracts";
+import {
+  OrchestratorMcpFailure,
+  type OrchestrationV2ThreadShell,
+  type ThreadId,
+} from "@t3tools/contracts";
+import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -24,6 +29,13 @@ export class BoardChats extends Context.Service<
     readonly heartbeat: Effect.Effect<void>;
   }
 >()("t3/board/BoardChats") {}
+
+/** A thread is still at it while a run is live or it waits on background work it started. */
+export const threadBusy = (
+  shell: Pick<OrchestrationV2ThreadShell, "activityRunStatus" | "pendingBackgroundTasks">,
+): boolean =>
+  (shell.activityRunStatus ?? null) !== null ||
+  backgroundWorkHoldsCompletion(shell.pendingBackgroundTasks ?? []);
 
 const failure = (message: string) =>
   new OrchestratorMcpFailure({ code: "orchestration_error", message });
@@ -61,6 +73,8 @@ export const make = Effect.fn("BoardChats.make")(function* (store: BoardStore) {
         },
       }),
     );
+    // A chat opens idle; one opened mid-turn (a restart, a move into a worktree) is not.
+    if (threadBusy(shell)) yield* Effect.promise(() => chat.setLive(true));
     open.set(threadId, { cwd, chat });
     return chat;
   });

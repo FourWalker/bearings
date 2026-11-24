@@ -145,6 +145,46 @@ describe("BoardChat", () => {
     expect(sess.source).toEqual({ kind: "t3-thread", threadId: "t1", provider: "codex" });
   });
 
+  it("links a chat on no task to the item it creates, and to a task it records work on", async () => {
+    const store = await seedBoard();
+    const chat = await openChat(store, "t1", ws);
+    await chat.turnStart("Why does the retry loop spin?");
+    await chat.createTask({ title: "Transfers", topLevel: true });
+    await chat.createTask({ title: "Retries", parentId: "transfers" });
+    // The reply says so once, and leaves the item's context for the next turn.
+    const made = await chat.runTool("board_create_task", {
+      title: "Retry loop spins",
+      parentId: "retries",
+      bug: true,
+    });
+    expect((await made)?.text).toContain("is now linked to retry-loop-spins");
+    expect(chat.contextSeen).not.toBe(chat.context);
+    // It followed the items down to the last one it created.
+    expect(chat.sess?.taskId).toBe("retry-loop-spins");
+    expect((await store.loadTask("nefx", "retries"))?.sessions).toEqual([]);
+    expect(
+      (await store.loadTask("nefx", "retry-loop-spins"))?.sessions.map((s) => s.sessionId),
+    ).toEqual(["t1"]);
+
+    // Once it works on the item, what it creates next is other work and doesn't move it.
+    await chat.filesChanged(["api/retry.ts"]);
+    await chat.createTask({ title: "Backoff jitter", parentId: "retries" });
+    expect(chat.sess?.taskId).toBe("retry-loop-spins");
+
+    // Work recorded on a task by id links the chat that recorded it.
+    const other = await openChat(store, "t2", ws);
+    await other.turnStart("Look at transfers");
+    await other.writeHandoff({ taskId: "retries", step: "note", markdown: "Mapped the callers." });
+    expect(other.sess?.taskId).toBe("retries");
+
+    // "Stay unlinked" is the person's call: creating an item no longer links the chat.
+    const off = await openChat(store, "t3", ws);
+    await off.turnStart("File the flaky test");
+    await off.linkTask({ decline: true });
+    await off.createTask({ title: "Flaky upload test", parentId: "retries" });
+    expect(off.sess?.taskId).toBeNull();
+  });
+
   it("finishes a step and its living handoff in one call, and a delegated subtask ticks its parent step", async () => {
     const store = await seedBoard();
     const chat = await openChat(store, "t1", ws);
@@ -245,8 +285,9 @@ describe("BoardChat", () => {
 
   it("gives a linked T3 thread a short resume summary, and an unlinked one only recent tasks", async () => {
     const store = await seedBoard();
+    const seed = await openChat(store, "seed", ws);
+    for (let i = 0; i < 10; i++) await seed.createTask({ title: `Task ${i}`, topLevel: true });
     const chat = await openChat(store, "t1", ws);
-    for (let i = 0; i < 10; i++) await chat.createTask({ title: `Task ${i}`, topLevel: true });
     await chat.turnStart("Hi");
     await chat.rebuildContext();
     expect(chat.context).toContain("…and 2 more: search them with board_find");
@@ -342,8 +383,6 @@ describe("BoardChat", () => {
     expect((await t3.createTask({ title: "Discussed feature" })).text).toMatch(
       /^Not created: a new item needs a parent/,
     );
-    await t3.createTask({ title: "Discussed feature", topLevel: true });
-    expect(t3.sess?.taskId).toBeFalsy();
     const linked = await t3.runTool("board_link", { newTaskTitle: "Task" });
     expect(t3.boardModeOn).toBe(true);
     expect(t3.context).not.toContain("Board Mode");

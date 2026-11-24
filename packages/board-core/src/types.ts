@@ -244,5 +244,7 @@ export interface Session {
   pendingWrite?: { key: string; turnAt: number } | undefined;
   /** Set with `goalId` on a Goal's worker: the group it was given. */
   goalGroup?: string | undefined;
+  /** Linked by creating the item, not at the person's ask: moves to the next item it creates, until work starts. */
+  autoLinked?: boolean | undefined;
   source?: SessionSource | undefined;
 }
