@@ -27,7 +27,7 @@ import {
   type TackPlace,
 } from "./tackPlace.logic";
 import { registerTackShow } from "./tackShow";
-import { type TackChat, type TackChatProps, useTackChat } from "./useTackChat";
+import { type TackChat, type TackChatProps, type TackView, useTackChat } from "./useTackChat";
 
 const PlaceSchema = Schema.Literals(TACK_PLACES);
 
@@ -88,16 +88,22 @@ export function TackBoardProvider(
   const [tab, setTab] = useState<"stand" | "tack">("stand");
   const chat = useTackChat(props, { follow: tab === "tack" });
   const [asked, setAsked] = useState<string | null>(null);
-  // The reply Tack was sent home from: it does not pull Tack back to its note when reopened.
-  const [dismissed, setDismissed] = useState<string | null>(null);
+  // Tack sleeps at home whenever the board opens, even if its chat was left open last time.
+  const [awake, setAwake] = useState(false);
   const [landed, setLanded] = useState<string | null>(null);
   const [offscreen, setOffscreen] = useState<Offscreen | null>(null);
   const [anchor, setAnchorState] = useState<TackBoard["anchor"]>(null);
   const [showMode] = useTackShowMode();
-  const open = chat.view !== "closed";
+  const view: TackView = awake ? chat.view : "closed";
+  const open = view !== "closed";
   const latest = chat.bubbles.at(-1);
+  // The last message when Tack woke: only a reply newer than it sends Tack to a note, so an
+  // old reply never pulls Tack back there.
+  const [wokeAfter, setWokeAfter] = useState<string | null | undefined>(undefined);
+  if (open && chat.loaded && wokeAfter === undefined) setWokeAfter(latest?.id ?? null);
+  if (!open && wokeAfter !== undefined) setWokeAfter(undefined);
   const replyFocus =
-    latest !== undefined && latest.id !== dismissed
+    wokeAfter !== undefined && latest !== undefined && latest.id !== wokeAfter
       ? tackFocusTask(latestTackText(chat.bubbles), props.tasks)
       : null;
   const focus = open ? (asked ?? replyFocus) : null;
@@ -115,7 +121,13 @@ export function TackBoardProvider(
     ),
   );
 
-  const callTack = useEffectEvent(() => chat.setView("open"));
+  const setView = (next: TackView) => {
+    if (next === "closed") setAsked(null);
+    setAwake(next !== "closed");
+    chat.setView(next);
+  };
+
+  const callTack = useEffectEvent(() => setView("open"));
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- a window-wide shortcut calls Tack
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -133,7 +145,7 @@ export function TackBoardProvider(
     if (boardId !== props.boardId || showMode !== "walk" || !chat.canAsk) return false;
     if (document.querySelector(`[data-board-task="${CSS.escape(taskId)}"]`) === null) return false;
     setAsked(taskId);
-    chat.setView("open");
+    setView("open");
     return true;
   });
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- board tools reach Tack through a module-level channel
@@ -142,16 +154,11 @@ export function TackBoardProvider(
   const value: TackBoard = {
     chat: {
       ...chat,
+      view,
+      setView,
       send: async (text) => {
         setAsked(null);
         await chat.send(text);
-      },
-      setView: (view) => {
-        if (view === "closed") {
-          setAsked(null);
-          setDismissed(latest?.id ?? null);
-        }
-        chat.setView(view);
       },
     },
     place: props.place,
@@ -169,7 +176,7 @@ export function TackBoardProvider(
     askAbout: (task) => {
       setAsked(task.id);
       chat.setDraft(gt("About “{title}”: ", { title: task.title }));
-      chat.setView("open");
+      setView("open");
     },
     offscreen,
     setOffscreen,
@@ -585,6 +592,9 @@ function TackBubble() {
       open={open}
       onOpenChange={(next, details) => {
         if (next) return;
+        // Focus moving off the bubble is not leaving it: clicking Tack, the board or another
+        // window moves focus, and only a press elsewhere, Escape or the close button sends Tack home.
+        if (details.reason === "focus-out") return;
         // A click on Tack toggles the bubble itself; outside presses elsewhere close it.
         const target = details.event.target;
         if (target instanceof Node && anchor?.element.contains(target)) return;

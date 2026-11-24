@@ -169,6 +169,8 @@ export function useTackChat(props: TackChatProps, options: { readonly follow: bo
     canAsk,
     view: state.view,
     setView,
+    /** The thread's messages have arrived (or there is no thread yet). */
+    loaded: threadRef === null || thread !== null,
     reset,
     threadRef,
     bubbles,
