@@ -16,6 +16,7 @@ import ChatMarkdown from "~/components/ChatMarkdown";
 import { Button } from "~/components/ui/button";
 import {
   Menu,
+  MenuCheckboxItem,
   MenuGroup,
   MenuGroupLabel,
   MenuPopup,
@@ -32,8 +33,9 @@ import { useOrchestrationCommand } from "~/state/use-orchestration-command";
 import { buildThreadRouteParams } from "~/threadRoutes";
 
 import { type BoardAssistantBubble, latestExchange } from "./board.logic";
-import { TackAvatar, useTackLook } from "./TackAvatar";
+import { TackAvatar, useTackLook, useTackPen } from "./TackAvatar";
 import type { TackMotion, TackSkin } from "./tackAvatar.logic";
+import type { PlotterInk, PlotterSpeed } from "./tackPlotter.logic";
 import type { TackPlace } from "./tackPlace.logic";
 import { type TackChat, type TackChatProps, useTackChat } from "./useTackChat";
 
@@ -302,7 +304,18 @@ export function TackLookMenu(props: {
     ["mint", gt("Claude Mint")],
     ["night", gt("Claude Night")],
     ["pin", gt("Pushpin")],
+    ["plotter", gt("Plotter: a pen draws Tack")],
     ["emoji", gt("Emoji, no animation")],
+  ];
+  const [pen, setPen] = useTackPen();
+  const speeds: ReadonlyArray<readonly [PlotterSpeed, string]> = [
+    ["slow", gt("Slow, to watch it draw")],
+    ["app", gt("Quick: draws in under a second")],
+    ["fast", gt("Fast")],
+  ];
+  const inks: ReadonlyArray<readonly [PlotterInk, string]> = [
+    ["chase", gt("Old ink: its tail chases it off")],
+    ["retrace", gt("Old ink: the pen eats it back")],
   ];
   const motions: ReadonlyArray<readonly [TackMotion, string]> = [
     ["full", gt("Full animation")],
@@ -366,6 +379,52 @@ export function TackLookMenu(props: {
             ))}
           </MenuRadioGroup>
         </MenuGroup>
+        {props.skin === "plotter" ? (
+          <>
+            <MenuSeparator />
+            <MenuGroup>
+              <MenuGroupLabel>{gt("Pen")}</MenuGroupLabel>
+              <MenuRadioGroup
+                value={pen.speed}
+                onValueChange={(next) =>
+                  setPen((previous) => ({ ...previous, speed: next as PlotterSpeed }))
+                }
+              >
+                {speeds.map(([speed, label]) => (
+                  <MenuRadioItem key={speed} value={speed}>
+                    {label}
+                  </MenuRadioItem>
+                ))}
+              </MenuRadioGroup>
+              <MenuSeparator />
+              <MenuRadioGroup
+                value={pen.ink}
+                onValueChange={(next) =>
+                  setPen((previous) => ({ ...previous, ink: next as PlotterInk }))
+                }
+              >
+                {inks.map(([ink, label]) => (
+                  <MenuRadioItem key={ink} value={ink}>
+                    {label}
+                  </MenuRadioItem>
+                ))}
+              </MenuRadioGroup>
+              <MenuSeparator />
+              <MenuCheckboxItem
+                checked={pen.hops}
+                onCheckedChange={(hops) => setPen((previous) => ({ ...previous, hops }))}
+              >
+                {gt("Show the pen moving between strokes")}
+              </MenuCheckboxItem>
+              <MenuCheckboxItem
+                checked={pen.wobble}
+                onCheckedChange={(wobble) => setPen((previous) => ({ ...previous, wobble }))}
+              >
+                {gt("Hand-inked wobble")}
+              </MenuCheckboxItem>
+            </MenuGroup>
+          </>
+        ) : null}
       </MenuPopup>
     </Menu>
   );

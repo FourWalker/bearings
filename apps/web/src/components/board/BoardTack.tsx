@@ -7,6 +7,7 @@ import { createContext, use, useEffect, useEffectEvent, useState, type ReactNode
 import { Popover, PopoverPopup } from "~/components/ui/popover";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { useMediaQuery } from "~/hooks/useMediaQuery";
+import { useStableCallback } from "~/hooks/useStableCallback";
 import { cn } from "~/lib/utils";
 
 import {
@@ -47,7 +48,7 @@ interface TackBoard {
   readonly focusTitle: string | null;
   /** The note that actually rendered Tack; the home shows Tack until one does. */
   readonly landed: string | null;
-  readonly land: (taskId: string | null) => void;
+  readonly land: (update: (current: string | null) => string | null) => void;
   readonly anchor: { readonly element: HTMLElement; readonly kind: AnchorKind } | null;
   readonly setAnchor: (element: HTMLElement | null, kind: AnchorKind) => void;
   readonly tab: "stand" | "tack";
@@ -79,6 +80,18 @@ export function TackBoardProvider(
   const replyFocus = tackFocusTask(latestTackText(chat.bubbles), props.tasks);
   const focus = open ? (asked ?? replyFocus) : null;
   const focusTitle = props.tasks.find((task) => task.id === focus)?.title ?? null;
+  // Stable, because Tack's elements report themselves through ref callbacks built on these.
+  const setAnchor = useStableCallback((element: HTMLElement | null, kind: AnchorKind) =>
+    setAnchorState((current) =>
+      element === null
+        ? current?.kind === kind
+          ? null
+          : current
+        : current?.element === element
+          ? current
+          : { element, kind },
+    ),
+  );
 
   const callTack = useEffectEvent(() => chat.setView("open"));
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- a window-wide shortcut calls Tack
@@ -115,16 +128,7 @@ export function TackBoardProvider(
     landed,
     land: setLanded,
     anchor,
-    setAnchor: (element, kind) =>
-      setAnchorState((current) =>
-        element === null
-          ? current?.kind === kind
-            ? null
-            : current
-          : current?.element === element
-            ? current
-            : { element, kind },
-      ),
+    setAnchor,
     tab,
     setTab,
     askAbout: (task) => {
@@ -157,9 +161,32 @@ function TackFigure(props: { readonly kind: AnchorKind; readonly scale: number }
   const board = useTackBoard();
   const [look] = useTackLook();
   const reduced = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const hops = !reduced && look.motion !== "still";
+  const setAnchor = board?.setAnchor;
+  const { kind } = props;
+  const place = useStableCallback((element: HTMLButtonElement | null) => {
+    setAnchor?.(element, kind);
+    if (element === null) return;
+    const rect = element.getBoundingClientRect();
+    const from = lastTackRect;
+    lastTackRect = rect;
+    if (!hops || from === null) return;
+    const dx = from.left - rect.left;
+    const dy = from.top - rect.top;
+    const distance = Math.hypot(dx, dy);
+    if (distance < 4) return;
+    const duration = tackHopMs(distance);
+    element.animate(
+      [
+        { translate: `${dx}px ${dy}px` },
+        { translate: `${dx / 2}px ${dy / 2 - Math.min(48, distance * 0.15)}px` },
+        { translate: "0 0" },
+      ],
+      { duration, easing: `steps(${Math.max(4, Math.round(duration / 80))})` },
+    );
+  });
   if (board === null) return null;
   const { chat } = board;
-  const hops = !reduced && look.motion !== "still";
   return (
     <button
       type="button"
@@ -167,27 +194,7 @@ function TackFigure(props: { readonly kind: AnchorKind; readonly scale: number }
       aria-label={gt("Tack")}
       draggable
       className="block cursor-pointer rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-      ref={(element) => {
-        board.setAnchor(element, props.kind);
-        if (element === null) return;
-        const rect = element.getBoundingClientRect();
-        const from = lastTackRect;
-        lastTackRect = rect;
-        if (!hops || from === null) return;
-        const dx = from.left - rect.left;
-        const dy = from.top - rect.top;
-        const distance = Math.hypot(dx, dy);
-        if (distance < 4) return;
-        const duration = tackHopMs(distance);
-        element.animate(
-          [
-            { translate: `${dx}px ${dy}px` },
-            { translate: `${dx / 2}px ${dy / 2 - Math.min(48, distance * 0.15)}px` },
-            { translate: "0 0" },
-          ],
-          { duration, easing: `steps(${Math.max(4, Math.round(duration / 80))})` },
-        );
-      }}
+      ref={place}
       onClick={() => chat.setView(chat.view === "closed" ? "open" : "closed")}
       onDragStart={(event) => {
         event.dataTransfer.setData("application/x-tack", "tack");
@@ -209,14 +216,16 @@ function TackFigure(props: { readonly kind: AnchorKind; readonly scale: number }
 /** Tack standing on a note's top edge while it talks about it. Every note renders one. */
 export function TackPerch(props: { readonly taskId: string }) {
   const board = useTackBoard();
+  const land = board?.land;
+  const { taskId } = props;
+  const perch = useStableCallback((element: HTMLSpanElement | null) =>
+    land?.((current) => (element !== null ? taskId : current === taskId ? null : current)),
+  );
   if (board === null || board.focus !== props.taskId) return null;
   return (
     <span
       data-tack-perch
-      ref={(element) => {
-        if (element !== null) board.land(props.taskId);
-        else if (board.landed === props.taskId) board.land(null);
-      }}
+      ref={perch}
       // The cell's two empty bottom rows sit below the note's top edge, so Tack stands on it.
       className="pointer-events-auto absolute -top-[36px] end-3 z-10"
       onClick={(event) => event.stopPropagation()}
@@ -265,6 +274,7 @@ function atHome(board: TackBoard) {
 
 /** The Roamer's home: a corner at the foot of the panel where Tack sleeps. */
 export function TackCorner() {
+  const gt = useGT();
   const board = useTackBoard();
   if (board === null || board.place !== "roam") return null;
   const home = atHome(board);
@@ -284,7 +294,7 @@ export function TackCorner() {
             <T>Tack is listening.</T>
           )
         ) : (
-          <T>Over at {board.focusTitle}.</T>
+          gt("Over at {title}.", { title: board.focusTitle ?? "" })
         )}
       </p>
     </div>
@@ -414,7 +424,7 @@ function TackBubble() {
       <PopoverPopup
         anchor={anchor?.element ?? null}
         side={side}
-        align={side === "bottom" ? "start" : "end"}
+        align={side === "left" ? "end" : "start"}
         sideOffset={8}
         padding="compact"
         width="md"

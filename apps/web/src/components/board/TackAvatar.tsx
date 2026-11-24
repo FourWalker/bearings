@@ -6,6 +6,7 @@ import { useMediaQuery } from "~/hooks/useMediaQuery";
 import { cn } from "~/lib/utils";
 import { observeVisibleAnimation } from "~/lib/visibleAnimation";
 
+import { TackPlotter } from "./TackPlotter";
 import {
   advanceTackPlayback,
   clipMoves,
@@ -21,8 +22,15 @@ import {
   type TackClip,
   type TackMood,
   type TackMotion,
+  type TackPixelSkin,
   type TackSkin,
 } from "./tackAvatar.logic";
+import {
+  DEFAULT_PLOTTER_PEN,
+  PLOTTER_INKS,
+  PLOTTER_SPEEDS,
+  type PlotterPen,
+} from "./tackPlotter.logic";
 
 const TackLook = Schema.Struct({
   skin: Schema.Literals(TACK_SKINS),
@@ -35,9 +43,25 @@ export function useTackLook() {
   return useLocalStorage("t3.board.assistant.look", DEFAULT_LOOK, TackLook);
 }
 
+const PenSchema = Schema.Struct({
+  speed: Schema.Literals(PLOTTER_SPEEDS),
+  ink: Schema.Literals(PLOTTER_INKS),
+  hops: Schema.Boolean,
+  wobble: Schema.Boolean,
+});
+
+/** How the Plotter skin's pen draws, on this device. */
+export function useTackPen() {
+  return useLocalStorage<PlotterPen, typeof PenSchema.Encoded>(
+    "t3.board.assistant.pen",
+    DEFAULT_PLOTTER_PEN,
+    PenSchema,
+  );
+}
+
 const strips = new Map<string, string>();
 
-function stripUrl(skin: Exclude<TackSkin, "emoji">, clip: TackClip): string {
+function stripUrl(skin: TackPixelSkin, clip: TackClip): string {
   const key = `${skin}:${clip}`;
   const cached = strips.get(key);
   if (cached !== undefined) return cached;
@@ -74,6 +98,7 @@ export function TackAvatar(props: {
   readonly className?: string;
 }) {
   const reduced = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const [pen] = useTackPen();
   const motion = reduced ? "still" : props.motion;
   const notes = props.notes ?? 0;
   const [stored, setPlayback] = useState(() =>
@@ -87,6 +112,24 @@ export function TackAvatar(props: {
       <span aria-hidden className={cn("text-base", props.className)}>
         📌
       </span>
+    );
+
+  const poke =
+    props.pokeable === true ? () => setPlayback((current) => pokeTack(current, motion)) : undefined;
+  if (props.skin === "plotter")
+    return (
+      <TackPlotter
+        clip={playback.clip}
+        mood={playback.mood}
+        motion={motion}
+        run={playback.run}
+        held={playback.held}
+        pen={pen}
+        size={Math.round(TACK_CELL.height * props.scale * 1.3)}
+        onClipEnd={() => setPlayback((current) => finishTackClip(current, motion))}
+        {...(poke === undefined ? {} : { onClick: poke })}
+        {...(props.className === undefined ? {} : { className: props.className })}
+      />
     );
 
   const { clip } = playback;
@@ -114,11 +157,7 @@ export function TackAvatar(props: {
       className={cn("tack-avatar block shrink-0", props.className)}
       style={style}
       onAnimationEnd={() => setPlayback((current) => finishTackClip(current, motion))}
-      onClick={
-        props.pokeable === true
-          ? () => setPlayback((current) => pokeTack(current, motion))
-          : undefined
-      }
+      onClick={poke}
     />
   );
 }

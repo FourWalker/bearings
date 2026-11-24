@@ -4,6 +4,7 @@
 @import "./plotter-tide.css";
 @import "./clay-post.css";
 @import "./plotter.css";
+@import "./tack-plotter.css";
 
 @custom-variant dark (&:is(.dark, .dark *));
 @custom-variant light (&:not(.dark, .dark *));

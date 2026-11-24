@@ -1,0 +1,456 @@
+/* Project Board fork: Tack's Plotter skin. Strokes use pathLength=1, so one dash covers a stroke
+   and the pen's timing is only delays and durations set per stroke. All of it is paused off screen
+   through --visible-animation-state, and the drawing's own motion stops once its clip played out. */
+.tack-plotter {
+  color: var(--foreground);
+  --tp-rust: var(--primary);
+}
+
+.tack-plotter svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.tack-plotter :is(path, g, circle, .tp-clock) {
+  animation-play-state: var(--visible-animation-state, paused);
+}
+
+.tack-plotter path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: var(--tp-w);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tack-plotter path[data-tone="rust"] {
+  stroke: var(--tp-rust);
+}
+
+.tack-plotter path[data-tone="fill-ink"] {
+  fill: currentColor;
+}
+
+.tack-plotter path[data-tone="fill-rust"] {
+  fill: var(--tp-rust);
+  stroke: var(--tp-rust);
+}
+
+.tack-plotter path[data-tone="fill-paper"] {
+  fill: var(--card);
+}
+
+/* ---------- The pen draws ---------- */
+
+.tp-sheet[data-mode="draw"] path[data-drawn] {
+  stroke-dasharray: 1 2;
+  stroke-dashoffset: 1.01;
+  animation: tp-draw var(--t) linear var(--d) forwards;
+}
+
+.tp-sheet[data-mode="draw"] path[data-drawn]:is([data-tone^="fill"]) {
+  fill-opacity: 0;
+  animation:
+    tp-draw var(--t) linear var(--d) forwards,
+    tp-fill 0.12s steps(2) calc(var(--d) + var(--t)) forwards;
+}
+
+.tack-plotter[data-motion="still"] .tp-sheet path[data-drawn] {
+  animation: none;
+  stroke-dasharray: none;
+  stroke-dashoffset: 0;
+  fill-opacity: 1;
+}
+
+.tp-pen {
+  fill: var(--tp-rust);
+  opacity: 0;
+  animation: tp-pen var(--t) linear var(--d) forwards;
+}
+
+/* ---------- The old drawing leaves ---------- */
+
+.tp-sheet[data-mode="chase"] path {
+  stroke-dasharray: 1 2;
+  fill-opacity: 0;
+  animation: tp-chase 300ms linear calc(var(--i) * 4ms) forwards;
+}
+
+.tp-sheet[data-mode="retrace"] path {
+  stroke-dasharray: 1 2;
+  fill-opacity: 0;
+  animation: tp-retrace var(--t) linear var(--d) forwards;
+}
+
+@keyframes tp-draw {
+  from {
+    stroke-dashoffset: 1.01;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes tp-fill {
+  to {
+    fill-opacity: 1;
+  }
+}
+
+@keyframes tp-chase {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -1.01;
+  }
+}
+
+@keyframes tp-retrace {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: 1.01;
+  }
+}
+
+@keyframes tp-pen {
+  0%,
+  99.9% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Counts a clip's runs, so a one-shot clip hands over once it has played. */
+.tp-clock {
+  position: absolute;
+  width: 0;
+  height: 0;
+  animation: tp-clock var(--tp-len) steps(1) var(--tp-live) var(--tp-runs);
+}
+
+@keyframes tp-clock {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ---------- Each drawing's rest pose ---------- */
+
+.tack-plotter
+  :is(
+    [data-part="smoke-2"],
+    [data-part="smoke-3"],
+    [data-part^="arc-"],
+    [data-part^="ring-"],
+    [data-part="wing-mid"],
+    [data-part="wing-down"],
+    [data-part="script"],
+    [data-part^="drop-"]
+  ) {
+  opacity: 0;
+}
+
+.tack-plotter[data-tack-clip="idle"] [data-part="pupil"] {
+  translate: -2.4px 1.7px;
+}
+
+.tack-plotter[data-tack-clip="wake"] [data-part="brow"] {
+  translate: 0 -2.2px;
+}
+
+.tack-plotter :is([data-part="gear-a"], [data-part="gear-b"], [data-part="bell"]) {
+  transform-box: view-box;
+}
+
+.tack-plotter [data-part="gear-a"] {
+  transform-origin: 70px 124px;
+}
+
+.tack-plotter [data-part="gear-b"] {
+  transform-origin: 114px 87px;
+}
+
+.tack-plotter [data-part="bell"] {
+  transform-origin: 100px 52px;
+}
+
+/* ---------- Each drawing's own motion, a few frames a second ---------- */
+
+.tack-plotter[data-live][data-tack-clip="idle"] [data-part="pupil"] {
+  animation: tp-read 2s steps(1) var(--tp-live) 30;
+}
+
+.tack-plotter[data-live][data-tack-clip="idle"] [data-part="brow"] {
+  animation: tp-brow 6s steps(1) var(--tp-live) 10;
+}
+
+.tack-plotter[data-live][data-tack-clip="idle"] [data-part="line"] {
+  animation: tp-page 8s steps(1) var(--tp-live) 7;
+}
+
+.tack-plotter[data-live][data-tack-clip="listen"] [data-part^="arc-"] {
+  animation: tp-arc 0.9s steps(1) var(--tp-live) infinite;
+}
+
+.tack-plotter[data-live][data-tack-clip="listen"] [data-part="arc-2"] {
+  animation-delay: calc(var(--tp-live) + 0.3s);
+}
+
+.tack-plotter[data-live][data-tack-clip="listen"] [data-part="arc-3"] {
+  animation-delay: calc(var(--tp-live) + 0.6s);
+}
+
+.tack-plotter[data-live][data-tack-clip="think"] [data-part="gear-a"] {
+  animation: tp-turn 6s steps(30) var(--tp-live) infinite;
+}
+
+.tack-plotter[data-live][data-tack-clip="think"] [data-part="gear-b"] {
+  animation: tp-turn 3.5s steps(30) var(--tp-live) infinite reverse;
+}
+
+.tack-plotter[data-live][data-tack-clip="write"] [data-part="quill"] {
+  animation: tp-bob 0.5s steps(2) var(--tp-live) 6;
+}
+
+.tack-plotter[data-live][data-tack-clip="write"] [data-part="script"] {
+  opacity: 1;
+}
+
+.tack-plotter[data-live][data-tack-clip="write"] [data-part="script"] path {
+  stroke-dasharray: 1 2;
+  stroke-dashoffset: 1.01;
+  animation: tp-draw 0.6s linear calc(var(--tp-live) + (var(--i) - 7) * 0.65s) forwards;
+}
+
+.tack-plotter[data-live][data-tack-clip="alert"] [data-part="bell"] {
+  animation: tp-ring 0.6s steps(4) var(--tp-live) 6;
+}
+
+.tack-plotter[data-live][data-tack-clip="alert"] [data-part="ring-l"] {
+  animation: tp-blink 0.6s steps(1) var(--tp-live) 6;
+}
+
+.tack-plotter[data-live][data-tack-clip="alert"] [data-part="ring-r"] {
+  animation: tp-blink 0.6s steps(1) calc(var(--tp-live) + 0.3s) 6;
+}
+
+.tack-plotter[data-live][data-tack-clip="done"] [data-part="wing-up"] {
+  animation: tp-wing-up 0.5s steps(1) var(--tp-live) 4;
+}
+
+.tack-plotter[data-live][data-tack-clip="done"] [data-part="wing-mid"] {
+  animation: tp-wing-mid 0.5s steps(1) var(--tp-live) 4;
+}
+
+.tack-plotter[data-live][data-tack-clip="done"] [data-part="wing-down"] {
+  animation: tp-wing-down 0.5s steps(1) var(--tp-live) 4;
+}
+
+.tack-plotter[data-live][data-tack-clip="done"] :is([data-part="bird"], [data-part^="wing-"]) {
+  translate: 0 0;
+}
+
+.tack-plotter[data-live][data-tack-clip="done"] .tp-sheet {
+  animation: tp-rise 2s steps(8) var(--tp-live) forwards;
+}
+
+.tack-plotter[data-live][data-tack-clip="oops"] [data-part^="drop-"] {
+  animation: tp-show 0.01s steps(1) calc(var(--tp-live) + 0.3s) forwards;
+}
+
+.tack-plotter[data-live][data-tack-clip="oops"] [data-part="drop-2"] {
+  animation-delay: calc(var(--tp-live) + 0.6s);
+}
+
+.tack-plotter[data-live][data-tack-clip="oops"] [data-part="drop-3"] {
+  animation-delay: calc(var(--tp-live) + 0.9s);
+}
+
+.tack-plotter[data-live][data-tack-clip="sleep"] [data-part="smoke-1"] {
+  animation: tp-third-1 2s steps(1) var(--tp-live) 15;
+}
+
+.tack-plotter[data-live][data-tack-clip="sleep"] [data-part="smoke-2"] {
+  animation: tp-third-2 2s steps(1) var(--tp-live) 15;
+}
+
+.tack-plotter[data-live][data-tack-clip="sleep"] [data-part="smoke-3"] {
+  animation: tp-third-3 2s steps(1) var(--tp-live) 15;
+}
+
+.tack-plotter[data-live][data-tack-clip="sleep"] [data-part="z-1"] {
+  animation: tp-blink 2s steps(1) var(--tp-live) 15;
+}
+
+.tack-plotter[data-live][data-tack-clip="sleep"] [data-part="z-2"] {
+  animation: tp-blink 2s steps(1) calc(var(--tp-live) + 1s) 15;
+}
+
+@keyframes tp-read {
+  0% {
+    translate: -3.2px 1.7px;
+  }
+  25% {
+    translate: -2.4px 1.7px;
+  }
+  50% {
+    translate: -1.6px 1.8px;
+  }
+  75% {
+    translate: -0.8px 1.9px;
+  }
+}
+
+@keyframes tp-brow {
+  80% {
+    translate: 0 -1.6px;
+  }
+  95% {
+    translate: 0 0;
+  }
+}
+
+@keyframes tp-page {
+  90% {
+    opacity: 0;
+  }
+  95% {
+    opacity: 1;
+  }
+}
+
+@keyframes tp-arc {
+  0% {
+    opacity: 1;
+  }
+  33% {
+    opacity: 0;
+  }
+}
+
+@keyframes tp-turn {
+  to {
+    rotate: 360deg;
+  }
+}
+
+@keyframes tp-bob {
+  50% {
+    translate: 0 -2px;
+  }
+}
+
+@keyframes tp-ring {
+  0% {
+    rotate: -14deg;
+  }
+  25% {
+    rotate: 0deg;
+  }
+  50% {
+    rotate: 14deg;
+  }
+  75% {
+    rotate: 0deg;
+  }
+}
+
+@keyframes tp-blink {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes tp-wing-up {
+  0% {
+    opacity: 1;
+  }
+  25% {
+    opacity: 0;
+  }
+  75% {
+    opacity: 0;
+  }
+}
+
+@keyframes tp-wing-mid {
+  0% {
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+  75% {
+    opacity: 1;
+  }
+}
+
+@keyframes tp-wing-down {
+  0% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  75% {
+    opacity: 0;
+  }
+}
+
+@keyframes tp-rise {
+  to {
+    translate: 6px -10px;
+  }
+}
+
+@keyframes tp-show {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes tp-third-1 {
+  0% {
+    opacity: 1;
+  }
+  33% {
+    opacity: 0;
+  }
+}
+
+@keyframes tp-third-2 {
+  0% {
+    opacity: 0;
+  }
+  33% {
+    opacity: 1;
+  }
+  66% {
+    opacity: 0;
+  }
+}
+
+@keyframes tp-third-3 {
+  0% {
+    opacity: 0;
+  }
+  66% {
+    opacity: 1;
+  }
+}

@@ -5,8 +5,10 @@
 
 export const TACK_CELL = { width: 26, height: 20 } as const;
 
-export const TACK_SKINS = ["claude", "ivory", "mint", "night", "pin", "emoji"] as const;
+export const TACK_SKINS = ["claude", "ivory", "mint", "night", "pin", "plotter", "emoji"] as const;
 export type TackSkin = (typeof TACK_SKINS)[number];
+/** Skins drawn as pixel strips; Plotter is drawn by a pen, and the emoji is just text. */
+export type TackPixelSkin = Exclude<TackSkin, "emoji" | "plotter">;
 export const TACK_MOTIONS = ["full", "calm", "still"] as const;
 export type TackMotion = (typeof TACK_MOTIONS)[number];
 
@@ -91,7 +93,7 @@ interface SkinPalette {
   readonly body: string;
   readonly eye: string;
 }
-const PALETTES: Record<Exclude<TackSkin, "emoji">, SkinPalette> = {
+const PALETTES: Record<TackPixelSkin, SkinPalette> = {
   claude: { kind: "claude", body: "#D97757", eye: "#1B1A18" },
   ivory: { kind: "claude", body: "#E9DFCB", eye: "#2A2722" },
   mint: { kind: "claude", body: "#6CC3A4", eye: "#10201A" },
@@ -537,7 +539,7 @@ export const TACK_CLIPS: Record<TackClip, ClipSpec> = {
 };
 
 /** Paints a clip as one strip, a cell per frame from left to right. */
-export function paintTackStrip(skin: Exclude<TackSkin, "emoji">, clip: TackClip, paint: Paint) {
+export function paintTackStrip(skin: TackPixelSkin, clip: TackClip, paint: Paint) {
   TACK_CLIPS[clip].frames.forEach((frame, index) => {
     const offset = index * TACK_CELL.width;
     frame({
