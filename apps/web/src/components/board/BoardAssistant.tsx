@@ -38,7 +38,13 @@ import type { TackMotion, TackSkin } from "./tackAvatar.logic";
 import type { PlotterInk, PlotterSpeed } from "./tackPlotter.logic";
 import type { TackShowMode } from "./BoardTack";
 import type { TackPlace } from "./tackPlace.logic";
-import { type TackChat, type TackChatProps, useTackChat } from "./useTackChat";
+import {
+  type TackChat,
+  type TackChatProps,
+  type TackView,
+  useTackChat,
+  useTackKey,
+} from "./useTackChat";
 
 /**
  * Project Board fork: Tack as a chat that floats over the board, the original way Tack sits on
@@ -48,12 +54,27 @@ export function BoardAssistant(
   props: TackChatProps & {
     readonly place?: TackPlace;
     readonly onPlace?: (place: TackPlace) => void;
+    /** On a task's page of a board Tack lives on: as awake here as it was on the board. */
+    readonly awake?: boolean;
+    readonly onAwake?: (awake: boolean) => void;
+    /** A task is open in a dialog, which takes every key and click: the chat waits out of sight. */
+    readonly covered?: boolean;
   },
 ) {
   const gt = useGT();
-  const chat = useTackChat(props, { follow: false });
+  const stored = useTackChat(props, { follow: false, asleep: props.awake === false });
+  const chat: TackChat = {
+    ...stored,
+    setView: (next: TackView) => {
+      props.onAwake?.(next !== "closed");
+      stored.setView(next);
+    },
+  };
   const [look, setLook] = useTackLook();
-  if (!chat.canAsk) return null;
+  useTackKey(() => {
+    if (props.covered !== true && chat.view === "closed") chat.setView("open");
+  });
+  if (!chat.canAsk || props.covered === true) return null;
   const avatar = { skin: look.skin, motion: look.motion, mood: chat.mood, notes: chat.notes };
 
   if (chat.view === "closed")

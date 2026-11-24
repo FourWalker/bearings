@@ -3,7 +3,7 @@ import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { type EnvironmentId, type ProjectId, ThreadId } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { useGT } from "gt-react";
-import { useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { toastManager } from "~/components/ui/toast";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
@@ -189,8 +189,26 @@ export function useTackChat(
     notes,
     draft,
     setDraft,
+    clearDraft: () => setDraftValue(""),
     send,
   };
 }
 
 export type TackChat = ReturnType<typeof useTackChat>;
+
+/** T calls Tack from anywhere on the board, unless the person is typing or a dialog has the keys. */
+export function useTackKey(call: () => void) {
+  const onCall = useEffectEvent(call);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- a window-wide shortcut calls Tack
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== "t" || event.metaKey || event.ctrlKey || event.altKey) return;
+      const typing = "input, textarea, select, [contenteditable=true], [role=dialog]";
+      if (event.target instanceof Element && event.target.closest(typing) !== null) return;
+      event.preventDefault();
+      onCall();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+}

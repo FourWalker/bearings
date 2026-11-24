@@ -35,7 +35,13 @@ import {
   tackReplyNote,
 } from "./tackPlace.logic";
 import { registerTackShow } from "./tackShow";
-import { type TackChat, type TackChatProps, type TackView, useTackChat } from "./useTackChat";
+import {
+  type TackChat,
+  type TackChatProps,
+  type TackView,
+  useTackChat,
+  useTackKey,
+} from "./useTackChat";
 
 const PlaceSchema = Schema.Literals(TACK_PLACES);
 
@@ -77,6 +83,8 @@ interface TackBoard {
   /** Which way Tack is when its note has scrolled out of view, or null while it is in view. */
   readonly offscreen: Offscreen | null;
   readonly setOffscreen: (offscreen: Offscreen | null) => void;
+  /** A task is open over the board: Tack keeps its place and its bubble waits. */
+  readonly covered: boolean;
 }
 
 const TackBoardContext = createContext<TackBoard | null>(null);
@@ -90,16 +98,26 @@ export function TackBoardProvider(
     readonly place: Exclude<TackPlace, "float">;
     readonly setPlace: (place: TackPlace) => void;
     readonly tasks: ReadonlyArray<BoardTask>;
+    /** Held by the board page, so Tack is as awake on a task's page as it was on the board. */
+    readonly awake: boolean;
+    readonly onAwake: (awake: boolean) => void;
+    readonly covered: boolean;
     readonly children: ReactNode;
   },
 ) {
   const gt = useGT();
   const [tab, setTab] = useState<"stand" | "tack">("stand");
-  // Tack sleeps at home whenever the board opens, even if its chat was left open last time.
-  const [awake, setAwake] = useState(false);
+  const { awake, covered } = props;
   const chat = useTackChat(props, { follow: tab === "tack", asleep: !awake });
   // The note Tack stands on: it stays there until a reply names another note or it is sent home.
   const [stand, setStand] = useState<string | null>(null);
+  const about = (title: string) => gt("About “{title}”: ", { title });
+  if (!awake && stand !== null) {
+    setStand(null);
+    // The opening words put in the box for that note leave with Tack, unless the person wrote on.
+    const title = props.tasks.find((task) => task.id === stand)?.title;
+    if (title !== undefined && chat.draft === about(title)) chat.clearDraft();
+  }
   const [landed, setLanded] = useState<string | null>(null);
   const [offscreen, setOffscreen] = useState<Offscreen | null>(null);
   const [anchor, setAnchorState] = useState<TackBoard["anchor"]>(null);
@@ -133,28 +151,19 @@ export function TackBoardProvider(
   );
 
   const setView = (next: TackView) => {
-    if (next === "closed") setStand(null);
-    setAwake(next !== "closed");
+    props.onAwake(next !== "closed");
     chat.setView(next);
   };
 
-  const callTack = useEffectEvent(() => setView("open"));
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- a window-wide shortcut calls Tack
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() !== "t" || event.metaKey || event.ctrlKey || event.altKey) return;
-      const target = event.target as HTMLElement | null;
-      if (target?.closest("input, textarea, select, [contenteditable=true], [role=dialog]")) return;
-      event.preventDefault();
-      callTack();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  useTackKey(() => {
+    if (!covered) setView("open");
+  });
 
   const showTask = useEffectEvent((boardId: string, taskId: string) => {
     if (boardId !== props.boardId || showMode !== "walk" || !chat.canAsk) return false;
-    if (document.querySelector(`[data-board-task="${CSS.escape(taskId)}"]`) === null) return false;
+    // Only a note on the board itself: one inside an open task closes with it.
+    const note = `[data-board-surface] [data-board-task="${CSS.escape(taskId)}"]`;
+    if (document.querySelector(note) === null) return false;
     setStand(taskId);
     setView("open");
     return true;
@@ -187,11 +196,12 @@ export function TackBoardProvider(
     setTab,
     askAbout: (task) => {
       setStand(task.id);
-      chat.setDraft(gt("About “{title}”: ", { title: task.title }));
+      chat.setDraft(about(task.title));
       setView("open");
     },
     offscreen,
     setOffscreen,
+    covered,
   };
   if (!chat.canAsk) return props.children;
   return (
@@ -204,6 +214,11 @@ export function TackBoardProvider(
 
 function useTackBoard() {
   return use(TackBoardContext);
+}
+
+/** An open task, drawn over the board: its notes are not places Tack stands on. */
+export function TackOffBoard(props: { readonly children: ReactNode }) {
+  return <TackBoardContext value={null}>{props.children}</TackBoardContext>;
 }
 
 interface TackOrigin {
@@ -360,7 +375,8 @@ function TackFigure(props: { readonly kind: AnchorKind; readonly scale: number }
   const [look] = useTackLook();
   const [pen] = useTackPen();
   const reduced = useMediaQuery("(prefers-reduced-motion: reduce)");
-  const travels = !reduced && look.motion !== "still";
+  // Behind an open task nobody sees the crossing, and its layer would be drawn over the task.
+  const travels = !reduced && look.motion !== "still" && board?.covered !== true;
   const penTravel = look.skin === "plotter" ? { trail: pen.hops } : null;
   // Null while Tack is still on its way here: it is out of sight and its bubble stays shut. Then
   // how many crossings ended here, which has the Plotter draw itself on landing.
@@ -752,7 +768,7 @@ function TackBubble() {
   const [showMode, setShowMode] = useTackShowMode();
   if (board === null) return null;
   const { chat, anchor } = board;
-  const open = chat.view !== "closed" && anchor !== null && board.tab !== "tack";
+  const open = chat.view !== "closed" && anchor !== null && board.tab !== "tack" && !board.covered;
   const side = anchor?.kind === "note" ? "right" : anchor?.kind === "corner" ? "top" : "bottom";
   return (
     <Popover

@@ -63,6 +63,7 @@ import {
   TackCorner,
   TackDropSurface,
   TackHost,
+  TackOffBoard,
   TackPanelTabs,
   useTackPlace,
 } from "./BoardTack";
@@ -394,6 +395,9 @@ function BoardScreen(props: {
   const index = indexBoard(board.tasks);
   const canLink = useAtomValue(boardEnvironment.linkThread.permissionAtom(props.environmentId));
   const [tackPlace, setTackPlace] = useTackPlace();
+  // Tack sleeps whenever the board opens, even if its chat was left open last time. Held here, so
+  // it carries between the board and a master task's page.
+  const [tackAwake, setTackAwake] = useState(false);
   // As in the board app: a master task opens as a page in place of the board; a module or task
   // opens in a modal over whatever is showing. Both are in the URL, so back and shared links work.
   const byId = (id: string | null) => (id === null ? null : (index.byId.get(id) ?? null));
@@ -407,13 +411,16 @@ function BoardScreen(props: {
       : linked !== null && linked.level > 1
         ? linked
         : null;
-  const openTask = (task: BoardTask, tab?: BoardTaskTab) =>
+  const openTask = (task: BoardTask, tab?: BoardTaskTab) => {
+    // Opening a task from the board is turning away from Tack, like any press beside its bubble.
+    if (pageTask === null) setTackAwake(false);
     void navigate({
       search: (previous) =>
         task.level === 1
           ? { ...previous, task: task.id, open: undefined, tab }
           : { ...previous, open: task.id, tab },
     });
+  };
   const closePage = () =>
     void navigate({
       search: (previous) => ({ ...previous, task: undefined, open: undefined, tab: undefined }),
@@ -498,7 +505,9 @@ function BoardScreen(props: {
       <DialogPopup showCloseButton={false} className="h-[90dvh] w-[min(96vw,72rem)] sm:max-w-none">
         <DialogTitle className="sr-only">{modalTask?.title ?? ""}</DialogTitle>
         <div className="@container/task h-full min-h-0 overflow-hidden">
-          {modalTask !== null ? taskView(modalTask, closeModal) : null}
+          {modalTask !== null ? (
+            <TackOffBoard>{taskView(modalTask, closeModal)}</TackOffBoard>
+          ) : null}
         </div>
       </DialogPopup>
     </Dialog>
@@ -516,6 +525,8 @@ function BoardScreen(props: {
             projectId={props.assistantProjectId}
             place={tackPlace}
             onPlace={setTackPlace}
+            covered={modalTask !== null}
+            {...(tackPlace === "float" ? {} : { awake: tackAwake, onAwake: setTackAwake })}
           />
         ) : null}
         {modal}
@@ -666,7 +677,8 @@ function BoardScreen(props: {
         <aside
           data-board-panel
           aria-label={gt("Board panel")}
-          className="shrink-0 overflow-y-auto border-t bg-card/40 p-4 lg:w-80 lg:border-t-0 lg:border-l"
+          // Stacked under the board on a narrow window, it takes at most the lower part and scrolls.
+          className="max-h-[45%] shrink-0 overflow-y-auto border-t bg-card/40 p-4 lg:max-h-none lg:w-80 lg:border-t-0 lg:border-l"
         >
           <TackHost
             active={index.tasks.filter((task) => task.status !== "done").length}
@@ -697,6 +709,7 @@ function BoardScreen(props: {
           projectId={props.assistantProjectId}
           place={tackPlace}
           onPlace={setTackPlace}
+          covered={modalTask !== null}
         />
       ) : null}
       {modal}
@@ -712,6 +725,9 @@ function BoardScreen(props: {
       place={tackPlace}
       setPlace={setTackPlace}
       tasks={board.tasks}
+      awake={tackAwake}
+      onAwake={setTackAwake}
+      covered={modalTask !== null}
     >
       {page}
     </TackBoardProvider>
