@@ -41,7 +41,14 @@ export interface TackChatProps {
  * Project Board fork: Tack's conversation, shared by every way Tack can sit on the board. It is a
  * real thread marked as the Assistant, so its history is kept and it can open as a full thread.
  */
-export function useTackChat(props: TackChatProps, options: { readonly follow: boolean }) {
+export function useTackChat(
+  props: TackChatProps,
+  options: {
+    readonly follow: boolean;
+    /** Tack on the board sleeps until called, whatever view was stored the last time. */
+    readonly asleep?: boolean;
+  },
+) {
   const gt = useGT();
   const { environmentId, boardId, projectId } = props;
   const [state, setState] = useLocalStorage(
@@ -61,7 +68,8 @@ export function useTackChat(props: TackChatProps, options: { readonly follow: bo
     state.threadId === null ? null : scopeThreadRef(environmentId, ThreadId.make(state.threadId));
   const shell = useThreadShell(threadRef);
   // The thread's messages are followed only while Tack is talking or its history is shown.
-  const open = state.view !== "closed";
+  const view: TackView = options.asleep === true ? "closed" : state.view;
+  const open = view !== "closed";
   const thread = useThreadProjection(open || options.follow ? threadRef : null);
   const bubbles = assistantBubbles(thread?.projection.messages ?? []);
   const busy = sending || isAssistantBusy(shell?.runtime?.status);
@@ -83,7 +91,7 @@ export function useTackChat(props: TackChatProps, options: { readonly follow: bo
     clearTimeout(typingTimer.current);
     typingTimer.current = setTimeout(() => setTyping(false), TYPING_LINGER_MS);
   };
-  const setView = (view: TackView) => setState((previous) => ({ ...previous, view }));
+  const setView = (next: TackView) => setState((previous) => ({ ...previous, view: next }));
   const reset = () => setState((previous) => ({ ...previous, threadId: null }));
 
   const send = async (text: string) => {
@@ -167,7 +175,7 @@ export function useTackChat(props: TackChatProps, options: { readonly follow: bo
 
   return {
     canAsk,
-    view: state.view,
+    view,
     setView,
     /** The thread's messages have arrived (or there is no thread yet). */
     loaded: threadRef === null || thread !== null,

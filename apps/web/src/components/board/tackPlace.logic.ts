@@ -35,6 +35,36 @@ export function latestTackText(
   return last?.role === "assistant" ? last.text : "";
 }
 
+/**
+ * The note a reply sends Tack to. Only a reply that came after Tack woke counts (`wokeAfter` is the
+ * last message at that moment), so an old reply never pulls Tack back to its note. The key names
+ * the reply and its note: each moves Tack once.
+ */
+export function tackReplyNote(
+  bubbles: ReadonlyArray<{
+    readonly id: string;
+    readonly role: "user" | "assistant";
+    readonly text: string;
+  }>,
+  wokeAfter: string | null,
+  tasks: ReadonlyArray<{ readonly id: string; readonly title: string }>,
+): { readonly key: string; readonly taskId: string } | null {
+  const last = bubbles.at(-1);
+  if (last === undefined || last.id === wokeAfter) return null;
+  const taskId = tackFocusTask(latestTackText(bubbles), tasks);
+  return taskId === null ? null : { key: `${last.id}:${taskId}`, taskId };
+}
+
+/** The pen's way across the board: an arc from where Tack stood to where it will be drawn. */
+export function tackArcPath(
+  from: { readonly x: number; readonly y: number },
+  to: { readonly x: number; readonly y: number },
+): string {
+  const lift = Math.min(80, Math.hypot(to.x - from.x, to.y - from.y) * 0.24);
+  const round = (value: number) => Math.round(value * 10) / 10;
+  return `M${round(from.x)} ${round(from.y)}Q${round((from.x + to.x) / 2)} ${round((from.y + to.y) / 2 - lift)} ${round(to.x)} ${round(to.y)}`;
+}
+
 /** How long Tack's hop between two places takes: quick across a note, never a slow crawl. */
 export function tackHopMs(distance: number): number {
   return Math.round(Math.min(1100, Math.max(320, 260 + distance * 0.7)));

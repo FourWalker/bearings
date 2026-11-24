@@ -3,7 +3,7 @@
    through --visible-animation-state, and the drawing's own motion stops once its clip played out. */
 .tack-plotter {
   color: var(--foreground);
-  --tp-rust: var(--primary);
+  --tp-rust: var(--app-theme-accent, var(--primary));
 }
 
 .tack-plotter svg {
@@ -502,7 +502,7 @@ html[data-theme-id="plotter"] .plotter-card-draw,
   height: 8px;
   margin: -4px 0 0 -4px;
   border-radius: 50%;
-  background: var(--primary);
+  background: var(--app-theme-accent, var(--primary));
   offset-path: inset(1px round 10px);
   offset-rotate: 0deg;
   animation: tp-card-pen 0.65s linear forwards;
@@ -510,7 +510,7 @@ html[data-theme-id="plotter"] .plotter-card-draw,
 
 html[data-theme-id="plotter"] [data-board-task-view] > :not(.plotter-card-draw),
 [data-board-task-view]:has(> .plotter-card-draw[data-skin]) > :not(.plotter-card-draw) {
-  animation: tp-card-in 0.35s steps(4) 0.3s both;
+  animation: tp-card-in 0.35s steps(4) 0.3s backwards;
 }
 
 @keyframes tp-card-pen {
@@ -537,6 +537,15 @@ html[data-theme-id="plotter"] [data-board-task-view] > :not(.plotter-card-draw),
   to {
     opacity: 0;
   }
+}
+
+/* Tack's motion set to Still switches this off too, as reduced motion does. */
+.plotter-card-draw[data-still] {
+  display: none !important;
+}
+
+[data-board-task-view]:has(> .plotter-card-draw[data-still]) > * {
+  animation: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -570,4 +579,66 @@ html[data-theme-id="plotter"] [data-board-task-view] > :not(.plotter-card-draw),
   to {
     opacity: 0;
   }
+}
+
+/* ---------- Tack crossing the board to a note and back ---------- */
+
+.tack-travel {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.tack-travel > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* The Plotter's old ink is chased off where Tack stood, as when it changes drawing. */
+.tack-travel-ink .tack-plotter path {
+  stroke-dasharray: 1 2 !important;
+  fill-opacity: 0 !important;
+  animation: tp-chase 300ms linear calc(var(--i, 0) * 4ms) forwards !important;
+}
+
+.tack-travel-ink .tp-pen {
+  display: none;
+}
+
+.tack-travel mask path {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 10px;
+  stroke-dasharray: 1 2;
+  stroke-dashoffset: 1.01;
+}
+
+.tack-travel-trail {
+  fill: none;
+  stroke: var(--app-theme-accent, var(--primary));
+  stroke-width: 1.3px;
+  stroke-linecap: round;
+  stroke-dasharray: 2 5;
+  opacity: 0.8;
+}
+
+.tack-travel-pen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--app-theme-accent, var(--primary));
+  offset-rotate: 0deg;
+}
+
+/* The note Tack stands on is the one it is talking about. */
+[data-board-task]:has(> [data-tack-perch]) {
+  outline: 2px solid var(--app-theme-accent, var(--primary));
+  outline-offset: 3px;
 }

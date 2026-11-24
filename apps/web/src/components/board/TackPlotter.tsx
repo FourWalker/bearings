@@ -71,6 +71,7 @@ interface Sheet {
   readonly epoch: number;
   /** The clip and run that brought this drawing in: its motion waits for the pen. */
   readonly firstClip: string;
+  readonly arrival: number;
 }
 
 /**
@@ -85,6 +86,8 @@ export function TackPlotter(props: {
   readonly run: number;
   readonly held: boolean;
   readonly pen: PlotterPen;
+  /** A rise means Tack just landed here: the pen draws it, with no old ink to clear. */
+  readonly arrival: number;
   /** Width and height in screen pixels. */
   readonly size: number;
   readonly onClipEnd: () => void;
@@ -98,13 +101,16 @@ export function TackPlotter(props: {
     leaving: null,
     epoch: 0,
     firstClip: clipKey,
+    arrival: props.arrival,
   });
-  if (sheet.shown !== drawing)
+  const landed = sheet.arrival !== props.arrival;
+  if (sheet.shown !== drawing || landed)
     setSheet({
       shown: drawing,
-      leaving: props.motion === "still" ? null : sheet.shown,
+      leaving: props.motion === "still" || landed ? null : sheet.shown,
       epoch: sheet.epoch + 1,
       firstClip: clipKey,
+      arrival: props.arrival,
     });
   const still = props.motion === "still";
   const { pen } = props;

@@ -95,6 +95,8 @@ export function TackAvatar(props: {
   readonly from?: TackMood;
   /** Clicking Tack makes it wave. */
   readonly pokeable?: boolean;
+  /** Rises each time Tack lands somewhere after crossing the board: the Plotter draws itself there. */
+  readonly arrival?: number;
   readonly className?: string;
 }) {
   const reduced = useMediaQuery("(prefers-reduced-motion: reduce)");
@@ -125,6 +127,7 @@ export function TackAvatar(props: {
         run={playback.run}
         held={playback.held}
         pen={pen}
+        arrival={props.arrival ?? 0}
         size={Math.round(TACK_CELL.height * props.scale * 1.3)}
         onClipEnd={() => setPlayback((current) => finishTackClip(current, motion))}
         {...(poke === undefined ? {} : { onClick: poke })}

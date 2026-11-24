@@ -12,6 +12,7 @@ export function PlotterCardDraw() {
       aria-hidden
       className="plotter-card-draw"
       data-skin={look.skin === "plotter" ? "" : undefined}
+      data-still={look.motion === "still" ? "" : undefined}
     >
       <svg role="presentation">
         <rect pathLength={1} />
