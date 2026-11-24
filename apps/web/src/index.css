@@ -3,6 +3,7 @@
 @import "tailwindcss";
 @import "./plotter-tide.css";
 @import "./clay-post.css";
+@import "./plotter.css";
 
 @custom-variant dark (&:is(.dark, .dark *));
 @custom-variant light (&:not(.dark, .dark *));

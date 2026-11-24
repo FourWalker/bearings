@@ -1,4 +1,5 @@
 import { CLAY_POST_THEME } from "./clayPostTheme.ts";
+import { PLOTTER_THEME } from "./plotterTheme.ts";
 import { PLOTTER_TIDE_THEME } from "./plotterTideTheme.ts";
 
 const PLOTTER_TIDE_FROZEN_ID = "plotter-tide-frozen";
@@ -24,6 +25,7 @@ export const RESERVED_THEME_IDS: ReadonlySet<string> = new Set([
   "dark",
   ...BUILT_IN_THEME_IDS,
   PLOTTER_TIDE_FROZEN_ID,
+  PLOTTER_THEME.id,
   "t3-chat-dark",
   "t3-grove",
   "t3-ocean",
@@ -936,6 +938,7 @@ export const BUILT_IN_THEMES: ReadonlyArray<ThemeDefinition> = [
 
 export const WEB_BUILT_IN_THEMES: ReadonlyArray<ThemeDefinition> = [
   ...BUILT_IN_THEMES,
+  PLOTTER_THEME,
   { ...PLOTTER_TIDE_THEME, id: PLOTTER_TIDE_FROZEN_ID, label: "Plotter Tide Frozen" },
 ];
 
