@@ -12911,6 +12911,11 @@
   "40ef67e5e07bfdba": "Hela historiken",
   "a2f0aed8b5e1967f": "Historik",
   "8a3ca894cbbf05f6": "Skicka hem Tack",
-  "6b3397dbea74bf50": "Tacks hörna. Klicka på Tack eller tryck T för att prata.",
-  "f083c0a833019678": "Tack lyssnar."
+  "b72c77a369d0dc81": "Gå till anteckningen, tavlan syns kvar",
+  "085eba4ad98ca0eb": "Öppna uppgiften direkt",
+  "48f3fb8c9bafa609": "När Tack pekar på en uppgift",
+  "5aafe1203663b36f": "Tack är här borta",
+  "4f5634b230f1fd62": "Tack är vid {title}",
+  "1daf1bba42c0e9ef": "Hej, jag är Tack. {active} öppna, {blocked} blockerade. Klicka på mig eller tryck T för att prata.",
+  "db6bbdc0cafa8b26": "Hej, jag är Tack. {active} öppna, inget blockerat. Klicka på mig eller tryck T för att prata."
 }

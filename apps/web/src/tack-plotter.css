@@ -454,3 +454,120 @@
     opacity: 1;
   }
 }
+
+/* ---------- Opening a task: the pen draws its card first ---------- */
+
+.plotter-card-draw {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+
+html[data-theme-id="plotter"] .plotter-card-draw,
+.plotter-card-draw[data-skin] {
+  display: block;
+}
+
+.plotter-card-draw svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.plotter-card-draw rect {
+  x: 1px;
+  y: 1px;
+  width: calc(100% - 2px);
+  height: calc(100% - 2px);
+  rx: 10px;
+  fill: none;
+  stroke: var(--foreground);
+  stroke-width: 1.5px;
+  stroke-dasharray: 1 2;
+  stroke-dashoffset: 1.01;
+  animation:
+    tp-draw 0.65s linear forwards,
+    tp-card-out 0.4s linear 0.9s forwards;
+}
+
+.plotter-card-pen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: var(--primary);
+  offset-path: inset(1px round 10px);
+  offset-rotate: 0deg;
+  animation: tp-card-pen 0.65s linear forwards;
+}
+
+html[data-theme-id="plotter"] [data-board-task-view] > :not(.plotter-card-draw),
+[data-board-task-view]:has(> .plotter-card-draw[data-skin]) > :not(.plotter-card-draw) {
+  animation: tp-card-in 0.35s steps(4) 0.3s both;
+}
+
+@keyframes tp-card-pen {
+  from {
+    offset-distance: 0%;
+  }
+  99% {
+    offset-distance: 100%;
+    opacity: 1;
+  }
+  to {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+
+@keyframes tp-card-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes tp-card-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plotter-card-draw {
+    display: none !important;
+  }
+
+  [data-board-task-view] > * {
+    animation: none !important;
+  }
+}
+
+/* ---------- Tack's hello when a board opens ---------- */
+
+.tack-greeting {
+  animation: tack-greeting 8s linear forwards;
+}
+
+@keyframes tack-greeting {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+  6% {
+    opacity: 1;
+    translate: 0 0;
+  }
+  88% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}

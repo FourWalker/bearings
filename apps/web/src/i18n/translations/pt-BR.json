@@ -12904,6 +12904,11 @@
   "40ef67e5e07bfdba": "Histórico completo",
   "a2f0aed8b5e1967f": "Histórico",
   "8a3ca894cbbf05f6": "Mandar o Tack para casa",
-  "6b3397dbea74bf50": "O canto do Tack. Clique no Tack ou pressione T para falar.",
-  "f083c0a833019678": "O Tack está ouvindo."
+  "b72c77a369d0dc81": "Andar até a nota, mantendo o quadro à vista",
+  "085eba4ad98ca0eb": "Abrir a tarefa na hora",
+  "48f3fb8c9bafa609": "Quando o Tack aponta uma tarefa",
+  "5aafe1203663b36f": "O Tack está aqui",
+  "4f5634b230f1fd62": "O Tack está em {title}",
+  "1daf1bba42c0e9ef": "Oi, eu sou o Tack. {active} abertas, {blocked} bloqueadas. Clique em mim ou pressione T para falar.",
+  "db6bbdc0cafa8b26": "Oi, eu sou o Tack. {active} abertas, nada bloqueado. Clique em mim ou pressione T para falar."
 }

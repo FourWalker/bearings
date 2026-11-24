@@ -12899,6 +12899,11 @@
   "40ef67e5e07bfdba": "Historial completo",
   "a2f0aed8b5e1967f": "Historial",
   "8a3ca894cbbf05f6": "Enviar a Tack a casa",
-  "6b3397dbea74bf50": "El rincón de Tack. Haz clic en Tack o pulsa T para hablar.",
-  "f083c0a833019678": "Tack está escuchando."
+  "b72c77a369d0dc81": "Caminar hasta la nota, sin perder el tablero",
+  "085eba4ad98ca0eb": "Abrir la tarea enseguida",
+  "48f3fb8c9bafa609": "Cuando Tack señala una tarea",
+  "5aafe1203663b36f": "Tack está por aquí",
+  "4f5634b230f1fd62": "Tack está en {title}",
+  "1daf1bba42c0e9ef": "Hola, soy Tack. {active} abiertas, {blocked} bloqueadas. Haz clic en mí o pulsa T para hablar.",
+  "db6bbdc0cafa8b26": "Hola, soy Tack. {active} abiertas, nada bloqueado. Haz clic en mí o pulsa T para hablar."
 }

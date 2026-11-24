@@ -12930,6 +12930,11 @@
   "40ef67e5e07bfdba": "完整记录",
   "a2f0aed8b5e1967f": "记录",
   "8a3ca894cbbf05f6": "让 Tack 回家",
-  "6b3397dbea74bf50": "Tack 的角落。点击 Tack 或按 T 开始对话。",
-  "f083c0a833019678": "Tack 正在听。"
+  "b72c77a369d0dc81": "走到便签旁，看板保持可见",
+  "085eba4ad98ca0eb": "立即打开任务",
+  "48f3fb8c9bafa609": "当 Tack 指向某个任务时",
+  "5aafe1203663b36f": "Tack 在这边",
+  "4f5634b230f1fd62": "Tack 在 {title}",
+  "1daf1bba42c0e9ef": "你好，我是 Tack。进行中 {active}，受阻 {blocked}。点击我或按 T 开始对话。",
+  "db6bbdc0cafa8b26": "你好，我是 Tack。进行中 {active}，没有受阻。点击我或按 T 开始对话。"
 }

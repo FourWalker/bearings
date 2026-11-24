@@ -36,6 +36,7 @@ import { type BoardAssistantBubble, latestExchange } from "./board.logic";
 import { TackAvatar, useTackLook, useTackPen } from "./TackAvatar";
 import type { TackMotion, TackSkin } from "./tackAvatar.logic";
 import type { PlotterInk, PlotterSpeed } from "./tackPlotter.logic";
+import type { TackShowMode } from "./BoardTack";
 import type { TackPlace } from "./tackPlace.logic";
 import { type TackChat, type TackChatProps, useTackChat } from "./useTackChat";
 
@@ -291,8 +292,14 @@ export function TackLookMenu(props: {
   readonly onMotion: (motion: TackMotion) => void;
   readonly place?: TackPlace;
   readonly onPlace?: (place: TackPlace) => void;
+  readonly show?: TackShowMode;
+  readonly onShow?: (show: TackShowMode) => void;
 }) {
   const gt = useGT();
+  const shows: ReadonlyArray<readonly [TackShowMode, string]> = [
+    ["walk", gt("Walk to the note, keep the board in view")],
+    ["open", gt("Open the task right away")],
+  ];
   const places: ReadonlyArray<readonly [TackPlace, string]> = [
     ["roam", gt("Roamer: sleeps in its corner, walks to notes")],
     ["host", gt("Panel host: says where things stand")],
@@ -341,6 +348,24 @@ export function TackLookMenu(props: {
               >
                 {places.map(([place, label]) => (
                   <MenuRadioItem key={place} value={place}>
+                    {label}
+                  </MenuRadioItem>
+                ))}
+              </MenuRadioGroup>
+            </MenuGroup>
+            <MenuSeparator />
+          </>
+        ) : null}
+        {props.show !== undefined && props.onShow !== undefined ? (
+          <>
+            <MenuGroup>
+              <MenuGroupLabel>{gt("When Tack points at a task")}</MenuGroupLabel>
+              <MenuRadioGroup
+                value={props.show}
+                onValueChange={(next) => props.onShow?.(next as TackShowMode)}
+              >
+                {shows.map(([show, label]) => (
+                  <MenuRadioItem key={show} value={show}>
                     {label}
                   </MenuRadioItem>
                 ))}

@@ -62,6 +62,7 @@ import {
   WorkspaceControls,
   useBoardEdit,
 } from "./BoardTaskEditors";
+import { PlotterCardDraw } from "./PlotterCardDraw";
 
 /**
  * Project Board fork: the board app's task views. A master task opens as a page with its
@@ -158,7 +159,8 @@ export function BoardTaskView(props: BoardTaskViewProps) {
         if (createdId && change.op === "reportBug") props.onOpenCreated(createdId);
       }}
     >
-      <div data-board-task-view className="flex h-full min-h-0 flex-col">
+      <div data-board-task-view className="relative flex h-full min-h-0 flex-col">
+        <PlotterCardDraw />
         <TaskHeader {...props} detail={data} tab={tab} />
         <Tabs.Root
           value={tab}

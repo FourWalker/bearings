@@ -683,7 +683,10 @@ function BoardScreen(props: {
               />
             }
           />
-          <TackCorner />
+          <TackCorner
+            active={index.tasks.filter((task) => task.status !== "done").length}
+            blocked={panel.blocked.length}
+          />
         </aside>
       </div>
       {props.assistantProjectId !== null && tackPlace === "float" ? (

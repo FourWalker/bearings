@@ -13,6 +13,7 @@ import { useAtomCommand } from "~/state/use-atom-command";
 import { buildThreadRouteParams } from "~/threadRoutes";
 
 import { boardSearchOfIntent } from "./board.logic";
+import { tackShow } from "./tackShow";
 
 /**
  * Project Board fork: does what a board tool asked this window to show, and answers whether it
@@ -55,12 +56,17 @@ function BoardIntentChannel(props: { readonly environmentId: EnvironmentId }) {
 
     async function perform(command: BoardIntent["command"]) {
       switch (command.type) {
-        case "board.open":
+        case "board.open": {
+          // Tack walks to the note instead, so the board stays in view while it points.
+          const shownByTack =
+            command.taskId !== undefined && tackShow(command.boardId, command.taskId);
+          const search = boardSearchOfIntent(environmentId, command);
           await router.navigate({
             to: "/board",
-            search: boardSearchOfIntent(environmentId, command),
+            search: shownByTack ? { ...search, open: undefined } : search,
           });
           return;
+        }
         case "view.back":
           router.history.back();
           return;

@@ -12904,6 +12904,11 @@
   "40ef67e5e07bfdba": "Historique complet",
   "a2f0aed8b5e1967f": "Historique",
   "8a3ca894cbbf05f6": "Renvoyer Tack chez lui",
-  "6b3397dbea74bf50": "Le coin de Tack. Clique sur Tack ou appuie sur T pour parler.",
-  "f083c0a833019678": "Tack écoute."
+  "b72c77a369d0dc81": "Marcher jusqu’à la note, le tableau reste visible",
+  "085eba4ad98ca0eb": "Ouvrir la tâche tout de suite",
+  "48f3fb8c9bafa609": "Quand Tack montre une tâche",
+  "5aafe1203663b36f": "Tack est par ici",
+  "4f5634b230f1fd62": "Tack est sur {title}",
+  "1daf1bba42c0e9ef": "Salut, je suis Tack. {active} ouvertes, {blocked} bloquées. Clique sur moi ou appuie sur T pour parler.",
+  "db6bbdc0cafa8b26": "Salut, je suis Tack. {active} ouvertes, rien de bloqué. Clique sur moi ou appuie sur T pour parler."
 }
