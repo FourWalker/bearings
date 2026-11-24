@@ -113,6 +113,25 @@ const FACE: ReadonlyArray<PlotterStroke> = [
   { d: "M64 177C71 174 76 179 73 184" },
 ];
 
+/**
+ * The scholar with a notice in hand: the card's lines give way to a rust stamp, and the card and
+ * the thumb on it move as one, so he can lift it toward the person.
+ */
+const STAMP: ReadonlyArray<PlotterStroke> = [
+  { d: "M27 158L61 152L64.5 172.5L30.5 178.5Z", tone: "rust", part: "card" },
+  { d: "M43.2 157.4L45 167", tone: "rust", part: "card" },
+  { d: circ(45.7, 171.3, 1.4), tone: "fill-rust", part: "card" },
+];
+const ATTENTION: ReadonlyArray<PlotterStroke> = FACE.flatMap((stroke, i) =>
+  stroke.part === "line"
+    ? []
+    : stroke.tone === "fill-paper"
+      ? [{ ...stroke, part: "card" }, ...STAMP]
+      : i === FACE.length - 1
+        ? [{ ...stroke, part: "card" }]
+        : [stroke],
+);
+
 const CANDLE: ReadonlyArray<PlotterStroke> = [
   { d: "M58 172C76 182 124 182 142 172C124 164 76 164 58 172" },
   { d: "M142 172C156 170 158 182 146 184" },
@@ -223,6 +242,7 @@ const INKWELL: ReadonlyArray<PlotterStroke> = [
 
 export const PLOTTER_DRAWINGS = {
   face: FACE,
+  attention: ATTENTION,
   candle: CANDLE,
   trumpet: TRUMPET,
   gears: GEARS,
@@ -311,9 +331,19 @@ export function plotterRetrace(
 
 export const PLOTTER_CHASE_MS = 300;
 
-/** The path a pen dot rides through every stroke: jumps between them, or pen-up lines with hops. */
+/**
+ * The path a pen dot rides through every stroke: jumps between them, or pen-up lines with hops.
+ * A closed stroke returns to its own start: joined after others, "Z" would close onto the very
+ * first stroke's start and carry the dot off the line it is drawing.
+ */
 export function plotterPenPath(paths: ReadonlyArray<string>, hops: boolean): string {
-  return paths.map((d, i) => (i > 0 && hops ? d.replace(/^\s*M/, "L") : d)).join("");
+  return paths
+    .map((d, i) => {
+      const start = /^\s*M\s*(-?[\d.]+)[\s,]+(-?[\d.]+)/.exec(d);
+      const open = start === null ? d : d.replace(/Z\s*$/i, `L${start[1]} ${start[2]}`);
+      return i > 0 && hops ? open.replace(/^\s*M/, "L") : open;
+    })
+    .join("");
 }
 
 /**

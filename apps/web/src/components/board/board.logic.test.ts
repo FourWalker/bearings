@@ -30,6 +30,7 @@ import {
   goalThreadOf,
   indexBoard,
   levelKindOf,
+  noticesOf,
   openDecisionCount,
   ownerHolderOf,
   panelOf,
@@ -386,6 +387,16 @@ describe("panelOf", () => {
       ["failed", "t"],
     ]);
     expect(panel.finished.map(({ chat }) => chat.sessionId)).toEqual(["new", "old"]);
+    // What Tack holds: one notice a chat, named after its task, a waiting answer first.
+    expect(noticesOf(panel, []).map((notice) => [notice.key, notice.title, notice.detail])).toEqual(
+      [
+        ["needs:asks", "t", "asks"],
+        ["needs:loose", "loose", null],
+        ["stopped:failed", "t", "failed"],
+        ["finished:new", "t", "new"],
+        ["finished:old", "t", "old"],
+      ],
+    );
   });
 
   it("collects open items and decisions from unfinished tasks, and open unlinked chats", () => {

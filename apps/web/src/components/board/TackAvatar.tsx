@@ -9,14 +9,18 @@ import { observeVisibleAnimation } from "~/lib/visibleAnimation";
 import { TackPlotter } from "./TackPlotter";
 import {
   advanceTackPlayback,
+  cheerTack,
   clipMoves,
   clipRuns,
   finishTackClip,
+  paintTackSign,
   paintTackStrip,
   pokeTack,
+  ringTack,
   startTackPlayback,
   TACK_CELL,
   TACK_CLIPS,
+  TACK_SIGN,
   TACK_MOTIONS,
   TACK_SKINS,
   type TackClip,
@@ -59,7 +63,58 @@ export function useTackPen() {
   );
 }
 
+export type TackHold = "needs" | "calm";
+export interface TackSignal {
+  readonly at: number;
+  readonly kind: "ring" | "cheer";
+}
+
 const strips = new Map<string, string>();
+const signs = new Map<string, string>();
+
+function signUrl(count: number, hot: boolean): string {
+  const key = `${count}:${hot}`;
+  const cached = signs.get(key);
+  if (cached !== undefined) return cached;
+  const canvas = document.createElement("canvas");
+  canvas.width = TACK_SIGN.width;
+  canvas.height = TACK_SIGN.height;
+  const context = canvas.getContext("2d");
+  if (context !== null)
+    paintTackSign(count, hot, (x, y, color) => {
+      context.fillStyle = color;
+      context.fillRect(x, y, 1, 1);
+    });
+  const url = canvas.toDataURL();
+  signs.set(key, url);
+  return url;
+}
+
+/** The sign a pixel Tack plants beside itself while it holds notices: their count, red if urgent. */
+export function TackSign(props: {
+  readonly count: number;
+  readonly hot: boolean;
+  /** Screen pixels per sprite pixel, as the avatar beside it. */
+  readonly scale: number;
+  /** Rises when a notice arrives: the sign waves. */
+  readonly wave: number;
+  readonly className?: string;
+}) {
+  return (
+    <span
+      aria-hidden
+      data-tack-sign={props.hot ? "hot" : "calm"}
+      className={cn("tack-sign block shrink-0", props.className)}
+      style={{
+        width: TACK_SIGN.width * props.scale,
+        height: TACK_SIGN.height * props.scale,
+        backgroundImage: `url(${signUrl(Math.min(9, props.count), props.hot)})`,
+        // Two names for one motion: alternating them replays it without remounting.
+        animationName: props.wave === 0 ? "none" : props.wave % 2 ? "tack-sign-a" : "tack-sign-b",
+      }}
+    />
+  );
+}
 
 function stripUrl(skin: TackPixelSkin, clip: TackClip): string {
   const key = `${skin}:${clip}`;
@@ -97,6 +152,10 @@ export function TackAvatar(props: {
   readonly pokeable?: boolean;
   /** Rises each time Tack lands somewhere after crossing the board: the Plotter draws itself there. */
   readonly arrival?: number;
+  /** Tack holds a notice for the person: urgent ("needs") or only a result to look at ("calm"). */
+  readonly hold?: TackHold | null;
+  /** A reaction to play once: `at` rises for each. A ring for a notice, a cheer for good news. */
+  readonly signal?: TackSignal;
   readonly className?: string;
 }) {
   const reduced = useMediaQuery("(prefers-reduced-motion: reduce)");
@@ -106,7 +165,16 @@ export function TackAvatar(props: {
   const [stored, setPlayback] = useState(() =>
     startTackPlayback(props.from ?? props.mood, notes, motion),
   );
-  const playback = advanceTackPlayback(stored, props.mood, notes, motion);
+  const signalAt = props.signal?.at ?? 0;
+  const [signalled, setSignalled] = useState(signalAt);
+  let reacted = stored;
+  if (signalAt !== signalled) {
+    setSignalled(signalAt);
+    if (signalAt > signalled)
+      reacted =
+        props.signal?.kind === "cheer" ? cheerTack(stored, motion) : ringTack(stored, motion);
+  }
+  const playback = advanceTackPlayback(reacted, props.mood, notes, motion);
   if (playback !== stored) setPlayback(playback);
 
   if (props.skin === "emoji")
@@ -128,6 +196,7 @@ export function TackAvatar(props: {
         held={playback.held}
         pen={pen}
         arrival={props.arrival ?? 0}
+        hold={props.hold ?? null}
         size={Math.round(TACK_CELL.height * props.scale * 1.3)}
         onClipEnd={() => setPlayback((current) => finishTackClip(current, motion))}
         {...(poke === undefined ? {} : { onClick: poke })}

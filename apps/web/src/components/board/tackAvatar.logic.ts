@@ -64,9 +64,14 @@ export function clipAfter(finished: TackClip, mood: TackMood): TackClip {
   return LOOP_OF[mood];
 }
 
+/** How many times the alert clip plays for a notice that just arrived. */
+const ARRIVAL_RINGS = 6;
+
 /** How often a clip plays before `clipAfter` is asked; `null` loops until the mood changes. */
 export function clipRuns(clip: TackClip, mood: TackMood): number | null {
   if (clip === "wake" || clip === "done" || clip === "write") return 1;
+  // Rung for a notice, not for Tack's own wait: it rings and goes back to what it was doing.
+  if (clip === "alert" && mood !== "alert") return ARRIVAL_RINGS;
   if (clip === "oops") return 3;
   if (mood === "rest") return clip === "sleep" ? 30 : 4;
   return null;
@@ -615,6 +620,46 @@ export function finishTackClip(playback: TackPlayback, motion: TackMotion): Tack
   return next === playback.clip
     ? { ...playback, held: true }
     : { ...playback, clip: next, run: playback.run + 1, held: false };
+}
+
+/** A notice arrived: Tack rings for it whatever it was doing, then carries on. */
+export function ringTack(playback: TackPlayback, motion: TackMotion): TackPlayback {
+  if (!clipMoves("alert", motion) || playback.mood === "alert") return playback;
+  return { ...playback, clip: "alert", run: playback.run + 1, held: false };
+}
+
+/** Good news, or the last notice dealt with: the "done" flourish, unless Tack is busy. */
+export function cheerTack(playback: TackPlayback, motion: TackMotion): TackPlayback {
+  if (!clipMoves("done", motion) || (playback.clip !== "idle" && playback.clip !== "sleep"))
+    return playback;
+  return { ...playback, clip: "done", run: playback.run + 1, held: false };
+}
+
+/** The sign a pixel Tack plants beside itself while it holds notices, with their count. */
+export const TACK_SIGN = { width: 9, height: 12 } as const;
+const DIGITS = [
+  "111101101101111",
+  "010110010010111",
+  "111001111100111",
+  "111001111001111",
+  "101101111001001",
+  "111100111001111",
+  "111100111101111",
+  "111001010010010",
+  "111101111101111",
+  "111101111001111",
+];
+
+export function paintTackSign(count: number, hot: boolean, paint: Paint) {
+  const fill = (x: number, y: number, w: number, h: number, color: string) => {
+    for (let i = 0; i < w; i++) for (let j = 0; j < h; j++) paint(x + i, y + j, color);
+  };
+  fill(1, 0, 7, 9, FX.graphite);
+  fill(2, 1, 5, 7, hot ? FX.red : FX.zed);
+  fill(4, 9, 1, 3, FX.pinNeedle);
+  const digit = DIGITS[Math.max(0, Math.min(9, count))] ?? "";
+  for (let i = 0; i < digit.length; i++)
+    if (digit[i] === "1") paint(3 + (i % 3), 2 + Math.floor(i / 3), hot ? FX.white : FX.graphite);
 }
 
 /** Tack reacts to a click with its wave, unless it is in the middle of something. */

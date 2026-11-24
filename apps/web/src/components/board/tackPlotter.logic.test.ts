@@ -49,6 +49,10 @@ describe("plotterPenPath", () => {
     expect(plotterPenPath(["M0 0L5 5", "M9 9L1 1"], true)).toBe("M0 0L5 5L9 9L1 1");
     expect(plotterPenPath(["M0 0L5 5", "M9 9L1 1"], false)).toBe("M0 0L5 5M9 9L1 1");
   });
+
+  it("closes a stroke onto its own start, not the first stroke's", () => {
+    expect(plotterPenPath(["M0 0L5 5", "M9 9L1 1L1 9Z"], true)).toBe("M0 0L5 5L9 9L1 1L1 9L9 9");
+  });
 });
 
 describe("wobblePath", () => {

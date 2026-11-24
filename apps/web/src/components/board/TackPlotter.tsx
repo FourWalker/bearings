@@ -88,13 +88,17 @@ export function TackPlotter(props: {
   readonly pen: PlotterPen;
   /** A rise means Tack just landed here: the pen draws it, with no old ink to clear. */
   readonly arrival: number;
+  /** Tack holds a notice: the scholar looks up with a stamped card, and gestures if it is urgent. */
+  readonly hold: "needs" | "calm" | null;
   /** Width and height in screen pixels. */
   readonly size: number;
   readonly onClipEnd: () => void;
   readonly onClick?: () => void;
   readonly className?: string;
 }) {
-  const drawing = PLOTTER_DRAWING_OF[props.clip];
+  // Only the scholar holds a notice; the bell, the bird and the rest play as they are.
+  const attentive = props.hold !== null && (props.clip === "idle" || props.clip === "wake");
+  const drawing = attentive ? "attention" : PLOTTER_DRAWING_OF[props.clip];
   const clipKey = `${props.clip}:${props.run}`;
   const [sheet, setSheet] = useState<Sheet>({
     shown: drawing,
@@ -177,7 +181,8 @@ export function TackPlotter(props: {
     <span
       ref={observeVisibleAnimation}
       aria-hidden
-      data-tack-clip={props.clip}
+      data-tack-clip={attentive ? "attention" : props.clip}
+      data-hold={attentive ? (props.hold ?? undefined) : undefined}
       data-motion={still ? "still" : "moving"}
       data-live={live ? "" : undefined}
       className={cn("tack-plotter relative block shrink-0", props.className)}

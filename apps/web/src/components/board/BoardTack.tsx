@@ -25,8 +25,16 @@ import {
   TackMessages,
   TackThreadButtons,
 } from "./BoardAssistant";
-import { latestExchange } from "./board.logic";
-import { TackAvatar, useTackLook, useTackPen } from "./TackAvatar";
+import { type BoardNotice, latestExchange } from "./board.logic";
+import {
+  TackAvatar,
+  type TackHold,
+  TackSign,
+  type TackSignal,
+  useTackLook,
+  useTackPen,
+} from "./TackAvatar";
+import { TackBanner } from "./TackBanner";
 import {
   TACK_PLACES,
   tackArcPath,
@@ -85,6 +93,14 @@ interface TackBoard {
   readonly setOffscreen: (offscreen: Offscreen | null) => void;
   /** A task is open over the board: Tack keeps its place and its bubble waits. */
   readonly covered: boolean;
+  /** What on the board wants the person: Tack holds these until they are dealt with. */
+  readonly notices: ReadonlyArray<BoardNotice>;
+  /** The notices with a banner up right now. */
+  readonly banners: ReadonlyArray<BoardNotice>;
+  readonly dismissBanner: (key: string) => void;
+  readonly openNotice: (notice: BoardNotice) => void;
+  readonly hold: TackHold | null;
+  readonly signal: TackSignal;
 }
 
 const TackBoardContext = createContext<TackBoard | null>(null);
@@ -102,12 +118,41 @@ export function TackBoardProvider(
     readonly awake: boolean;
     readonly onAwake: (awake: boolean) => void;
     readonly covered: boolean;
+    readonly notices: ReadonlyArray<BoardNotice>;
+    /** The threads are loaded, so a notice not seen before really is new. */
+    readonly noticesReady: boolean;
+    readonly onOpenNotice: (notice: BoardNotice) => void;
     readonly children: ReactNode;
   },
 ) {
   const gt = useGT();
   const [tab, setTab] = useState<"stand" | "tack">("stand");
-  const { awake, covered } = props;
+  const { awake, covered, notices } = props;
+  // What stood when the board opened is old news: Tack holds it without announcing it.
+  const [announced, setAnnounced] = useState<ReadonlyArray<string> | null>(null);
+  const [bannerKeys, setBannerKeys] = useState<ReadonlyArray<string>>([]);
+  const [signal, setSignal] = useState<TackSignal>({ at: 0, kind: "ring" });
+  const urgent = notices.some((notice) => notice.kind !== "finished");
+  if (props.noticesReady) {
+    const keys = notices.map((notice) => notice.key);
+    if (announced === null) setAnnounced(keys);
+    else if (keys.length !== announced.length || keys.some((key) => !announced.includes(key))) {
+      const fresh = notices.filter((notice) => !announced.includes(notice.key));
+      setAnnounced(keys);
+      if (fresh.some((notice) => notice.kind !== "finished"))
+        setSignal((current) => ({ at: current.at + 1, kind: "ring" }));
+      // A result, or the last notice dealt with: good news, unless something still waits.
+      else if (!urgent && (fresh.length > 0 || keys.length === 0))
+        setSignal((current) => ({ at: current.at + 1, kind: "cheer" }));
+      // Behind an open task a banner would announce to nobody; the notice is held all the same.
+      if (fresh.length > 0 && !covered)
+        setBannerKeys((current) => [...current, ...fresh.map((notice) => notice.key)].slice(-2));
+    }
+  }
+  const banners = bannerKeys.flatMap((key) => notices.find((notice) => notice.key === key) ?? []);
+  const dismissBanner = useStableCallback((key: string) =>
+    setBannerKeys((current) => current.filter((candidate) => candidate !== key)),
+  );
   const chat = useTackChat(props, { follow: tab === "tack", asleep: !awake });
   // The note Tack stands on: it stays there until a reply names another note or it is sent home.
   const [stand, setStand] = useState<string | null>(null);
@@ -123,6 +168,8 @@ export function TackBoardProvider(
   const [anchor, setAnchorState] = useState<TackBoard["anchor"]>(null);
   const [showMode] = useTackShowMode();
   const open = chat.view !== "closed";
+  // Tack's bubble lists what it holds, so banners make way for it.
+  if (open && bannerKeys.length > 0) setBannerKeys([]);
   // The last message when Tack woke; see tackReplyNote.
   const [wokeAfter, setWokeAfter] = useState<string | null | undefined>(undefined);
   if (open && chat.loaded && wokeAfter === undefined) setWokeAfter(chat.bubbles.at(-1)?.id ?? null);
@@ -202,6 +249,15 @@ export function TackBoardProvider(
     offscreen,
     setOffscreen,
     covered,
+    notices,
+    banners: covered ? [] : banners,
+    dismissBanner,
+    openNotice: (notice) => {
+      dismissBanner(notice.key);
+      props.onOpenNotice(notice);
+    },
+    hold: notices.length === 0 ? null : urgent ? "needs" : "calm",
+    signal,
   };
   if (!chat.canAsk) return props.children;
   return (
@@ -443,13 +499,62 @@ function TackFigure(props: { readonly kind: AnchorKind; readonly scale: number }
       <TackAvatar
         skin={look.skin}
         motion={look.motion}
-        mood={chat.mood}
+        // Holding a notice, Tack stays up with it and does not doze off.
+        mood={board.hold !== null && chat.mood === "rest" ? "idle" : chat.mood}
         notes={chat.notes}
         scale={props.scale}
         from="rest"
         arrival={landings ?? 0}
+        hold={board.hold}
+        signal={board.signal}
       />
     </button>
+  );
+}
+
+/** Beside Tack at home: how many notices it holds. A sign for the pixel skins, a stamp otherwise. */
+function TackHeld(props: {
+  /** Where the stamped count sits. */
+  readonly stamp: string;
+  /** Where the pixel skins' sign stands: on the ground beside the sprite. */
+  readonly sign: string;
+}) {
+  const board = useTackBoard();
+  const [look] = useTackLook();
+  if (board === null || board.hold === null) return null;
+  const count = board.notices.length;
+  return look.skin === "plotter" || look.skin === "emoji" ? (
+    <span data-tack-count={board.hold} className={cn("tack-count absolute", props.stamp)}>
+      {count}
+    </span>
+  ) : (
+    <TackSign
+      count={count}
+      hot={board.hold === "needs"}
+      scale={3}
+      wave={board.signal.kind === "ring" ? board.signal.at : 0}
+      className={cn("absolute", props.sign)}
+    />
+  );
+}
+
+/** Tack's banners for notices that just arrived, stacked beside its home. */
+function TackBanners(props: { readonly className: string }) {
+  const board = useTackBoard();
+  if (board === null || board.banners.length === 0) return null;
+  return (
+    <div className={cn("pointer-events-none absolute z-20 flex w-72 gap-3", props.className)}>
+      {board.banners.map((notice) => (
+        <div key={notice.key} className="pointer-events-auto">
+          <TackBanner
+            notice={notice}
+            environmentId={board.environmentId}
+            onOpen={() => board.openNotice(notice)}
+            onGone={() => board.dismissBanner(notice.key)}
+          />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -627,7 +732,8 @@ export function TackCorner(props: { readonly active: number; readonly blocked: n
       className="pointer-events-none sticky bottom-0 mt-4 flex justify-end pt-2"
     >
       <div className="relative">
-        {!greeted && home && chat.view === "closed" ? (
+        <TackBanners className="end-0 bottom-full mb-3 flex-col-reverse" />
+        {!greeted && home && chat.view === "closed" && board.banners.length === 0 ? (
           <button
             type="button"
             data-tack-greeting
@@ -639,18 +745,26 @@ export function TackCorner(props: { readonly active: number; readonly blocked: n
               chat.setView("open");
             }}
           >
-            {props.blocked > 0
-              ? gt("Hi, I'm Tack. {active} open, {blocked} blocked. Click me or press T to talk.", {
-                  active: props.active,
-                  blocked: props.blocked,
+            {board.notices.length > 0
+              ? gt("Hi, I'm Tack. I'm holding {count} for you. Click me to see.", {
+                  count: board.notices.length,
                 })
-              : gt("Hi, I'm Tack. {active} open, nothing blocked. Click me or press T to talk.", {
-                  active: props.active,
-                })}
+              : props.blocked > 0
+                ? gt(
+                    "Hi, I'm Tack. {active} open, {blocked} blocked. Click me or press T to talk.",
+                    {
+                      active: props.active,
+                      blocked: props.blocked,
+                    },
+                  )
+                : gt("Hi, I'm Tack. {active} open, nothing blocked. Click me or press T to talk.", {
+                    active: props.active,
+                  })}
           </button>
         ) : null}
-        <div className="pointer-events-auto grid size-28 place-items-center rounded-full border bg-card/55 shadow-sm backdrop-blur-md">
+        <div className="pointer-events-auto relative grid size-28 place-items-center rounded-full border bg-card/55 shadow-sm backdrop-blur-md">
           {home ? <TackFigure kind="corner" scale={3} /> : <TackGhost scale={3} />}
+          <TackHeld stamp="-end-1 top-0" sign="end-1 bottom-8" />
         </div>
       </div>
     </div>
@@ -678,8 +792,10 @@ export function TackHost(props: {
   return (
     <div data-tack-home="host" className="mb-4 grid gap-2 border-b pb-3">
       <div className="flex items-end gap-2">
-        <div className="grid min-h-[60px] min-w-[78px] place-items-end">
+        <div className="relative grid min-h-[60px] min-w-[78px] place-items-end">
           {home ? <TackFigure kind="host" scale={3} /> : <TackGhost scale={3} />}
+          <TackHeld stamp="-end-4 top-0" sign="-end-5 bottom-0" />
+          <TackBanners className="start-0 top-full mt-3 flex-col" />
         </div>
         <p className="min-w-0 flex-1 pb-1 text-sm">{line}</p>
       </div>
@@ -818,6 +934,41 @@ function TackBubble() {
               <XIcon />
             </HeaderButton>
           </div>
+          {board.notices.length > 0 ? (
+            <div data-tack-held className="grid gap-0.5 border-b pb-2">
+              <span className="px-1 text-muted-foreground text-xs">
+                {gt("Tack is holding {count}", { count: board.notices.length })}
+              </span>
+              {board.notices.map((notice) => (
+                <button
+                  key={notice.key}
+                  type="button"
+                  className="flex items-center gap-2 rounded-md px-1 py-1 text-start text-sm hover:bg-accent"
+                  onClick={() => board.openNotice(notice)}
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "inline-block size-2 shrink-0",
+                      notice.kind === "needs"
+                        ? "rotate-45 bg-board-attention"
+                        : notice.kind === "stopped"
+                          ? "bg-destructive"
+                          : "rounded-full bg-success",
+                    )}
+                  />
+                  <span className="min-w-0 flex-1 truncate">{notice.title}</span>
+                  <span className="shrink-0 text-muted-foreground text-xs">
+                    {notice.kind === "needs"
+                      ? gt("needs you")
+                      : notice.kind === "stopped"
+                        ? gt("stopped")
+                        : gt("finished")}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : null}
           <TackMessages
             chat={chat}
             environmentId={board.environmentId}

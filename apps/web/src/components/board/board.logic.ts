@@ -758,6 +758,67 @@ export function goalLanes(index: BoardIndex, goal: BoardGoal): ReadonlyArray<Boa
 }
 
 /** The thread to talk to about a Goal: its executor, or the last thread that ran it. */
+/** Something on the board that wants the person: what Tack announces and holds. */
+export interface BoardNotice {
+  /** Stable while the notice stands; a new key is a new arrival. */
+  readonly key: string;
+  readonly kind: BoardChatAttention["kind"];
+  readonly why: "approval" | "question" | null;
+  /** The task's title, the Goal's, or the chat's when it is on no task. */
+  readonly title: string;
+  /** The chat's own title under a task's; null when the title is already the chat's. */
+  readonly detail: string | null;
+  readonly task: BoardTask | null;
+  readonly chat: BoardChat | null;
+  readonly goal: BoardGoal | null;
+}
+
+/** Waiting answers first, then failures, then results nobody has looked at. */
+export function noticesOf(
+  panel: Pick<BoardPanel, "needsYou" | "finished">,
+  goals: ReadonlyArray<BoardGoalProgress>,
+): ReadonlyArray<BoardNotice> {
+  const ofChat = ({ chat, task, attention }: BoardPanelChat): BoardNotice => ({
+    key: `${attention.kind}:${chat.sessionId}`,
+    kind: attention.kind,
+    why: attention.kind === "needs" ? attention.why : null,
+    title: task?.title ?? chat.title,
+    detail: task === null || chat.title === "" ? null : chat.title,
+    task,
+    chat,
+    goal: null,
+  });
+  const chats = [...panel.needsYou, ...panel.finished].map(ofChat);
+  const taken = new Set(chats.map((notice) => notice.chat?.sessionId));
+  const ofGoals = goals.flatMap(({ goal, standing }): ReadonlyArray<BoardNotice> => {
+    // A Goal whose thread is on a task is already told by that chat.
+    const runner = goalThreadOf(goal)?.sessionId ?? goal.executor;
+    if (runner !== null && taken.has(runner)) return [];
+    const kind =
+      standing.kind === "needs" || standing.kind === "stalled"
+        ? "needs"
+        : standing.kind === "stopped"
+          ? "stopped"
+          : null;
+    return kind === null
+      ? []
+      : [
+          {
+            key: `goal:${goal.id}:${standing.kind}`,
+            kind,
+            why: standing.kind === "needs" ? standing.why : null,
+            title: goal.title,
+            detail: null,
+            task: null,
+            chat: null,
+            goal,
+          },
+        ];
+  });
+  const rank = { needs: 0, stopped: 1, finished: 2 } as const;
+  return [...chats, ...ofGoals].toSorted((a, b) => rank[a.kind] - rank[b.kind]);
+}
+
 /** Why a Goal is, or is not, moving. "running · thread idle" told none of these apart. */
 export type BoardGoalStanding =
   | { readonly kind: "running" }

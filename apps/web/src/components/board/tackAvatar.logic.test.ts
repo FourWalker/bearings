@@ -5,6 +5,9 @@ import {
   finishTackClip,
   paintTackStrip,
   pokeTack,
+  ringTack,
+  cheerTack,
+  clipRuns,
   startTackPlayback,
   TACK_CELL,
   TACK_CLIPS,
@@ -76,6 +79,23 @@ it("skips clips that would never end when motion is reduced", () => {
   const calm = advanceTackPlayback(startTackPlayback("rest", 0, "calm"), "idle", 0, "calm");
   expect(calm.clip).toBe("wake");
   expect(pokeTack(finishTackClip(calm, "calm"), "calm").clip).toBe("wake");
+});
+
+it("rings for a notice and goes back to what it was doing", () => {
+  const asleep = finishTackClip(startTackPlayback("rest", 0, "full"), "full");
+  const ringing = ringTack(asleep, "full");
+  expect(ringing.clip).toBe("alert");
+  // The mood is still rest, so the bell is a few rings and not Tack's own wait.
+  expect(clipRuns("alert", "rest")).toBe(6);
+  expect(clipRuns("alert", "alert")).toBeNull();
+  expect(finishTackClip(ringing, "full").clip).toBe("idle");
+  // Waiting on its own approval already rings; still motion never does.
+  const waiting = advanceTackPlayback(asleep, "alert", 0, "full");
+  expect(ringTack(waiting, "full")).toBe(waiting);
+  expect(ringTack(asleep, "still")).toBe(asleep);
+  // The flourish only when Tack has nothing else on.
+  expect(cheerTack(finishTackClip(ringing, "full"), "full").clip).toBe("done");
+  expect(cheerTack(ringing, "full")).toBe(ringing);
 });
 
 it("paints every clip of every skin inside its cells", () => {

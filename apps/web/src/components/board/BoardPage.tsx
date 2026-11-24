@@ -36,7 +36,7 @@ import { isElectron } from "~/env";
 import { useNewThreadHandler } from "~/hooks/useHandleNewThread";
 import { useAcknowledgeThreadWoke } from "~/hooks/useThreadActions";
 import { boardEnvironment } from "~/state/board";
-import { useQuietThreadShells } from "~/state/entities";
+import { useAllEnvironmentShellsBootstrapped, useQuietThreadShells } from "~/state/entities";
 import { useEnvironments } from "~/state/environments";
 import { formatEnvironmentQueryError, useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
@@ -54,6 +54,7 @@ import {
   collisionsOf,
   indexBoard,
   goalsOf,
+  noticesOf,
   panelOf,
   serviceColumns,
   statusMatches,
@@ -401,6 +402,7 @@ function BoardScreen(props: {
   const { board } = props;
   // What each chat wants from the person, as the sidebar reads its thread.
   const threads = useQuietThreadShells();
+  const shellsReady = useAllEnvironmentShellsBootstrapped();
   const localVisits = useUiStateStore((state) => state.threadLastVisitedAtById);
   const index = indexBoard(board.tasks, {
     attention: boardAttentionOf(
@@ -751,6 +753,17 @@ function BoardScreen(props: {
       awake={tackAwake}
       onAwake={setTackAwake}
       covered={modalTask !== null}
+      notices={noticesOf(panel, goalsOf(index, board.goals))}
+      noticesReady={shellsReady}
+      onOpenNotice={(notice) =>
+        notice.task !== null
+          ? openTask(notice.task, "threads")
+          : notice.goal !== null
+            ? setSearch({ view: "goals" })
+            : notice.chat !== null
+              ? props.onOpenThread(notice.chat)
+              : undefined
+      }
     >
       {page}
     </TackBoardProvider>
