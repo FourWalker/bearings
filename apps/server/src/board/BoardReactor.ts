@@ -31,6 +31,7 @@ import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ThreadIssueService from "../orchestration-v2/ThreadIssueService.ts";
 import { forkParked } from "../serverActivation.ts";
 import * as BoardChats from "./BoardChats.ts";
+import { checksOf } from "./boardChecks.ts";
 
 export class BoardReactor extends Context.Service<
   BoardReactor,
@@ -43,35 +44,6 @@ export class BoardReactor extends Context.Service<
 const SETTLED = new Set(["completed", "failed", "interrupted", "cancelled", "rolled_back"]);
 // The board app shows a chat offline after 2.5 minutes without a heartbeat.
 const HEARTBEAT = "60 seconds";
-
-const CHECK =
-  /^(?:(?:vp|npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:test|lint|typecheck|check(?::changed)?|build)|(?:go|cargo|dotnet|mvn|gradle|\.[/\\](?:mvnw|gradlew)(?:\.(?:cmd|bat))?)\s+test|pytest|git\s+diff\s+--check)(?=\s|$)/;
-
-function checkCommand(input: string): string | undefined {
-  // Codex reports the Windows shell invocation rather than the command inside it.
-  const powershell =
-    /^(?:"(?:[^"\r\n]*[/\\])?(?:powershell|pwsh)(?:\.exe)?"|(?:powershell|pwsh)(?:\.exe)?)(?:\s+-(?:NoProfile|NoLogo|NonInteractive))*\s+-Command\s+(['"])(.*)\1$/i.exec(
-      input.trim(),
-    );
-  const statements = (powershell?.[2] ?? input)
-    .split(/[\r\n;]+/)
-    .map((statement) => statement.trim())
-    .filter(Boolean);
-  const checks = statements.filter((statement) => CHECK.test(statement));
-  const [statement] = checks;
-  if (statement === undefined || checks.length > 1) return undefined;
-  if (statements.length > 1) {
-    // A script exits with its last statement's code: that is the check's only when passed on.
-    const kept = /^\$?(\w+)\s*=\s*\$(?:LASTEXITCODE|\?)$/i.exec(
-      statements[statements.indexOf(statement) + 1] ?? "",
-    )?.[1];
-    if (!kept || statements.at(-1)?.toLowerCase() !== `exit $${kept.toLowerCase()}`)
-      return undefined;
-  }
-  // Where the output goes ("> file", "*> file", "2>&1") doesn't change what ran.
-  if (/[&|]/.test(statement.replace(/\s(?:\*|\d)?>>?\s*(?:&\d|[^\s&|]+)/g, ""))) return undefined;
-  return CHECK.exec(statement)?.[0].replace(/\s+/g, " ");
-}
 
 export const make = Effect.gen(function* () {
   const engine = yield* Orchestrator.OrchestratorV2;
@@ -219,19 +191,20 @@ export const make = Effect.gen(function* () {
             return;
           }
           if (item.type !== "command_execution") return;
-          const { exitCode, completedAt } = item;
-          if (exitCode === undefined || completedAt === null) return;
-          const command = checkCommand(item.input);
-          if (!command) return;
+          const { completedAt } = item;
+          if (completedAt === null) return;
+          const checks = checksOf(item);
+          if (checks.length === 0) return;
           const chat = yield* chatOf(event.threadId);
-          yield* Effect.promise(() =>
-            chat.recordCheck({
-              id: item.id,
-              command,
-              exitCode,
-              at: DateTime.toEpochMillis(completedAt),
-            }),
-          );
+          for (const [index, check] of checks.entries()) {
+            yield* Effect.promise(() =>
+              chat.recordCheck({
+                id: index === 0 ? item.id : `${item.id}:${index}`,
+                ...check,
+                at: DateTime.toEpochMillis(completedAt),
+              }),
+            );
+          }
           return;
         }
         // Background work ending with no wake is the only sign that the chat is done.
