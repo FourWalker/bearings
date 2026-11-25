@@ -1,6 +1,6 @@
 # Handoff: Project Board next features
 
-State (2026-11-24, night run). One living file: rewrite in place, never append.
+State (2026-11-25). One living file: rewrite in place, never append.
 
 **Objective.** Finish the features in [NEXT-FEATURES.md](NEXT-FEATURES.md) so the owner has a usable
 release for NEFX work. Read that brief and [PROGRESS.md](PROGRESS.md) first.
@@ -102,6 +102,18 @@ the detail; update the board task after it.
 - **Outputs** (`ffd3944`): `addOutputs` in `chat.ts` lists document files a thread writes and up to three
   links of its final answer as task docs of kind "Output" (newest 20; a removed one is kept off
   by `outputsDropped`). Tests only; not watched with a real thread.
+- **Tree deck, order, filters, stars** (`e6d3fd25da`, seen running on the copied NEFX board): the
+  Tree view's cards are shut to one line and open in place (`BoardDeck` in `BoardNotes.tsx`); the bar
+  and columns are `BoardTree.tsx`, the rules `boardTree.logic.ts` (+ test). Order, Show done and open
+  cards per board in `t3.board.tree`; the name and Starred filters last while the board is open.
+  `task.json` gains `lastActionAt`, `doneAt` (`stampProgress` in `edit.ts`: the last tick or status
+  done, cleared on untick or reopen; the last tick does not change the status) and `starredAt` (edit
+  op `star`, people only: no agent tool). A star goes first and stays in view when done. The star
+  review opens the first time a board opens each day (`useStarReview`, `t3.board.stars.review`);
+  its switch is Settings, Tack, "Starred items", and "Review stars" in the bar opens it by hand.
+  Design: `concepts/tree-deck-concept.html`. Not seen: Plotter and Clay Post themes with shut
+  cards, the star in an open task's header, the Settings switch. Not built: mobile, the other views'
+  bar, sorting the columns. Starring bumps `updatedAt`, so the column moves left on its own.
 - **Checks, reviews, CLI writes** (`19c9c7a08a`, `27bce128f6`, `4553bf3ba4`): `boardChecks.ts` reads
   check results from Claude commands too (no exit code there; `echo "rc $?"` is read from the
   output); replayed over the owner's stored commands, not yet seen live. `board_update review`

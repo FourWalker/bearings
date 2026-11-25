@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Tree view: module deck, sort, hide done, name search (concept)</title>
+<!--
+  Concept for the Tree view's filter bar and the module deck. Theme values are the app's
+  (plotterTheme.ts, plotterTideTheme.ts, plotter.css); the tasks are made up. Nothing here is built.
+-->
+<style>
+  :root { --d-bg:#111; --d-card:#181818; --d-border:#2c2c2c; --d-fg:#e8e6e1; --d-muted:#8d8a84; --d-accent:#d97757;
+    --sans:-apple-system,BlinkMacSystemFont,"Inter Variable","Segoe UI",system-ui,sans-serif;
+    --mono:ui-monospace,"Cascadia Mono","SF Mono",Consolas,monospace;
+    --serif:"Iowan Old Style","Palatino Linotype","Source Serif 4",Georgia,serif; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--d-bg); color:var(--d-fg); font:14px/1.45 var(--sans); }
+  main { max-width:1220px; margin:0 auto; padding:28px 20px 80px; }
+  h1 { font-size:22px; margin:0 0 4px; } h2 { font-size:16px; margin:38px 0 6px; }
+  .lead, .sub { color:var(--d-muted); max-width:900px; margin:0 0 14px; } .sub b, .lead b { color:var(--d-fg); }
+  .btn { background:#242424; color:var(--d-fg); border:1px solid var(--d-border); border-radius:8px; padding:6px 10px; font:inherit; font-size:12.5px; cursor:pointer; }
+  .btn:hover { background:#2e2e2e; } .btn.on { border-color:var(--d-accent); color:#ffd9c9; }
+  .toolbar { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:8px 0; } .toolbar .lbl { color:var(--d-muted); font-size:12px; min-width:70px; }
+  .rules { display:grid; grid-template-columns:repeat(2,1fr); gap:10px 24px; font-size:13px; }
+  .rules div { background:var(--d-card); border:1px solid var(--d-border); border-radius:10px; padding:10px 12px; color:#c4c0b9; }
+  .rules b { color:var(--d-fg); }
+  table.src { border-collapse:collapse; font-size:13px; width:100%; max-width:980px; }
+  table.src td, table.src th { text-align:left; padding:6px 10px; border-bottom:1px solid var(--d-border); vertical-align:top; }
+  table.src th { color:var(--d-muted); font-weight:500; } table.src code { font:12px var(--mono); color:#ffd9c9; }
+  .stage { border:1px solid var(--d-border); border-radius:12px; overflow:hidden; margin:10px 0 6px; }
+  .cap { color:var(--d-muted); font-size:12px; margin:2px 2px 12px; }
+  ol.q { color:#c4c0b9; max-width:900px; padding-left:20px; } ol.q li { margin:6px 0; } ol.q b { color:var(--d-fg); }
+
+  /* ---------- theme values ---------- */
+  .app { --canvas:#f3eee3; --toolbar:#ece5d6; --raised:#faf7f0; --text:#1f2a48; --muted:#4f5872; --border:#d3d1cc;
+    --accent:#c4552d; --accent-fg:#fbf8f1; --attention:#b07a18; --error:#b23a2a; --success:#3f7a52;
+    --line:rgb(31 42 72 / .16); --rule:transparent; --shadow:rgb(31 42 72 / .22);
+    --n1:#fff1a8; --n2:#d6f0d9; --n3:#d9e7fb; --n4:#fbdcd3; --note-ink:#2a2721;
+    --title-font:var(--sans); --label-font:var(--sans); --title-weight:600; }
+  .app.night { --canvas:#141a27; --toolbar:#11161f; --raised:#1c2333; --text:#aab6d0; --muted:#8390ac; --border:#2a3140;
+    --accent:#e98a5e; --accent-fg:#141a27; --attention:#d9a441; --error:#f08a7a; --success:#7fc79a;
+    --line:rgb(170 182 208 / .16); --shadow:rgb(0 0 0 / .55);
+    --n1:#4a4425; --n2:#2b4432; --n3:#2b3a52; --n4:#4a2f2a; --note-ink:#f1ede4; }
+  .app.plotter { --canvas:#efe4d0; --toolbar:#f3eadb; --raised:#f6efe2; --text:#1f2a48; --muted:#545c72; --border:#d2c6b0;
+    --accent:#c4552d; --accent-fg:#fbf6ec; --attention:#c4552d; --error:#b23a2a; --success:#1f2a48; --rule:rgb(31 42 72 / .1);
+    --n1:#f6efe2; --n2:#f6efe2; --n3:#f6efe2; --n4:#f6efe2; --note-ink:#1f2a48;
+    --title-font:var(--serif); --label-font:var(--mono); --title-weight:500; }
+  .app.plotter.night { --canvas:#1c2333; --toolbar:#1a2030; --raised:#252f45; --text:#b8c2da; --muted:#8692ae; --border:#313b52;
+    --accent:#e98a5e; --accent-fg:#1c2333; --attention:#e98a5e; --error:#f08a7a; --success:#b8c2da;
+    --line:rgb(170 182 208 / .16); --rule:rgb(170 182 208 / .08); --shadow:rgb(0 0 0 / .55);
+    --n1:#252f45; --n2:#252f45; --n3:#252f45; --n4:#252f45; --note-ink:#c3cce0; }
+
+  /* ---------- board chrome ---------- */
+  .app { background:var(--canvas); color:var(--text); font:13px/1.4 var(--sans); }
+  .mast { display:flex; flex-wrap:wrap; align-items:center; gap:8px 10px; padding:9px 16px; background:var(--toolbar); border-bottom:1px solid var(--border); }
+  .mast .name { font:var(--title-weight) 17px var(--title-font); } .mast .name em { font-style:normal; color:var(--accent); }
+  .seg { display:flex; gap:2px; font:12px var(--label-font); color:var(--muted); }
+  .seg span { padding:3px 8px; border-radius:6px; } .seg .cur { background:var(--raised); color:var(--text); border:1px solid var(--border); }
+  .sp { flex:1; }
+
+  /* ---------- the new Tree bar ---------- */
+  .treebar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:7px 16px; background:var(--raised); border-bottom:1px solid var(--border); font:12px var(--label-font); }
+  .treebar input[type=search] { width:220px; font:13px var(--sans); color:var(--text); background:var(--canvas); border:1px solid var(--border); border-radius:6px; padding:4px 8px; outline:none; }
+  .treebar input[type=search]:focus { border-color:var(--accent); }
+  .treebar select, .treebar button { font:12px var(--label-font); color:var(--text); background:transparent; border:1px solid var(--border); border-radius:6px; padding:4px 8px; cursor:pointer; }
+  .treebar button[aria-pressed=true] { background:var(--accent); border-color:var(--accent); color:var(--accent-fg); }
+  .treebar .muted { color:var(--muted); }
+  .plotter .treebar select, .plotter .treebar button, .plotter .treebar input { border-radius:3px; }
+
+  /* ---------- columns and the deck ---------- */
+  .surface { padding:20px 18px 28px; display:flex; align-items:flex-start; gap:16px; overflow-x:auto; min-height:420px;
+    background-image:linear-gradient(var(--rule) 1px,transparent 1px),linear-gradient(90deg,var(--rule) 1px,transparent 1px); background-size:24px 24px; }
+  .col { width:300px; flex:none; }
+  .card { position:relative; border-radius:8px; color:var(--note-ink); box-shadow:0 -3px 8px -5px var(--shadow), 0 6px 14px -12px var(--shadow); cursor:pointer; }
+  .card[data-c="1"]{background:var(--n1)} .card[data-c="2"]{background:var(--n2)} .card[data-c="3"]{background:var(--n3)} .card[data-c="4"]{background:var(--n4)}
+  .plotter .card { border:1px solid var(--line); border-radius:4px; }
+  .card.done { opacity:.62; }
+  .card.master { margin-bottom:10px; }
+  .deck { margin-left:12px; padding-bottom:10px; }
+  /* A shut card keeps only its peek; the next card sits on its lower edge, like a fanned deck. */
+  .deck .card.shut { height:44px; margin-bottom:-10px; overflow:hidden; }
+  .deck .card.open { margin:6px 0 12px; }
+  .deck .card.shut + .card.open { margin-top:16px; }
+  .peek { display:grid; grid-template-columns:auto minmax(0,1fr) auto auto auto auto; align-items:center; gap:7px; padding:8px 10px; height:34px; }
+  .peek .ttl { font:var(--title-weight) 13.5px var(--title-font); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .master .peek .ttl { font-size:15px; }
+  .dot { width:8px; height:8px; border-radius:50%; background:color-mix(in srgb, var(--note-ink) 30%, transparent); }
+  .dot.working { background:var(--success); } .dot.needs { background:var(--attention); } .dot.blocked { background:var(--error); }
+  .chip { font:600 10.5px var(--label-font); letter-spacing:.03em; text-transform:uppercase; padding:1px 7px; border-radius:999px; white-space:nowrap;
+    background:color-mix(in srgb, var(--note-ink) 12%, transparent); }
+  .chip.blocked { background:var(--error); color:#fff; } .chip.needs { background:var(--attention); color:#fff; }
+  .chip.working { background:var(--success); color:#fff; }
+  .plotter .chip { border-radius:3px; background:transparent; border:1px solid currentColor; font-weight:500; }
+  .plotter .chip.blocked, .plotter .chip.needs { background:var(--accent); border-color:var(--accent); color:var(--accent-fg); }
+  .plotter .chip.working { color:var(--note-ink); }
+  .cnt { font:11px var(--mono); opacity:.7; white-space:nowrap; }
+  .chev { width:18px; height:18px; display:grid; place-items:center; border-radius:4px; opacity:.6; font-size:10px; transition:transform .12s; }
+  .chev:hover { background:color-mix(in srgb, var(--note-ink) 12%, transparent); opacity:1; }
+  .open > .peek .chev { transform:rotate(90deg); }
+  .body { padding:0 12px 10px; display:grid; gap:6px; }
+  .shut .body { display:none; }
+  .kick { font:10px var(--label-font); letter-spacing:.06em; text-transform:uppercase; opacity:.7; }
+  .bar { height:4px; border-radius:99px; background:color-mix(in srgb, var(--note-ink) 15%, transparent); overflow:hidden; } .bar i { display:block; height:100%; background:var(--note-ink); opacity:.55; }
+  .next { font-size:12px; } .next b { font-family:var(--mono); font-weight:500; margin-right:5px; }
+  .row { display:flex; align-items:center; gap:7px; font-size:13px; padding:2px 4px; border-radius:4px; }
+  .row:hover { background:color-mix(in srgb, var(--note-ink) 10%, transparent); }
+  .row span.t { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row.done span.t { text-decoration:line-through; opacity:.6; } .row small { font:11px var(--mono); opacity:.7; }
+  .times { display:flex; flex-wrap:wrap; gap:2px 12px; font:11px var(--label-font); opacity:.75; border-top:1px dashed color-mix(in srgb, var(--note-ink) 25%, transparent); padding-top:5px; }
+  .times b { font-weight:600; }
+  .hidden-done { margin:14px 0 0 12px; font:11.5px var(--label-font); color:var(--muted); background:none; border:0; padding:2px 0; cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px; }
+  .star { font-size:13px; line-height:1; opacity:.35; cursor:pointer; padding:1px 2px; border-radius:4px; }
+  .star:hover { opacity:.9; } .star.on { opacity:1; color:var(--accent); }
+  .row .star { font-size:11px; }
+  .stage { position:relative; }
+  .veil { position:absolute; inset:0; background:rgb(0 0 0 / .45); display:none; place-items:start center; padding-top:70px; z-index:5; }
+  .veil.on { display:grid; }
+  .modal { width:min(460px,92%); background:var(--raised); color:var(--text); border:1px solid var(--border); border-radius:12px; box-shadow:0 24px 50px -20px #000; font:13px/1.4 var(--sans); }
+  .plotter .modal { border-radius:4px; }
+  .modal header { padding:14px 16px 4px; } .modal h3 { margin:0; font:var(--title-weight) 16px var(--title-font); } .modal header p { margin:3px 0 0; color:var(--muted); font-size:12.5px; }
+  .modal .list { max-height:260px; overflow:auto; padding:6px 10px; display:grid; gap:1px; }
+  .modal .grp { font:10px var(--label-font); letter-spacing:.06em; text-transform:uppercase; color:var(--muted); padding:8px 6px 2px; }
+  .modal label.it { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:8px; align-items:center; padding:5px 6px; border-radius:6px; cursor:pointer; }
+  .modal label.it:hover { background:color-mix(in srgb, var(--text) 7%, transparent); }
+  .modal .it b { font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; } .modal .it small { color:var(--muted); font:11px var(--label-font); }
+  .modal .sug { font:600 10px var(--label-font); letter-spacing:.04em; text-transform:uppercase; color:var(--accent); border:1px solid var(--accent); border-radius:999px; padding:1px 7px; }
+  .modal footer { display:flex; align-items:center; gap:8px; padding:10px 16px 14px; border-top:1px solid var(--border); font-size:12px; }
+  .modal footer button { font:12px var(--label-font); color:var(--text); background:transparent; border:1px solid var(--border); border-radius:6px; padding:5px 11px; cursor:pointer; }
+  .modal footer button.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-fg); font-weight:600; }
+  .modal footer .dont { display:flex; align-items:center; gap:6px; color:var(--muted); cursor:pointer; }
+  mark { background:color-mix(in srgb, var(--accent) 35%, transparent); color:inherit; border-radius:2px; padding:0 1px; }
+  .empty { color:var(--muted); padding:40px; font-size:13px; }
+</style>
+</head>
+<body>
+<main>
+<h1>Tree view: module deck, sort, hide done, name search</h1>
+<p class="lead">The Tree view opens as a wall of fully open notes. This concept shuts them into a <b>deck</b>: each
+module shows one line (name and status) and the next card sits on its edge. A bar under the header
+<b>hides done work</b>, <b>orders</b> the cards and <b>filters by name</b>. A <b>star</b> on a feature, module or task
+moves it to the front, and a once-a-day review keeps the stars from piling up. Try it below: click a card's line to open or
+shut it. Nothing is built yet.</p>
+
+<div class="toolbar"><span class="lbl">Theme</span>
+  <button class="btn on" data-theme="">Default</button><button class="btn" data-theme="night">Night</button>
+  <button class="btn" data-theme="plotter">Plotter</button><button class="btn" data-theme="plotter night">Plotter night</button>
+</div>
+<div class="toolbar"><span class="lbl">Try</span>
+  <button class="btn" id="sim">Simulate: first save of the day</button>
+</div>
+
+<div class="stage"><div class="app" id="app">
+  <div class="mast">
+    <span class="name">Board / Dev <em>Board</em></span>
+    <span class="sp"></span>
+    <div class="seg"><span class="cur">Tree</span><span>Level 1</span><span>Level 2</span><span>Level 3</span><span>By service</span><span>Register</span><span>Goals</span></div>
+    <div class="seg"><span class="cur">Active</span><span>Paused</span><span>Done</span><span>All</span></div>
+  </div>
+  <div class="treebar">
+    <input type="search" id="q" placeholder="Filter by name…" aria-label="Filter by name" />
+    <span class="muted">Order</span>
+    <select id="sort" aria-label="Order">
+      <option value="last">Last action</option><option value="done">Done date</option><option value="blocked">Blocked first</option>
+      <option value="name">Name</option><option value="completion">Completion</option><option value="deps">Dependencies</option>
+    </select>
+    <button id="dir" title="Reverse the order">↓</button>
+    <button id="onlystar" aria-pressed="false">★ Starred</button>
+    <button id="showdone" aria-pressed="false">Show done</button>
+    <span class="sp"></span>
+    <button id="all">Open all</button>
+  </div>
+  <div class="surface" id="surface"></div>
+  <div class="veil" id="veil"><div class="modal" role="dialog" aria-label="Review your stars">
+    <header><h3>Review your stars</h3><p>Untick what no longer needs a star. Finished work is suggested first.</p></header>
+    <div class="list" id="review"></div>
+    <footer><label class="dont"><input type="checkbox" id="dont" /> Don't ask me again</label><span class="sp"></span>
+      <button id="keep">Keep all</button><button class="primary" id="apply">Save</button></footer>
+  </div></div>
+</div></div>
+<p class="cap">Sample data. "Now" is 25 Nov 2026, 18:00. The Active / Paused / Done / All switch stays as it is and still picks which master tasks get a column.</p>
+
+<h2>How it behaves</h2>
+<div class="rules">
+  <div><b>The deck.</b> Modules in a column are shut by default: one line each with the dot, the name, a status stamp (Working, Needs you, Blocked, Paused, Done) and tasks done / total. Click the line to open the card in place; any number can be open. In an open card, clicking the body opens the task as today; the arrow shuts it.</div>
+  <div><b>Master note.</b> Shuts to the same one line. "Open all / Shut all" in the bar acts on every card. Which cards are open is remembered per board on this device.</div>
+  <div><b>Show done.</b> Off by default: done modules and done tasks are left out, and each column says how many ("3 done hidden", click to show). On: they come back, dimmed, with their done time.</div>
+  <div><b>Order.</b> Applies to modules in a column and to tasks in a module. The arrow reverses it. Columns themselves keep today's order (most recently changed first).</div>
+  <div><b>Filter by name.</b> Matches titles of masters, modules and tasks as you type. A match keeps its parents; a module with a matching task opens and shows only the matches. Done items match too only when Show done is on.</div>
+  <div><b>Stars.</b> A star on any card line or task row (also in the open task's header). Starred comes first whatever the order: a starred feature's column moves left, then columns holding a starred module or task; a starred module rises to the top of its deck, a starred task to the top of its module. Among starred, the chosen order applies.</div>
+  <div><b>Starred filter.</b> "★ Starred" in the bar shows only starred items with their parents. A starred feature shows its whole column. It combines with the name filter and Show done.</div>
+  <div><b>Daily star review.</b> Once a day, after the first save on the board (an edit, a plan, a handoff, a decision, a new task), a dialog lists every star, ticked. Finished ones are on top, marked Suggested. Untick and Save to unstar; Keep all shuts it. It does not show when nothing is starred, and never twice in a day.</div>
+  <div><b>Don't ask me again.</b> Ticking it turns the review off on this device. It comes back from Board settings, "Daily star review", which also has "Review stars now".</div>
+  <div><b>Remembered.</b> Order, direction and Show done are kept per board on this device, so the board reopens the way you left it. The name filter is not kept.</div>
+</div>
+
+<h2>The six orders</h2>
+<table class="src">
+  <tr><th>Order</th><th>First</th><th>Read from</th></tr>
+  <tr><td>Last action</td><td>Most recently acted on</td><td>new <code>lastActionAt</code></td></tr>
+  <tr><td>Done date</td><td>Most recently finished; unfinished after</td><td>new <code>doneAt</code></td></tr>
+  <tr><td>Blocked first</td><td>Blocked itself, then has a blocked task below, then the rest</td><td><code>blocked_by</code> links (as the Blocked stamp today)</td></tr>
+  <tr><td>Name</td><td>A to Z</td><td>title</td></tr>
+  <tr><td>Completion</td><td>Closest to finished</td><td>module: tasks done / tasks; with no tasks, its plan steps. Task: plan steps</td></tr>
+  <tr><td>Dependencies</td><td>What others wait on, before what waits</td><td><code>blocked_by</code> links, in chain order</td></tr>
+</table>
+
+<h2>What gets saved</h2>
+<table class="src">
+  <tr><th>Field on task.json</th><th>Stamped when</th><th>Cleared when</th><th>Old tasks</th></tr>
+  <tr><td><code>lastActionAt</code></td><td>A plan step or item is ticked or unticked, the status changes, or a last-action line is written (checkpoint, handoff, update, turn end). By a person or an agent.</td><td>Never</td><td>Falls back to the last-action line's time, else <code>updatedAt</code></td></tr>
+  <tr><td><code>doneAt</code></td><td>A tick leaves no unticked step in the plan (the last tick), or the status is set to done, whichever comes first. A done child that ticks its parent's last step stamps the parent too.</td><td>A step is unticked or the task is reopened</td><td>Done tasks fall back to their done evidence time, else <code>updatedAt</code></td></tr>
+</table>
+<p class="sub"><code>starredAt</code> (a time, missing when not starred) is saved on the task too, so a star is the same
+on desktop, in the browser and for an agent reading the board. The review's "last shown" day and "Don't ask me again" are kept on the device.</p>
+<p class="sub">Both fields are optional, so the Claude Code mod and older builds keep reading the same files.
+<code>updatedAt</code> is not reused for "last action": it also moves when a chat links, a file is recorded or a title is edited.</p>
+
+<h2>For you to decide</h2>
+<ol class="q">
+  <li><b>Last tick and status.</b> The last tick stamps the done time but leaves the status as it is (an agent or you still mark it done). Or should the last tick also set the status to done?</li>
+  <li><b>What opens by itself.</b> Everything shut on first open. Or should a module that is Working or Needs you start open?</li>
+  <li><b>Columns.</b> Should the order also sort the master-task columns, or only what is inside them (as drawn)?</li>
+  <li><b>What triggers the review.</b> I read "first Confirmed or Saved button" as the first thing you save on the board that day, shown right after the save goes through. The other reading is the first time the board is opened that day. Which one?</li>
+  <li><b>Suggested stars.</b> Drawn ticked, so you untick them yourself. Or should finished ones come already unticked, so Save alone clears them?</li>
+  <li><b>Where a star lives.</b> On the task file (shared by every device and visible to agents), as drawn. The Pin is per device; a star could be too.</li>
+  <li><b>Other views.</b> This covers the Tree view only. Level 1/2/3 and By service keep their look; the name filter and order could be added there later.</li>
+  <li><b>Mobile.</b> Gets the two new times over the wire; its board screen is not changed in this step.</li>
+</ol>
+</main>
+
+<script>
+const NOW = Date.parse("2026-11-25T18:00:00");
+const h = (n) => NOW - n * 3600e3;
+const T = (id, title, o = {}) => ({ id, title, status: "active", steps: [0, 0], blockedBy: [], ...o });
+const DATA = [
+  T("m1", "Board core", { last: h(1), steps: [5, 9], kids: [
+    T("a1", "Storage and ids", { last: h(1), state: "working", next: ["S3", "Move ids to the store clock"], kids: [
+      T("a1a", "Ids collide across boards", { last: h(1), steps: [2, 4], state: "working" }),
+      T("a1b", "Task files written twice per turn", { last: h(30), steps: [3, 3], status: "done", doneAt: h(30) }),
+      T("a1c", "Backup before a bulk edit", { last: h(50), steps: [0, 2] })] }),
+    T("a2", "Ranked search", { star: 1, last: h(26), status: "done", doneAt: h(26), steps: [6, 6], kids: [
+      T("a2a", "Other names", { status: "done", last: h(40), doneAt: h(40), steps: [3, 3] }),
+      T("a2b", "File paths and level", { status: "done", last: h(26), doneAt: h(26), steps: [4, 4] })] }),
+    T("a3", "Done evidence", { last: h(9), blockedBy: ["a1"], next: ["E2", "Record checks from PowerShell"], kids: [
+      T("a3a", "Checks run through PowerShell", { last: h(9), steps: [1, 5], blockedBy: ["a1a"] }),
+      T("a3b", "Review of finished work", { status: "done", last: h(20), doneAt: h(20), steps: [2, 2] })] }),
+    T("a4", "CLI writes", { last: h(22), status: "done", doneAt: h(22), steps: [4, 4], kids: [
+      T("a4a", "t3 board add", { status: "done", last: h(23), doneAt: h(23), steps: [2, 2] }),
+      T("a4b", "t3 board update", { status: "done", last: h(22), doneAt: h(22), steps: [2, 2] })] }),
+    T("a5", "New board and workspace binding", { star: 1, last: h(4), state: "needs", next: ["W4", "Folder browse button"], kids: [
+      T("a5a", "Folder browse button", { last: h(4), steps: [0, 3], state: "needs" }),
+      T("a5b", "New board from this project", { last: h(70), steps: [0, 2] }),
+      T("a5c", "Create dialog", { status: "done", last: h(28), doneAt: h(28), steps: [5, 5] })] }),
+    T("a6", "Tree deck and filters", { last: h(0.2), next: ["D1", "Concept for review"], kids: [
+      T("a6a", "Save last action and done times", { last: h(0.2), steps: [0, 4] }),
+      T("a6b", "Deck, order, hide done, name filter", { last: h(0.2), steps: [0, 6], blockedBy: ["a6a"] })] })] }),
+  T("m2", "Tack", { last: h(3), steps: [7, 12], kids: [
+    T("b1", "Pin bar", { last: h(3), state: "working", next: ["P6", "Swell on non-Plotter themes"], kids: [
+      T("b1a", "Bar and peek", { status: "done", last: h(12), doneAt: h(12), steps: [6, 6] }),
+      T("b1b", "Sub Tack release", { status: "done", last: h(8), doneAt: h(8), steps: [5, 5] }),
+      T("b1c", "Swell on other themes", { star: 1, last: h(3), steps: [1, 3], state: "working" })] }),
+    T("b2", "Tack in an open task", { last: h(31), status: "paused", next: ["T5", "Wide size"], kids: [
+      T("b2a", "Wide size", { last: h(31), steps: [0, 2], status: "paused" }),
+      T("b2b", "Recap card on a long thread", { last: h(60), steps: [0, 3] })] }),
+    T("b3", "Notices", { last: h(45), status: "done", doneAt: h(45), steps: [8, 8], kids: [
+      T("b3a", "Banners", { status: "done", last: h(46), doneAt: h(46), steps: [4, 4] })] }),
+    T("b4", "Plotter skin", { last: h(52), status: "done", doneAt: h(52), steps: [7, 7], kids: [] }),
+    T("b5", "Mobile", { last: h(90), blockedBy: ["b2"], kids: [
+      T("b5a", "Act on board_show", { last: h(90), steps: [0, 3] }),
+      T("b5b", "Goals view", { last: h(95), steps: [0, 4] })] })] }),
+  T("m3", "Goal Mode", { star: 1, last: h(6), steps: [9, 11], kids: [
+    T("c1", "Goals screen", { last: h(6), next: ["G7", "Model picker"], kids: [
+      T("c1a", "Model picker", { last: h(6), steps: [1, 4] }),
+      T("c1b", "Pause and resume from the card", { last: h(33), steps: [2, 3] }),
+      T("c1c", "Chat on a Goal card", { star: 1, status: "done", last: h(48), doneAt: h(48), steps: [4, 4] })] }),
+    T("c2", "Delegation to child threads", { last: h(75), status: "done", doneAt: h(75), steps: [6, 6], kids: [] }),
+    T("c3", "Evals for model-facing text", { last: h(100), blockedBy: ["c1"], kids: [
+      T("c3a", "Board cases in evals/", { last: h(100), steps: [0, 5] })] })] }),
+];
+
+const state = { q: "", sort: "last", desc: true, showDone: false, onlyStar: false, open: new Set(["a1"]), star: new Set() };
+const byId = new Map(); DATA.forEach(function walk(t) { byId.set(t.id, t); if (t.star) state.star.add(t.id); (t.kids ?? []).forEach(walk); });
+const isBlocked = (t) => t.blockedBy.some((id) => byId.get(id)?.status !== "done");
+const blockedBelow = (t) => (t.kids ?? []).some((k) => isBlocked(k));
+const pct = (t) => { if (t.status === "done") return 1; const k = t.kids ?? [];
+  return k.length ? k.filter((x) => x.status === "done").length / k.length : t.steps[1] ? t.steps[0] / t.steps[1] : 0; };
+const stateOf = (t) => t.status === "done" ? "done" : isBlocked(t) ? "blocked" : t.state ?? (t.status === "paused" ? "paused" : "");
+const LABEL = { done: "Done", blocked: "Blocked", needs: "Needs you", working: "Working", paused: "Paused" };
+
+function depsOrder(list) {
+  const ids = new Set(list.map((t) => t.id)), out = [], seen = new Set();
+  const visit = (t) => { if (seen.has(t.id)) return; seen.add(t.id);
+    t.blockedBy.filter((id) => ids.has(id)).forEach((id) => visit(byId.get(id))); out.push(t); };
+  list.forEach(visit); return out;
+}
+function ordered(list) {
+  const rank = { last: (t) => -t.last, done: (t) => -(t.doneAt ?? 0), blocked: (t) => isBlocked(t) ? 0 : blockedBelow(t) ? 1 : 2,
+    completion: (t) => -pct(t) }[state.sort];
+  const out = state.sort === "deps" ? depsOrder(list)
+    : state.sort === "name" ? list.toSorted((a, b) => a.title.localeCompare(b.title))
+    : list.toSorted((a, b) => rank(a) - rank(b));
+  const sorted = state.desc ? out : out.toReversed();
+  return sorted.toSorted((a, b) => starRank(a) - starRank(b));
+}
+const starBelow = (t) => (t.kids ?? []).some((k) => state.star.has(k.id) || starBelow(k));
+const starRank = (t) => state.star.has(t.id) ? 0 : starBelow(t) ? 1 : 2;
+const F = () => state.q || state.onlyStar;
+const starEl = (t) => `<span class="star ${state.star.has(t.id) ? "on" : ""}" data-star="${t.id}" title="Star">${state.star.has(t.id) ? "★" : "☆"}</span>`;
+const ago = (at) => { const m = Math.round((NOW - at) / 60000); return m < 60 ? `${m}m ago` : m < 1440 ? `${Math.round(m / 60)}h ago` : `${Math.round(m / 1440)}d ago`; };
+const when = (at) => new Date(at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+const hit = (t) => (!state.q || t.title.toLowerCase().includes(state.q)) && (!state.onlyStar || state.star.has(t.id));
+const mark = (s) => { const i = state.q ? s.toLowerCase().indexOf(state.q) : -1;
+  return i < 0 ? esc(s) : esc(s.slice(0, i)) + "<mark>" + esc(s.slice(i, i + state.q.length)) + "</mark>" + esc(s.slice(i + state.q.length)); };
+const shown = (t) => state.showDone || t.status !== "done";
+
+function card(t, kind, colour) {
+  const kidsAll = (t.kids ?? []).filter(shown);
+  const kids = ordered(F() && !hit(t) ? kidsAll.filter(hit) : kidsAll);
+  const st = stateOf(t), open = state.open.has(t.id) || (F() && kind === "module" && kidsAll.some(hit) && !(hit(t) && !state.q));
+  const all = t.kids ?? [], count = kind === "master" ? `${t.steps[0]}/${t.steps[1]}` : all.length ? `${all.filter((k) => k.status === "done").length}/${all.length}` : `${t.steps[0]}/${t.steps[1]}`;
+  const rows = kind === "module" ? kids.map((k) => `<div class="row ${k.status === "done" ? "done" : ""}"><i class="dot ${stateOf(k)}"></i>${starEl(k)}<span class="t">${isBlocked(k) ? "⛔ " : ""}${mark(k.title)}</span><small>${k.status === "done" ? "done " + when(k.doneAt) : `${k.steps[0]}/${k.steps[1]}`}</small></div>`).join("") : "";
+  return `<div class="card ${kind} ${open ? "open" : "shut"} ${t.status === "done" ? "done" : ""}" data-c="${colour}" data-id="${t.id}">
+    <div class="peek"><i class="dot ${st}"></i><span class="ttl">${mark(t.title)}</span>
+      ${st ? `<span class="chip ${st}">${LABEL[st]}</span>` : ""}<span class="cnt">${count}</span>${starEl(t)}<span class="chev">▶</span></div>
+    <div class="body"><div class="kick">${kind === "master" ? "Master task" : "Module"}</div>
+      <div class="bar"><i style="width:${Math.round(pct(t) * 100)}%"></i></div>
+      ${t.next && t.status !== "done" ? `<div class="next"><b>${t.next[0]}</b>${esc(t.next[1])}</div>` : ""}
+      ${rows}
+      <div class="times"><span>Last action <b>${ago(t.last)}</b></span>${t.doneAt ? `<span>Done <b>${when(t.doneAt)}</b></span>` : ""}</div>
+    </div></div>`;
+}
+function render() {
+  const cols = DATA.map((m, i) => [m, i]).toSorted((a, b) => starRank(a[0]) - starRank(b[0])).map(([m, i]) => {
+    const mods = ordered((m.kids ?? []).filter(shown).filter((x) => hit(x) || hit(m) || (x.kids ?? []).filter(shown).some(hit)));
+    if (F() && !hit(m) && mods.length === 0) return "";
+    const hidden = state.showDone ? 0 : (m.kids ?? []).filter((x) => x.status === "done").length;
+    return `<section class="col">${card(m, "master", (i % 4) + 1)}<div class="deck">${mods.map((x, j) => card(x, "module", ((i + j + 1) % 4) + 1)).join("")}</div>
+      ${hidden ? `<button class="hidden-done" data-done>${hidden} done hidden</button>` : ""}</section>`;
+  }).join("");
+  document.getElementById("surface").innerHTML = cols || `<div class="empty">Nothing is named like that.</div>`;
+  document.getElementById("dir").textContent = state.desc ? "↓" : "↑";
+  document.getElementById("showdone").setAttribute("aria-pressed", state.showDone);
+  document.getElementById("onlystar").setAttribute("aria-pressed", state.onlyStar);
+  document.getElementById("all").textContent = state.open.size ? "Shut all" : "Open all";
+}
+document.getElementById("surface").addEventListener("click", (e) => {
+  if (e.target.closest("[data-done]")) { state.showDone = true; return render(); }
+  const star = e.target.closest("[data-star]");
+  if (star) { const id = star.dataset.star; state.star.has(id) ? state.star.delete(id) : state.star.add(id); return render(); }
+  const el = e.target.closest(".card"); if (!el || !e.target.closest(".peek")) return;
+  state.open.has(el.dataset.id) ? state.open.delete(el.dataset.id) : state.open.add(el.dataset.id); render();
+});
+document.getElementById("q").addEventListener("input", (e) => { state.q = e.target.value.trim().toLowerCase(); render(); });
+document.getElementById("sort").addEventListener("change", (e) => { state.sort = e.target.value; state.desc = true; render(); });
+document.getElementById("dir").addEventListener("click", () => { state.desc = !state.desc; render(); });
+document.getElementById("showdone").addEventListener("click", () => { state.showDone = !state.showDone; render(); });
+document.getElementById("onlystar").addEventListener("click", () => { state.onlyStar = !state.onlyStar; render(); });
+const kindOf = (t) => DATA.includes(t) ? "Feature" : t.kids ? "Module" : "Task";
+const veil = document.getElementById("veil");
+function review() {
+  const all = [...state.star].map((id) => byId.get(id));
+  const item = (t, sug) => `<label class="it"><input type="checkbox" checked value="${t.id}" /><span><b>${esc(t.title)}</b><small>${kindOf(t)}${t.doneAt ? " · done " + when(t.doneAt) : " · last action " + ago(t.last)}</small></span>${sug ? '<span class="sug">Suggested</span>' : ""}</label>`;
+  const done = all.filter((t) => t.status === "done"), rest = all.filter((t) => t.status !== "done");
+  document.getElementById("review").innerHTML = (done.length ? `<div class="grp">Finished: suggested to unstar</div>` + done.map((t) => item(t, true)).join("") : "")
+    + (rest.length ? `<div class="grp">Still open</div>` + rest.map((t) => item(t, false)).join("") : "") || `<div class="grp">No stars</div>`;
+  veil.classList.add("on");
+}
+document.getElementById("sim").addEventListener("click", review);
+document.getElementById("keep").addEventListener("click", () => veil.classList.remove("on"));
+document.getElementById("apply").addEventListener("click", () => {
+  document.querySelectorAll("#review input:not(:checked)").forEach((box) => state.star.delete(box.value));
+  veil.classList.remove("on"); render();
+});
+document.getElementById("all").addEventListener("click", () => { state.open.size ? state.open.clear() : byId.forEach((_, id) => state.open.add(id)); render(); });
+document.querySelectorAll("[data-theme]").forEach((b) => b.addEventListener("click", () => {
+  document.getElementById("app").className = "app " + b.dataset.theme;
+  document.querySelectorAll("[data-theme]").forEach((x) => x.classList.toggle("on", x === b));
+}));
+render();
+</script>
+</body>
+</html>
