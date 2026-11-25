@@ -7,7 +7,13 @@
  * @module board-core/edit
  */
 import { type BoardGit, systemClock } from "./io.ts";
-import { markStepDelegated, setDelegatedDone, setStepDone, stepDone } from "./plan.ts";
+import {
+  markStepDelegated,
+  planProgress,
+  setDelegatedDone,
+  setStepDone,
+  stepDone,
+} from "./plan.ts";
 import { type BoardStore, levelOf } from "./store.ts";
 import { doneEvidence } from "./verify.ts";
 import { base, isInside, norm, sameRoot, slug, stamp } from "./text.ts";
@@ -48,6 +54,7 @@ export type TaskEdit =
   | { readonly op: "deleteItem"; readonly itemId: string }
   | { readonly op: "savePlan"; readonly markdown: string }
   | { readonly op: "toggleStep"; readonly step: string }
+  | { readonly op: "star"; readonly on: boolean }
   | { readonly op: "saveHandoff"; readonly markdown: string }
   | { readonly op: "saveMasterPlan"; readonly markdown: string }
   | {
@@ -141,6 +148,14 @@ const newId = (store: BoardStore, prefix: string, upper = false, suffixMax = 0):
   return `${prefix}${upper ? t.toUpperCase() : t}${suffixMax ? store.clock.random(suffixMax) : ""}`;
 };
 
+/** Records an action on a task, and its done time once it is done or no plan step is left. */
+export function stampProgress(task: Task, plan: string, now: number): void {
+  task.lastActionAt = now;
+  const { done, total } = planProgress(plan);
+  if (task.status === "done" || (total > 0 && done === total)) task.doneAt ??= now;
+  else delete task.doneAt;
+}
+
 async function requireTask(store: BoardStore, boardId: string, id: string): Promise<Task> {
   const task = await store.loadTask(boardId, id);
   if (!task) throw new BoardEditError(`No task "${id}".`);
@@ -163,6 +178,11 @@ export async function syncDelegatedSteps(
   const updated = setDelegatedDone(plan, task.id, task.status === "done");
   if (updated === plan) return [];
   await store.io.write(path, updated);
+  const parent = await store.loadTask(boardId, task.parentId);
+  if (parent) {
+    stampProgress(parent, updated, store.clock.now());
+    await store.saveTask(boardId, parent);
+  }
   const before = plan.split(/\r?\n/);
   return updated
     .split(/\r?\n/)
@@ -677,6 +697,8 @@ export async function editTask(
       if (edit.kind !== undefined && levelOf(task) === 1) task.kind = edit.kind;
       if (edit.mainService !== undefined) task.mainService = edit.mainService;
       if (edit.services !== undefined) task.services = [...new Set(edit.services)];
+      if (edit.status !== undefined)
+        stampProgress(task, await store.readText(store.planPath(boardId, task.id)), now);
       await store.saveTask(boardId, task);
       const steps =
         wasDone !== (task.status === "done") ? await syncDelegatedSteps(store, boardId, task) : [];
@@ -704,13 +726,16 @@ export async function editTask(
     case "deleteItem": {
       const item = task.items.find((i) => i.id === edit.itemId);
       if (!item) throw new BoardEditError("No such item.");
-      if (edit.op === "toggleItem") item.done = !item.done;
-      else task.items = task.items.filter((i) => i.id !== edit.itemId);
+      if (edit.op === "toggleItem") {
+        item.done = !item.done;
+        task.lastActionAt = now;
+      } else task.items = task.items.filter((i) => i.id !== edit.itemId);
       await store.saveTask(boardId, task);
       return { message: "Saved." };
     }
     case "savePlan":
       await store.io.write(store.planPath(boardId, task.id), edit.markdown.trimEnd() + "\n");
+      stampProgress(task, edit.markdown, now);
       await store.saveTask(boardId, task);
       return { message: "Plan saved." };
     case "toggleStep": {
@@ -718,10 +743,17 @@ export async function editTask(
       const plan = await store.readText(path);
       const done = stepDone(plan, edit.step);
       if (done === null) throw new BoardEditError(`No step "${edit.step}" in the plan.`);
-      await store.io.write(path, setStepDone(plan, edit.step, !done));
+      const next = setStepDone(plan, edit.step, !done);
+      await store.io.write(path, next);
+      stampProgress(task, next, now);
       await store.saveTask(boardId, task);
       return { message: "Saved." };
     }
+    case "star":
+      if (edit.on) task.starredAt ??= now;
+      else delete task.starredAt;
+      await store.saveTask(boardId, task);
+      return { message: edit.on ? "Starred." : "Star removed." };
     case "saveHandoff": {
       const md = edit.markdown.trim();
       const header = `<!-- living handoff, rewritten in place · last by ${actor.by}, ${stamp(now)} -->\n`;

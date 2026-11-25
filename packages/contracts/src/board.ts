@@ -89,6 +89,9 @@ export const BoardTask = Schema.Struct({
       sessionId: Schema.String,
     }),
   ),
+  lastActionAt: Schema.Number,
+  doneAt: Schema.NullOr(Schema.Number),
+  starredAt: Schema.NullOr(Schema.Number),
   next: Schema.NullOr(Schema.Struct({ id: Schema.String, text: Schema.String })),
   steps: Schema.Struct({ done: NonNegativeInt, total: NonNegativeInt }),
   chats: Schema.Array(BoardChat),
@@ -352,6 +355,7 @@ export const BoardTaskEdit = Schema.Union([
   Schema.Struct({ op: Schema.Literal("deleteItem"), itemId: Schema.String }),
   Schema.Struct({ op: Schema.Literal("savePlan"), markdown: Schema.String }),
   Schema.Struct({ op: Schema.Literal("toggleStep"), step: Schema.String }),
+  Schema.Struct({ op: Schema.Literal("star"), on: Schema.Boolean }),
   Schema.Struct({ op: Schema.Literal("saveHandoff"), markdown: Schema.String }),
   Schema.Struct({ op: Schema.Literal("saveMasterPlan"), markdown: Schema.String }),
   Schema.Struct({

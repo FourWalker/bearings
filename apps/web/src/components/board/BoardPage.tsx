@@ -73,9 +73,18 @@ import {
   serviceColumns,
   statusMatches,
   subtreeOf,
-  treeRoots,
 } from "./board.logic";
-import { type BoardNoteActions, BoardModuleNote, BoardNote, BoardServiceRow } from "./BoardNotes";
+import { type BoardNoteActions, BoardNote, BoardServiceRow } from "./BoardNotes";
+import {
+  type BoardTree,
+  BoardStarReview,
+  BoardTreeBar,
+  BoardTreeColumns,
+  treeCardIds,
+  useBoardTree,
+  useStarReview,
+} from "./BoardTree";
+import { type TreeColumn, treeColumns } from "./boardTree.logic";
 import { BoardAssistant } from "./BoardAssistant";
 import {
   TackBoardProvider,
@@ -481,6 +490,28 @@ function BoardScreen(props: {
   const [tackAwake, setTackAwake] = useState(false);
   const [pinnedId, setPinnedId] = useBoardPin(board.id);
   const [panelOpen, setPanelOpen] = useBoardPanelOpen();
+  const tree = useBoardTree(board.id);
+  const starred = board.tasks.filter((task) => task.starredAt !== null);
+  const starReview = useStarReview(board.id, starred.length);
+  const canEdit = useAtomValue(boardEnvironment.editTask.permissionAtom(props.environmentId));
+  const editTask = useAtomCommand(boardEnvironment.editTask, { reportFailure: false });
+  const star = async (tasks: ReadonlyArray<BoardTask>, on: boolean) => {
+    for (const task of tasks) {
+      const result = await editTask({
+        environmentId: props.environmentId,
+        input: { boardId: board.id, taskId: task.id, edit: { op: "star", on } },
+      });
+      if (result._tag === "Failure") {
+        toastManager.add({
+          type: "error",
+          title: gt("Could not save the change"),
+          description: formatEnvironmentQueryError(result.cause),
+        });
+        break;
+      }
+    }
+    props.onChanged();
+  };
   // As in the board app: a master task opens as a page in place of the board; a module or task
   // opens in a modal over whatever is showing. Both are in the URL, so back and shared links work.
   const byId = (id: string | null) => (id === null ? null : (index.byId.get(id) ?? null));
@@ -544,6 +575,7 @@ function BoardScreen(props: {
       const chat = chatsById.get(sessionId);
       if (chat !== undefined) props.onOpenThread(chat);
     },
+    onStar: canEdit ? (task, on) => void star([task], on) : undefined,
   };
   const working = new Set(
     [...chatsById.values()].filter((chat) => chat.live === "working").map((c) => c.workspaceLabel),
@@ -618,6 +650,16 @@ function BoardScreen(props: {
     />
   );
 
+  const starReviewDialog = (
+    <BoardStarReview
+      index={index}
+      open={starReview.open}
+      onClose={starReview.close}
+      onUnstar={(tasks) => void star(tasks, false)}
+    />
+  );
+  const columns = props.mode === "tree" ? treeColumns(index, props.filter, tree.options) : [];
+
   const modal = (
     <Dialog
       open={modalTask !== null}
@@ -645,6 +687,7 @@ function BoardScreen(props: {
         {pinBar}
         <div className="@container/task min-h-0 flex-1">{taskView(pageTask, closePage)}</div>
         {modal}
+        {starReviewDialog}
       </div>
     );
 
@@ -773,6 +816,14 @@ function BoardScreen(props: {
         </div>
       </header>
       {pinBar}
+      {props.mode === "tree" ? (
+        <BoardTreeBar
+          tree={tree}
+          cards={treeCardIds(columns)}
+          starred={starred.length}
+          onReview={starReview.show}
+        />
+      ) : null}
       <div className="flex min-h-0 flex-1 flex-col @container/board lg:flex-row">
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           <TackDropSurface tasks={board.tasks} className="min-h-0 min-w-0 flex-1 overflow-auto p-4">
@@ -804,6 +855,8 @@ function BoardScreen(props: {
                 board={board}
                 mode={props.mode}
                 filter={props.filter}
+                tree={tree}
+                columns={columns}
                 serviceName={serviceName}
                 actions={actions}
               />
@@ -859,6 +912,7 @@ function BoardScreen(props: {
         />
       ) : null}
       {modal}
+      {starReviewDialog}
     </div>
   );
   if (props.assistantProjectId === null || tackPlace === "float") return page;
@@ -896,6 +950,8 @@ function BoardArea(props: {
   readonly board: BoardView;
   readonly mode: BoardViewMode;
   readonly filter: BoardFilter;
+  readonly tree: BoardTree;
+  readonly columns: ReadonlyArray<TreeColumn>;
   readonly serviceName: (id: string) => string;
   readonly actions: BoardNoteActions;
 }) {
@@ -939,8 +995,7 @@ function BoardArea(props: {
     );
   }
   if (props.mode === "tree") {
-    const roots = treeRoots(index, filter);
-    if (roots.length === 0)
+    if (props.columns.length === 0)
       return (
         <BoardEmpty
           title={index.tasks.length === 0 ? gt("No tasks yet") : gt("No tasks here")}
@@ -952,23 +1007,13 @@ function BoardArea(props: {
         />
       );
     return (
-      <div className="flex items-start gap-4">
-        {roots.map((root) => (
-          <section key={root.id} className="grid w-80 shrink-0 grid-cols-[minmax(0,1fr)] gap-3">
-            <BoardNote
-              index={index}
-              task={root}
-              serviceName={props.serviceName}
-              actions={props.actions}
-            />
-            {index.kidsOf(root.id).map((module) => (
-              <div key={module.id} data-board-module className="ms-3">
-                <BoardModuleNote index={index} task={module} actions={props.actions} />
-              </div>
-            ))}
-          </section>
-        ))}
-      </div>
+      <BoardTreeColumns
+        index={index}
+        columns={props.columns}
+        tree={props.tree}
+        serviceName={props.serviceName}
+        actions={props.actions}
+      />
     );
   }
   const level = Number(props.mode);

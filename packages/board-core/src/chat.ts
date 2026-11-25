@@ -17,6 +17,7 @@ import {
   setSessionTask,
   setTaskLink,
   settleDecision,
+  stampProgress,
   syncDelegatedSteps,
 } from "./edit.ts";
 import type { BoardGit } from "./io.ts";
@@ -1525,7 +1526,12 @@ ${this.related}`
         );
       const done = a.done !== false;
       const next = setStepDone(plan, stepId, done);
-      if (next !== plan) await this.store.io.write(this.store.planPath(this.boardId, id), next);
+      const stepped = next === plan ? null : await this.store.loadTask(this.boardId, id);
+      if (stepped) {
+        await this.store.io.write(this.store.planPath(this.boardId, id), next);
+        stampProgress(stepped, next, this.now());
+        await this.saveTask(stepped);
+      }
       return reply(`Step ${stepId} of ${id} is ${done ? "done" : "open"}.`);
     }
 
@@ -1889,6 +1895,8 @@ ${this.related}`
       const it = t.items.find((i) => i.id === id);
       if (it) it.done = true;
     }
+    if (a.lastAction || a.status || (Array.isArray(a.resolve) && a.resolve.length > 0))
+      stampProgress(t, await this.readPlan(t.id), this.now());
     await this.saveTask(t);
     await this.rebuildContext();
     return reply(
@@ -1902,6 +1910,7 @@ ${this.related}`
     const md = str(a.markdown);
     if (!md.trim()) return reply("markdown is empty: nothing saved.");
     await this.store.io.write(this.store.planPath(this.boardId, t.id), md);
+    stampProgress(t, md, this.now());
     await this.saveTask(t);
     await this.rebuildContext();
     const nx = nextStep(md);
@@ -1946,6 +1955,7 @@ ${this.related}`
       str(a.lastAction ?? `Finished ${step}: ${firstPara(str(a.markdown))}`),
     );
     this.lastActionSetThisTurn = true;
+    stampProgress(t, plan, this.now());
     await this.saveTask(t);
     await this.rebuildContext();
     const nx = nextStep(plan);

@@ -47,7 +47,13 @@ import {
   subtreeOf,
   tagsOf,
 } from "./board.logic";
-import { attentionDot, BoardDotMark, BoardModuleNote, type BoardNoteActions } from "./BoardNotes";
+import {
+  attentionDot,
+  BoardDotMark,
+  BoardModuleNote,
+  type BoardNoteActions,
+  BoardStar,
+} from "./BoardNotes";
 import {
   AddRow,
   BoardEditProvider,
@@ -348,6 +354,10 @@ function TaskHeader(props: BoardTaskViewProps & { readonly detail: BoardTaskDeta
                 : gt("done")}
           </Badge>
         )}
+        <BoardStar
+          task={task}
+          onStar={canEdit ? (_, on) => void edit({ op: "star", on }) : undefined}
+        />
         <BoardPinToggle boardId={props.board.id} taskId={task.id} />
         {task.level > 1 ? (
           <Button

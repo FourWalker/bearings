@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { TACK_SKINS, type TackMotion, type TackSkin } from "~/components/board/tackAvatar.logic";
 import { TackAvatar, useTackLook, useTackPen } from "~/components/board/TackAvatar";
 import { usePinCatch } from "~/components/board/BoardPinBar";
+import { useStarReviewOff } from "~/components/board/BoardTree";
 import { useTackPlace, useTackShowMode } from "~/components/board/BoardTack";
 import {
   type TackModelRole,
@@ -66,6 +67,7 @@ export function TackSettingsPanel() {
   const [show, setShow] = useTackShowMode();
   const [panelOpen, setPanelOpen] = useBoardPanelOpen();
   const [catching, setCatching] = usePinCatch();
+  const [reviewOff, setReviewOff] = useStarReviewOff();
   const [taskSize, setTaskSize] = useTaskTackSize();
   const [models, setModels] = useTackModels();
   const { environments } = useEnvironments();
@@ -258,6 +260,16 @@ export function TackSettingsPanel() {
               ["tack", gt("By Tack: a Sub Tack goes to the bar")],
             ]}
           />,
+        )}
+      </SettingsSection>
+
+      <SettingsSection id="board-stars" title={gt("Starred items")}>
+        {row(
+          gt("Daily star review"),
+          gt(
+            "The first time a board opens each day, list its starred items so you can unstar some.",
+          ),
+          toggle(gt("Daily star review"), !reviewOff, (on) => setReviewOff(!on)),
         )}
       </SettingsSection>
 

@@ -134,6 +134,12 @@ export interface Task {
   createdAt: number;
   updatedAt: number;
   lastAction: { text: string; sessionId: string; workspaceLabel: string; at: number } | null;
+  /** The last tick, status change or last-action line; `updatedAt` also moves on bookkeeping. */
+  lastActionAt?: number | undefined;
+  /** When the last plan step was ticked or the status set to done, whichever came first. */
+  doneAt?: number | undefined;
+  /** Set while a person keeps the item starred. */
+  starredAt?: number | undefined;
   items: Item[];
   sessions: TaskSessionRef[];
   /** 1 = master task, 2 = module, 3 = task. Missing means 1 (tasks made before levels existed). */

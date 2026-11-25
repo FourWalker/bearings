@@ -93,6 +93,11 @@ export interface BoardViewTask {
     readonly workspaceLabel: string;
     readonly sessionId: string;
   } | null;
+  /** The last tick, status change or last-action line; tasks from before it was kept use `updatedAt`. */
+  readonly lastActionAt: number;
+  /** When the last plan step was ticked or the task was set done; null while neither holds. */
+  readonly doneAt: number | null;
+  readonly starredAt: number | null;
   readonly next: PlanStep | null;
   readonly steps: { readonly done: number; readonly total: number };
   readonly chats: ReadonlyArray<BoardViewChat>;
@@ -316,6 +321,9 @@ export async function readBoardView(
               sessionId: t.lastAction.sessionId,
             }
           : null,
+        lastActionAt: Math.max(t.lastActionAt ?? 0, t.lastAction?.at ?? 0) || t.updatedAt,
+        doneAt: t.doneAt ?? (t.status === "done" ? (t.doneEvidence?.at ?? t.updatedAt) : null),
+        starredAt: t.starredAt ?? null,
         next: nextStep(plan),
         steps: planProgress(plan),
         chats: chats.filter((c) => c.taskId === t.id),

@@ -219,6 +219,40 @@ describe("editTask", () => {
     });
   });
 
+  it("stamps the last action on a tick, the done time on the last tick, and a star", async () => {
+    await createTask(store, "nefx", { title: "Billing" }, actor);
+    await edit("billing", { op: "savePlan", markdown: "- [ ] A1 Retries\n- [ ] A2 Verify" });
+    await edit("billing", { op: "createChild", title: "Retries", fromStep: "A1" });
+    await edit("billing", { op: "toggleStep", step: "A2" });
+    const ticked = await task("billing");
+    expect(ticked.lastActionAt).toBeGreaterThan(ticked.createdAt);
+    expect(ticked.doneAt).toBeUndefined();
+
+    // The subtask finishing ticks the parent's last step: both get their done time.
+    await edit("retries", { op: "update", status: "done" });
+    const finished = await task("retries");
+    expect(finished.doneAt).toBe(finished.lastActionAt);
+    const parentDone = (await task("billing")).doneAt;
+    expect(parentDone).toBeGreaterThan(ticked.lastActionAt ?? 0);
+    expect((await task("billing")).status).toBe("active");
+
+    await edit("retries", { op: "update", status: "active" });
+    expect((await task("retries")).doneAt).toBeUndefined();
+    expect((await task("billing")).doneAt).toBeUndefined();
+    // A title edit is bookkeeping, not an action.
+    const before = (await task("retries")).lastActionAt;
+    await edit("retries", { op: "update", title: "Retry handling" });
+    expect((await task("retries")).lastActionAt).toBe(before);
+
+    await edit("retries", { op: "star", on: true });
+    const starredAt = (await task("retries")).starredAt;
+    expect(starredAt).toBeGreaterThan(0);
+    await edit("retries", { op: "star", on: true });
+    expect((await task("retries")).starredAt).toBe(starredAt);
+    await edit("retries", { op: "star", on: false });
+    expect((await task("retries")).starredAt).toBeUndefined();
+  });
+
   it("maps documents, links tasks from either side, and files and settles decisions", async () => {
     await createTask(store, "nefx", { title: "Billing" }, actor);
     await edit("billing", { op: "createChild", title: "Retries" });
