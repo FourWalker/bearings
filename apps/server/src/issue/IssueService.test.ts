@@ -13,6 +13,7 @@ import {
 import {
   IssueTrackerError,
   type IssueTrackerApi,
+  type LocalIssueTrackerApi,
   type StandaloneIssueTrackerApi,
   type TrackerIssueDetail,
 } from "@t3tools/source-control-core/server/IssueTracker";
@@ -768,5 +769,54 @@ describe("IssueService with a standalone tracker", () => {
         operation: "listProjects",
       });
     }),
+  );
+});
+
+describe("IssueService with a local tracker", () => {
+  it.effect(
+    "lists the board covering a project's folder beside its git host, with no binding",
+    () =>
+      Effect.gen(function* () {
+        const BOARD = IssueTrackerKind.make("board");
+        const listed: string[] = [];
+        const board: LocalIssueTrackerApi = {
+          ...fakeTracker({
+            kind: BOARD,
+            listIssues: (input) =>
+              Effect.sync(() => {
+                listed.push(`${input.host} ${input.scope}`);
+                return { items: [issue("sftp")], nextCursor: null };
+              }),
+          }),
+          local: { host: "local" },
+          scopesFor: (root) => Effect.succeed(root === "/w/web" ? ["nefx"] : []),
+        };
+        const service = yield* makeService({
+          projects: [project({ id: "web", repository: "acme/web" }), project({ id: "notes" })],
+          trackers: [
+            fakeTracker({
+              listIssues: () => Effect.succeed({ items: [issue("1")], nextCursor: null }),
+            }),
+            board,
+          ],
+        });
+
+        const result = yield* service.list({ state: "open" });
+        expect(listed).toEqual(["local nefx"]);
+        expect(
+          result.entries.map((entry) => [entry.projectId, entry.tracker, entry.key]).sort(),
+        ).toEqual([
+          ["web", "board", "sftp"],
+          ["web", "github", "1"],
+        ]);
+        expect(
+          yield* service.detail({
+            projectId: "web" as ProjectId,
+            tracker: BOARD,
+            scope: "nefx",
+            key: "sftp",
+          }),
+        ).toMatchObject({ host: "local", writable: true });
+      }),
   );
 });

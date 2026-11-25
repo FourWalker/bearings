@@ -15,6 +15,7 @@ import {
   ThreadId,
   TurnItemId,
   AuthOrchestrationOperateScope,
+  clientRpcRequiredScopes,
   AuthOrchestrationReadScope,
   AuthSourceControlWriteScope,
   AuthTerminalReadScope,
@@ -75,6 +76,30 @@ describe("RPC authorization scopes", () => {
     ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthTerminalOperateScope);
     }
+  });
+
+  it("lets thread readers see the board, and only operators put threads on its tasks", () => {
+    for (const method of [
+      WS_METHODS.boardList,
+      WS_METHODS.boardUnassigned,
+      WS_METHODS.boardView,
+      WS_METHODS.boardTaskDetail,
+      WS_METHODS.boardSettings,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationReadScope);
+    }
+    for (const method of [
+      WS_METHODS.boardLinkThread,
+      WS_METHODS.boardEditTask,
+      WS_METHODS.boardCreateTask,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationOperateScope);
+      expect(clientRpcRequiredScopes(method, undefined)).toEqual([AuthOrchestrationOperateScope]);
+    }
+    expect(requiredScopeForRpcMethod(WS_METHODS.boardEditBoard)).toBe(AuthSettingsWriteScope);
+    expect(clientRpcRequiredScopes(WS_METHODS.boardEditBoard, undefined)).toEqual([
+      AuthSettingsWriteScope,
+    ]);
   });
 
   it("lets thread readers observe and refresh checkout branches", () => {

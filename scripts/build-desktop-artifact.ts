@@ -3236,6 +3236,8 @@ function collectUnpackedAsarFiles(
 const countPayloadFiles = Effect.fn("desktopArtifact.countPayloadFiles")(function* (root: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  // The optimization writes one cache file per server JS chunk, independently of ASAR unpacking.
+  const compileCache = path.join(root, "resources", "server-compile-cache");
   const pendingDirectories = [root];
   let count = 0;
 
@@ -3247,7 +3249,7 @@ const countPayloadFiles = Effect.fn("desktopArtifact.countPayloadFiles")(functio
       const entryPath = path.join(directory, entry);
       const stat = yield* fs.stat(entryPath);
       if (stat.type === "Directory") {
-        pendingDirectories.push(entryPath);
+        if (entryPath !== compileCache) pendingDirectories.push(entryPath);
       } else if (stat.type === "File") {
         count += 1;
       }
@@ -3582,7 +3584,7 @@ export const validateWindowsPackagedPayload = Effect.fn(
   });
 
   yield* Effect.log(
-    `[desktop-artifact] Validated Windows payload (${String(fileCount)} files, ${String(unpackedFiles.length)} sidecar natives).`,
+    `[desktop-artifact] Validated Windows payload (${String(fileCount)} files excluding compile cache, ${String(unpackedFiles.length)} sidecar natives).`,
   );
   return { packagedAppDir, fileCount, unpackedFiles } as const;
 });
@@ -3752,6 +3754,9 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
 
   const requiredBuildInputs = [
     { artifact: "desktop-dist", artifactPath: distDirs.desktopDist },
+    { artifact: "desktop-dist", artifactPath: path.join(distDirs.desktopDist, "main.cjs") },
+    { artifact: "desktop-dist", artifactPath: path.join(distDirs.desktopDist, "boot.cjs") },
+    { artifact: "desktop-dist", artifactPath: path.join(distDirs.desktopDist, "preload.cjs") },
     { artifact: "desktop-resources", artifactPath: distDirs.desktopResources },
     { artifact: "server-dist", artifactPath: distDirs.serverDist },
   ] as const;

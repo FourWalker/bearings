@@ -1,5 +1,6 @@
 import { threadIssueKeyOf, type ScopedThreadRef, type ThreadIssueLink } from "@t3tools/contracts";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
+import { useNavigate } from "@tanstack/react-router";
 import { useGT } from "gt-react";
 import { MessageSquareIcon } from "lucide-react";
 import { useState, type MouseEvent } from "react";
@@ -37,20 +38,31 @@ function LinkedIssueRow({
   onOpen: (() => void) | undefined;
 }) {
   const gt = useGT();
+  const navigate = useNavigate();
   const configs = useServerConfigs();
   const detail = useLinkedIssueDetail(threadRef.environmentId, link, mountScope);
   const trackerPresentation = issueTrackerPresentation(link.tracker);
   const state = detail === null ? null : issueStatePresentation(detail.state);
   const Icon = state?.Icon ?? IssueGlyph.issue;
   const title = detail?.title ?? link.title;
+  const boardSearch =
+    link.tracker === "board"
+      ? { env: threadRef.environmentId, board: link.scope, task: link.key }
+      : null;
   const anchorProps = {
-    href: link.url,
+    href: boardSearch === null ? link.url : `/board?${new URLSearchParams(boardSearch)}`,
     target: "_blank",
     rel: "noopener noreferrer",
     "aria-label": gt("Issue {key}: {title}", { key: link.displayKey, title }),
     onClick: (event: MouseEvent<HTMLElement>) => {
       event.stopPropagation();
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      if (boardSearch !== null) {
+        event.preventDefault();
+        void navigate({ to: "/board", search: boardSearch });
+        onOpen?.();
+        return;
+      }
       if (configs.get(threadRef.environmentId)?.environment.capabilities.issues !== true) return;
       event.preventDefault();
       useRightPanelStore.getState().openIssue(threadRef, link);

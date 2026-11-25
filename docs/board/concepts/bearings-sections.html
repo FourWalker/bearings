@@ -1,0 +1,322 @@
+<!--@css-->
+  /* ---------- the broader preview's own demos; colours come from each .app's theme tokens ---------- */
+  .demo { display:grid; gap:0; }
+  .demo .mast .sp { flex:1; }
+  .bgrid { display:grid; grid-template-columns:minmax(0,1fr) 230px; }
+  .bnotes { padding:22px 20px 26px; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px 16px; align-content:start; position:relative;
+    background-image:linear-gradient(var(--rule) 1px,transparent 1px),linear-gradient(90deg,var(--rule) 1px,transparent 1px); background-size:24px 24px; }
+  .bnote { position:relative; display:grid; gap:4px; border-radius:6px; padding:12px 12px 0; color:var(--note-ink); background:var(--note-a); box-shadow:0 8px 20px -14px var(--shadow); min-width:0; }
+  .bnote:nth-child(3n+2) { background:var(--note-b); } .bnote:nth-child(3n) { background:var(--note-c); }
+  .plotter .bnote { border:1px solid var(--line); }
+  .plotter .bnote::before { content:""; position:absolute; top:-5px; left:50%; width:9px; height:9px; margin-left:-4px; border-radius:50%; background:var(--accent); }
+  .bnote b { font:var(--title-weight) 14px/1.25 var(--title-font); } .bnote small { font:11px var(--label-font); opacity:.7; }
+  .bnote.lit { outline:2px solid var(--accent); outline-offset:3px; }
+  .bstrip { margin:8px -12px 0; height:27px; display:flex; align-items:center; gap:7px; padding:0 12px; font-size:12px; border-radius:0 0 6px 6px;
+    background:color-mix(in srgb, var(--note-ink) 8%, transparent); transition:background .4s; }
+  .bstrip i { width:8px; height:8px; border-radius:50%; flex:none; background:var(--muted); }
+  .bstrip[data-s="working"] i { background:var(--success); }
+  .bstrip[data-s="needs"] { background:color-mix(in srgb, var(--attention) 26%, transparent); font-weight:600; } .bstrip[data-s="needs"] i { background:var(--attention); border-radius:1px; transform:rotate(45deg); }
+  .bstrip[data-s="done"] { background:color-mix(in srgb, var(--success) 20%, transparent); } .bstrip[data-s="done"] i { background:var(--success); box-shadow:0 0 0 2px color-mix(in srgb, var(--success) 35%, transparent); }
+  .bstrip[data-s="failed"] { background:color-mix(in srgb, var(--error) 20%, transparent); font-weight:600; } .bstrip[data-s="failed"] i { background:var(--error); border-radius:1px; }
+  .bstrip.changed { animation:strip-in .6s ease-out 1; }
+  @keyframes strip-in { from { opacity:.2; } }
+  .stamp { justify-self:start; font:10px var(--label-font); letter-spacing:.06em; text-transform:uppercase; color:var(--accent); border:1px solid var(--accent); border-radius:3px; padding:0 5px; }
+  .ledger { border-left:1px solid var(--border); background:color-mix(in srgb, var(--raised) 60%, transparent); padding:14px 14px 18px; display:grid; gap:12px; align-content:start; font-size:12.5px; min-width:0; }
+  .ledger h4 { margin:0; font:var(--title-weight) 16px var(--title-font); }
+  .ledger h5 { margin:0 0 4px; font:500 10.5px var(--label-font); letter-spacing:.06em; text-transform:uppercase; color:var(--muted); display:flex; justify-content:space-between; }
+  .ledger ul { margin:0; padding:0; list-style:none; display:grid; gap:3px; } .ledger li { display:flex; gap:6px; align-items:center; min-width:0; }
+  .ledger li span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .ledger li i { width:7px; height:7px; flex:none; background:var(--attention); transform:rotate(45deg); }
+  .ledger li.ok i { background:var(--success); border-radius:50%; transform:none; } .ledger .none { color:var(--muted); }
+
+  .fly { position:relative; }
+  .fly .bnotes { min-height:300px; }
+  .flyer { position:absolute; left:0; top:0; z-index:5; transition:translate .9s cubic-bezier(.5,0,.3,1); pointer-events:none; }
+  .flyer.hop > span { animation:hop .45s ease-out 1; }
+  @keyframes hop { 0%, 100% { translate:0 0; } 45% { translate:0 -13px; } }
+  .say { position:absolute; z-index:6; width:230px; background:var(--raised); color:var(--text); border:1px solid var(--border); border-radius:10px; padding:9px 11px; font-size:12.5px;
+    box-shadow:0 14px 30px -18px var(--shadow); opacity:0; transition:opacity .25s; pointer-events:none; }
+  .say.on { opacity:1; } .say b { font-weight:600; }
+  .nest2 { position:absolute; right:14px; bottom:10px; width:96px; text-align:center; font:10px var(--label-font); color:var(--muted); border-bottom:2px solid var(--line); height:18px; }
+
+  .tview { display:grid; grid-template-rows:auto auto minmax(0,1fr); background:var(--raised); min-height:420px; }
+  .thead { padding:12px 16px 10px; border-bottom:1px solid var(--border); display:grid; gap:3px; }
+  .thead .crumb { font:11px var(--label-font); color:var(--muted); letter-spacing:.04em; }
+  .thead .row { display:flex; align-items:center; gap:8px; } .thead h4 { margin:0; flex:1; min-width:0; font:var(--title-weight) 19px var(--title-font); }
+  .pill { font:12px var(--label-font); border:1px solid var(--border); border-radius:6px; padding:2px 8px; color:var(--text); background:transparent; cursor:pointer; white-space:nowrap; }
+  .pill.on { border-color:var(--accent); color:var(--accent); } .pill.solid { background:var(--accent); border-color:var(--accent); color:var(--accent-fg); font-weight:600; }
+  .ttabs { display:flex; gap:14px; padding:0 16px; border-bottom:1px solid var(--border); font:12.5px var(--label-font); color:var(--muted); }
+  .ttabs span { padding:8px 0; } .ttabs .cur { color:var(--text); border-bottom:2px solid var(--accent); }
+  .tbody { display:grid; grid-template-columns:minmax(0,1fr) 300px; min-height:0; }
+  .tleft { padding:14px 16px; display:grid; gap:10px; align-content:start; min-width:0; }
+  .tcard { border:1px solid var(--border); border-radius:6px; padding:9px 11px; display:grid; gap:3px; font-size:12.5px; background:var(--canvas); min-width:0; }
+  .tcard .top { display:flex; gap:8px; align-items:center; } .tcard .top b { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+  .tcard small { color:var(--muted); } .tcard .st { font:11px var(--label-font); padding:0 6px; border-radius:999px; background:color-mix(in srgb, var(--muted) 16%, transparent); }
+  .tcard .st[data-s="working"] { background:color-mix(in srgb, var(--success) 25%, transparent); }
+  .ttack { border-left:1px solid var(--border); display:grid; grid-template-rows:auto minmax(0,1fr) auto; background:color-mix(in srgb, var(--canvas) 60%, transparent); min-width:0; }
+  .ttack header { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--border); font-size:12.5px; }
+  .ttack header span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .tmsgs { padding:10px 12px; display:grid; gap:8px; align-content:end; font-size:12.5px; overflow:hidden; }
+  .tmsgs .me { justify-self:end; background:var(--text); color:var(--canvas); border-radius:10px 10px 2px 10px; padding:5px 9px; max-width:88%; }
+  .tmsgs .ta { border-left:2px solid var(--accent); padding-left:9px; }
+  .tfoot { border-top:1px solid var(--border); padding:8px 12px 10px; display:grid; gap:7px; }
+  .tfoot .row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; } .tfoot .lab { font:11px var(--label-font); color:var(--muted); }
+  .tfoot .box { border:1px solid var(--border); border-radius:6px; padding:6px 9px; font-size:12.5px; color:var(--muted); background:var(--raised); }
+
+  .plan { background:var(--raised); padding:14px 16px 16px; display:grid; gap:12px; }
+  .plan .bar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  .plan input[type="search"] { flex:1; min-width:160px; font:13px var(--sans); color:var(--text); background:var(--canvas); border:1px solid var(--border); border-radius:6px; padding:6px 10px; }
+  .plan .sum { font:12px var(--mono); color:var(--muted); }
+  .phase { display:grid; gap:2px; } .phase h5 { margin:0 0 3px; font:500 11px var(--label-font); letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+  .pstep { display:grid; grid-template-columns:18px 30px minmax(0,1fr) auto; gap:8px; align-items:center; padding:4px 6px; border-radius:5px; font-size:13.5px; }
+  .pstep:hover { background:color-mix(in srgb, var(--muted) 10%, transparent); }
+  .pstep input { accent-color:var(--accent); margin:0; } .pstep .id { font:12px var(--mono); color:var(--muted); }
+  .pstep .tx { outline:none; border-radius:3px; min-width:0; } .pstep .tx:focus { box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent); }
+  .pstep.done .tx { text-decoration:line-through; color:var(--muted); } .pstep.cur .tx { font-weight:600; } .pstep.cur .id { color:var(--accent); }
+  .pstep .who { font:11px var(--label-font); color:var(--muted); } .pstep mark { background:color-mix(in srgb, var(--attention) 40%, transparent); color:inherit; border-radius:2px; }
+  .pstep[hidden] { display:none; }
+  @media (max-width:760px) { .bgrid, .tbody { grid-template-columns:minmax(0,1fr); } .ledger, .ttack { border-left:0; border-top:1px solid var(--border); } }
+<!--@board-->
+  <section class="section">
+    <header>
+      <p class="eyebrow">The board</p>
+      <h2>See every chat at work, without opening one.</h2>
+      <p class="lede">Each task is a note. The strip at its foot says what the chats on it are doing right now: working, waiting for you, finished and not yet looked at, or stopped. A module rolls up the tasks under it.</p>
+      <p class="more">The side panel keeps the short list of what needs you. Nothing here is typed in by anyone; it follows the agents' threads as they run. The demo below changes on its own every few seconds.</p>
+    </header>
+    <div class="toolbar"><span class="lbl">Theme</span>
+      <button class="btn on" data-demo-theme="plotter">Plotter</button>
+      <button class="btn" data-demo-theme="plotter night">Plotter · night</button>
+      <button class="btn" data-demo-theme="tide">Plotter Tide</button>
+      <button class="btn" data-demo-theme="tide night">Tide · night</button>
+      <span class="lbl" style="margin-left:10px">applies to the demos on this page</span>
+    </div>
+    <div class="stage"><div class="app plotter demo" data-demo>
+      <div class="mast"><span class="name">Acme / <em>Board</em></span><div class="tabs"><span class="cur">Tree</span><span>Modules</span><span>Tasks</span><span>By service</span><span>Goals</span></div></div>
+      <div class="bgrid">
+        <div class="bnotes" id="g-notes"></div>
+        <aside class="ledger" id="g-ledger"></aside>
+      </div>
+    </div></div>
+  </section>
+<!--@fly-->
+    <div style="display:grid;gap:8px;min-width:0">
+      <h3 style="font-size:24px">Ask where something is. Tack goes there.</h3>
+      <p class="more" style="max-width:68ch">On a big board, finding a task is half the work. Ask Tack and it crosses the board to the note, stands on it and tells you where it stands. The board stays in view the whole time.</p>
+      <div class="toolbar"><span class="lbl">Ask Tack</span>
+        <button class="btn" data-fly="1">Where is key rotation?</button>
+        <button class="btn" data-fly="3">What failed?</button>
+        <button class="btn" data-fly="5">Which module is furthest along?</button>
+        <button class="btn" data-fly="home">Send Tack home</button>
+      </div>
+      <div class="stage"><div class="app plotter demo fly" data-demo id="f-app">
+        <div class="mast"><span class="name">Acme / <em>Board</em></span><div class="tabs"><span class="cur">Tree</span><span>Modules</span><span>Tasks</span><span>Goals</span></div></div>
+        <div class="bnotes" id="f-notes"></div>
+        <div class="nest2">Tack's home</div>
+        <span class="say" id="f-say"></span>
+        <span class="flyer" id="f-tack"></span>
+      </div></div>
+    </div>
+    <div style="display:grid;gap:8px;min-width:0">
+      <h3 style="font-size:24px">Open a task and Tack is already in it.</h3>
+      <p class="more" style="max-width:68ch">Inside a task or module, Tack sits beside the work as a column or a single row. Every conversation there is a thread on that task, so nothing is lost. Ask a quick question, or press Continue and an agent picks the task up from its plan and handoff.</p>
+      <div class="stage"><div class="app plotter demo" data-demo>
+        <div class="tview">
+          <div class="thead">
+            <span class="crumb">Transfers › Retries › Bug</span>
+            <div class="row"><h4>Retry loop spins</h4><button class="pill">Share</button><button class="pill on">active</button><button class="pill" title="Pin to the board's bar">Pin</button></div>
+          </div>
+          <div class="ttabs"><span class="cur">Threads (2)</span><span>Plan &amp; Docs</span><span>Handoff</span><span>Tasks (0)</span><span>Decisions (1)</span></div>
+          <div class="tbody">
+            <div class="tleft">
+              <div class="tcard"><div class="top"><b>Fix the retry loop</b><span class="st" id="t-st">idle</span></div><small>main · codex · 2h ago · did the last action</small><span>Finished B1: attempts are capped at 3.</span></div>
+              <div class="tcard"><div class="top"><b>Why does it spin?</b><span class="st">idle</span></div><small>main · claude · yesterday</small><span>The timeout path never increments the counter.</span></div>
+              <div class="tcard"><div class="top"><b>Outputs</b></div><small>Plan &amp; Docs</small><span>retry-notes.md · Manual test runbook ↗</span></div>
+            </div>
+            <aside class="ttack">
+              <header><span id="t-ava"></span><span>Fix the retry loop</span><button class="pill">▾</button></header>
+              <div class="tmsgs" id="t-msgs"><span class="ta">Next step is <b>B2</b>, backoff with jitter. B1 is done and its tests pass.</span></div>
+              <div class="tfoot">
+                <div class="row"><button class="pill solid" data-task="continue">Continue ▸</button><button class="pill" data-task="next">What's next?</button><button class="pill" data-task="status">Status</button></div>
+                <div class="row"><span class="lab">Mode</span><button class="pill on" data-mode="ask">Ask</button><button class="pill" data-mode="run">Run</button></div>
+                <div class="box" id="t-box">Ask about this task, or tell Tack to continue…</div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </div></div>
+      <p class="cap">Try the buttons. Ask means Tack answers and checks with you before changing anything; Run means your next message has the agent work on the task.</p>
+    </div>
+<!--@pin-->
+    <div style="display:grid;gap:8px;min-width:0">
+      <h3 style="font-size:24px">Pin it, then watch it move.</h3>
+      <div class="toolbar"><span class="lbl">Pin</span>
+        <button class="btn on" data-pk="task">A task</button><button class="btn" data-pk="module">A module</button>
+        <span class="lbl" style="margin-left:10px">Agent</span>
+        <button class="btn" id="p-tick">Ticks a step</button>
+      </div>
+      <div class="toolbar"><span class="lbl">Status</span>
+        <button class="btn on" data-ps="working">Working</button><button class="btn" data-ps="approval">Needs approval</button><button class="btn" data-ps="question">Asks you</button>
+        <button class="btn" data-ps="blocked">Blocked</button><button class="btn" data-ps="stopped">Stopped</button><button class="btn" data-ps="finished">Finished</button>
+      </div>
+      <div class="stage"><div class="app plotter demo" data-demo>
+        <div class="mast"><span class="name">Acme / <em>Board</em></span><div class="tabs"><span class="cur">Tree</span><span>Modules</span><span>Tasks</span><span>Goals</span></div></div>
+        <div class="pin" id="p-pin"></div>
+        <div class="bnotes" id="p-notes" style="grid-template-columns:repeat(3,minmax(0,1fr));padding-bottom:20px"></div>
+      </div></div>
+      <p class="cap">A pinned task shows its own step in hand. A pinned module shows the task being done under it. The pinned note keeps an outline so you can find it on the board.</p>
+    </div>
+<!--@plan-->
+  <section class="section">
+    <header>
+      <p class="eyebrow">Plans</p>
+      <h2>Find a step. Edit it. Watch it get ticked.</h2>
+      <p class="lede">Every task carries the plan its agent follows, as plain steps grouped in phases. You can search across them, reword one, add one, or tick one yourself. Agents tick the same list when they finish a step, with a note of what was done.</p>
+    </header>
+    <div class="stage"><div class="app plotter demo" data-demo>
+      <div class="plan">
+        <div class="bar"><input type="search" id="pl-find" placeholder="Find a step… try “retry” or “test”" aria-label="Find a step"><span class="sum" id="pl-sum"></span><button class="pill" id="pl-add">+ Add a step</button><button class="pill solid" id="pl-agent">Agent finishes its step</button></div>
+        <div id="pl-list"></div>
+      </div>
+    </div></div>
+    <p class="cap">Click a checkbox to tick a step, or click a step's words to reword it. The count and the step in hand update as you go, which is what the Pin bar reads.</p>
+  </section>
+<!--@js-->
+  /* ---------- the broader preview's demos ---------- */
+  const NOTES = [
+    { t: "Retry loop spins", k: "bug · Retries", s: "working", d: "Working · 12m" },
+    { t: "Key rotation", k: "task · SFTP auth", s: "needs", d: "Needs you · approval", stamp: "blocked" },
+    { t: "Invoice export", k: "module · 4 of 5 tasks", s: "done", d: "Finished · not seen" },
+    { t: "Webhook signing", k: "task · Partner API", s: "failed", d: "Stopped on an error" },
+    { t: "Onboarding copy", k: "task · Portal", s: "idle", d: "Idle · 1 chat open" },
+    { t: "Rate limits", k: "module · 1 of 3 tasks", s: "working", d: "Working · 3m · 2 in subtasks" },
+  ];
+  const noteHtml = (n) => `<div class="bnote"><small>${n.k}</small><b>${n.t}</b>${n.stamp ? `<span class="stamp">${n.stamp}</span>` : ""}<div class="bstrip" data-s="${n.s}"><i></i><span>${n.d}</span></div></div>`;
+
+  // The board at a glance: statuses change on their own, the ledger follows.
+  const gNotes = $("g-notes"), gLedger = $("g-ledger"), live = NOTES.map((n) => ({ ...n }));
+  const STEPS_G = [[0, "needs", "Needs you · a question"], [1, "working", "Working · just now"], [2, "idle", "Idle · result seen"], [0, "working", "Working · 13m"],
+    [3, "working", "Working · retrying"], [4, "done", "Finished · not seen"], [1, "needs", "Needs you · approval"], [3, "failed", "Stopped on an error"], [2, "done", "Finished · not seen"], [4, "idle", "Idle · 1 chat open"]];
+  function ledger() {
+    const of = (s) => live.filter((n) => n.s === s);
+    const list = (items, cls) => items.length ? `<ul>${items.map((n) => `<li class="${cls}"><i></i><span>${n.t}</span></li>`).join("")}</ul>` : '<span class="none">None</span>';
+    const needs = [...of("needs"), ...of("failed")];
+    gLedger.innerHTML = `<h4>Where things stand</h4><div><h5><span>Needs you</span><span>${needs.length}</span></h5>${list(needs, "")}</div>` +
+      `<div><h5><span>Working now</span><span>${of("working").length}</span></h5>${list(of("working"), "ok")}</div>` +
+      `<div><h5><span>Finished, not seen</span><span>${of("done").length}</span></h5>${list(of("done"), "ok")}</div>`;
+  }
+  if (gNotes) {
+    gNotes.innerHTML = live.map(noteHtml).join(""); ledger();
+    let at = 0;
+    setInterval(() => {
+      const [i, s, d] = STEPS_G[at++ % STEPS_G.length]; live[i].s = s; live[i].d = d;
+      const strip = gNotes.children[i].querySelector(".bstrip"); strip.dataset.s = s; strip.lastElementChild.textContent = d; again(strip, "changed"); ledger();
+    }, 3200);
+  }
+
+  // Tack crosses the board to the note it is asked about.
+  const fApp = $("f-app"), fNotes = $("f-notes"), fTack = $("f-tack"), fSay = $("f-say");
+  if (fNotes) {
+    fNotes.innerHTML = NOTES.map(noteHtml).join("");
+    const pix = makePix(3); fTack.append(pix.host); pix.show("sleep");
+    const SAY = { 1: "<b>Key rotation</b> is here. It waits for your approval, and it is blocked by the SFTP auth module.", 3: "<b>Webhook signing</b> stopped on an error 20 minutes ago. Its thread is one click away.", 5: "<b>Rate limits</b> has 1 of 3 tasks done, with two chats working under it right now." };
+    const rect = (el) => { const a = fApp.getBoundingClientRect(), r = el.getBoundingClientRect(); return { x: r.left - a.left, y: r.top - a.top, w: r.width, h: r.height }; };
+    const homeAt = () => { const a = fApp.getBoundingClientRect(); return { x: a.width - 62 - 39, y: a.height - 12 - 60 }; };
+    const put = (p, instant) => { fTack.style.transition = instant ? "none" : ""; fTack.style.translate = `${p.x}px ${p.y}px`; };
+    let trip = 0;
+    put(homeAt(), true);
+    document.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-fly]"); if (!b) return;
+      const mine = ++trip; fSay.classList.remove("on"); [...fNotes.children].forEach((n) => n.classList.remove("lit"));
+      if (b.dataset.fly === "home") { pix.show("idle"); put(homeAt()); setTimeout(() => mine === trip && pix.show("sleep"), 950); return; }
+      const note = fNotes.children[+b.dataset.fly], r = rect(note);
+      pix.show("idle"); put({ x: r.x + r.w - 70, y: r.y - 46 });
+      setTimeout(() => {
+        if (mine !== trip) return;
+        note.classList.add("lit"); again(fTack, "hop"); pix.show("alert", 1); setTimeout(() => mine === trip && pix.show("idle"), 1000);
+        fSay.innerHTML = SAY[b.dataset.fly]; fSay.style.left = `${Math.max(8, Math.min(r.x + r.w - 236, fApp.clientWidth - 240))}px`; fSay.style.top = `${r.y + r.h + 10}px`; fSay.classList.add("on");
+      }, 950);
+    });
+  }
+
+  // Tack inside an open task.
+  const tMsgs = $("t-msgs");
+  if (tMsgs) {
+    const ava = makePix(1); $("t-ava").append(ava.host); ava.show("idle");
+    const add = (q, a) => { tMsgs.insertAdjacentHTML("beforeend", `<span class="me">${q}</span><span class="ta">${a}</span>`); while (tMsgs.children.length > 5) tMsgs.firstElementChild.remove(); };
+    const ASK = { next: ["What is next on this task?", "<b>B2</b>, backoff with jitter. Then B3 wires the retry into the client."], status: ["Where does this task stand?", "3 of 8 steps done. No open decisions. Nothing is blocking it."],
+      continue: ["Continue", "Picking it up from the handoff, in Run mode. Working on <b>B2</b> now."] };
+    document.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-task],[data-mode]"); if (!b) return;
+      if (b.dataset.mode) { document.querySelectorAll("[data-mode]").forEach((x) => x.classList.toggle("on", x === b)); $("t-box").textContent = b.dataset.mode === "run" ? "Tell Tack what to do on this task…" : "Ask about this task, or tell Tack to continue…"; return; }
+      add(...ASK[b.dataset.task]);
+      if (b.dataset.task === "continue") { const st = $("t-st"); st.textContent = "working"; st.dataset.s = "working"; }
+    });
+  }
+
+  // The Pin bar: pin, tick, change status.
+  const pPin = $("p-pin"), pNotes = $("p-notes");
+  if (pPin) {
+    const P_STEPS = ["A1 Reproduce the spin", "A2 Capture a failing test", "B1 Cap attempts at 3", "B2 Backoff with jitter", "B3 Wire retry into client", "C1 Cover the timeout path", "C2 Update the runbook", "C3 Verify on the testbed"];
+    const P_STATE = { working: ["working", "Working · 12m", "<b>running</b> vp test run src/transfer/retry.test.ts", "Open"], approval: ["needs", "Needs approval", "<b>wants to run</b> git push origin fix/retry-loop", "Review"],
+      question: ["needs", "Asks you", "“Keep the 3-try cap fixed, or make it a setting per route?”", "Answer"], blocked: ["blocked", "Blocked", "<b>by</b> Key rotation (SFTP auth), still active", "Open blocker"],
+      stopped: ["stopped", "Stopped", "<b>run failed</b> usage limit, resets 02:10", "Open"], finished: ["finished", "Finished · not seen", "Retry is capped at 3 with jitter; 14 tests pass.", "See result"] };
+    let pk = "task", ps = "working", pd = 3, moved = false;
+    pNotes.innerHTML = NOTES.slice(0, 3).map(noteHtml).join("");
+    function drawPin() {
+      const [tone, chip, line, act] = P_STATE[ps], module = pk === "module";
+      const total = module ? 5 : P_STEPS.length, done = module ? 2 : pd, cur = P_STEPS[pd];
+      const pips = Array.from({ length: total }, (_, i) => `<span class="pip${i < done ? " done" : i === done ? " next" : ""}"></span>`).join("");
+      const step = module ? "<i>▸</i>Task in hand: <b>Retry loop spins</b>" : cur ? `<i>▸</i><b>${cur.slice(0, 2)}</b>${cur.slice(3)}` : "<i>✓</i>Every step is ticked";
+      pPin.dataset.tone = tone;
+      pPin.innerHTML = `<span class="glyph">${ICON}</span><div class="what"><div class="kicker">${module ? "Module · Transfers" : "Bug · Transfers › Retries"}</div><div class="title">${module ? "Retries" : "Retry loop spins"}</div></div>` +
+        `<div class="plan"><div class="top"><span class="pips">${pips}</span><span class="count">${module ? "2/5 tasks" : `${done}/${total}`}</span></div><div class="step${moved ? " swap" : ""}">${step}</div></div>` +
+        `<div class="now"><span class="chip" data-tone="${tone}"><i></i>${chip}</span><span class="peekline">${line}</span></div>` +
+        `<div class="acts"><button class="act${tone === "working" ? "" : " primary"}">${act}</button><button class="act icon">▾</button><button class="act icon">✕</button></div>`;
+      pNotes.children[0].classList.toggle("lit", true);
+      pNotes.children[0].querySelector("b").textContent = module ? "Retries" : "Retry loop spins";
+      pNotes.children[0].querySelector("small").textContent = module ? "module · 2 of 5 tasks" : "bug · Retries";
+      moved = false;
+    }
+    drawPin();
+    document.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-pk],[data-ps],#p-tick"); if (!b) return;
+      if (b.dataset.pk) { pk = b.dataset.pk; document.querySelectorAll("[data-pk]").forEach((x) => x.classList.toggle("on", x === b)); }
+      else if (b.dataset.ps) { ps = b.dataset.ps; document.querySelectorAll("[data-ps]").forEach((x) => x.classList.toggle("on", x === b)); }
+      else { pd = pd >= P_STEPS.length ? 2 : pd + 1; moved = true; }
+      drawPin();
+    });
+  }
+
+  // Plans: find, edit, tick.
+  const plList = $("pl-list");
+  if (plList) {
+    const PLAN = [["A · Reproduce", [["A1", "Reproduce the spin", 1, "ticked by codex · 2h ago"], ["A2", "Capture a failing test", 1, "ticked by codex · 2h ago"]]],
+      ["B · Fix", [["B1", "Cap attempts at 3", 1, "ticked by codex · 40m ago"], ["B2", "Backoff with jitter", 0, ""], ["B3", "Wire retry into client", 0, ""]]],
+      ["C · Verify", [["C1", "Cover the timeout path", 0, ""], ["C2", "Update the runbook", 0, ""], ["C3", "Verify on the testbed", 0, ""]]]];
+    const esc = (t) => t.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+    const stepHtml = ([id, text, done, who]) => `<label class="pstep${done ? " done" : ""}"><input type="checkbox"${done ? " checked" : ""} aria-label="${id}"><span class="id">${id}</span><span class="tx" contenteditable="true" spellcheck="false">${esc(text)}</span><span class="who">${who}</span></label>`;
+    plList.innerHTML = PLAN.map(([name, steps]) => `<div class="phase"><h5>${name}</h5>${steps.map(stepHtml).join("")}</div>`).join("");
+    const rows = () => [...plList.querySelectorAll(".pstep")];
+    function sum() {
+      const all = rows(), done = all.filter((r) => r.querySelector("input").checked), cur = all.find((r) => !r.querySelector("input").checked);
+      all.forEach((r) => { r.classList.toggle("done", r.querySelector("input").checked); r.classList.toggle("cur", r === cur); });
+      $("pl-sum").textContent = `${done.length} of ${all.length} done` + (cur ? ` · in hand ${cur.querySelector(".id").textContent}` : " · all ticked");
+    }
+    sum();
+    plList.addEventListener("change", (e) => { const r = e.target.closest(".pstep"); if (r) { r.querySelector(".who").textContent = e.target.checked ? "ticked by you · now" : ""; sum(); } });
+    plList.addEventListener("click", (e) => { if (e.target.closest(".tx")) e.preventDefault(); });
+    $("pl-find").addEventListener("input", (e) => {
+      const q = e.target.value.trim().toLowerCase();
+      rows().forEach((r) => { const tx = r.querySelector(".tx"), text = tx.textContent; const at = q ? text.toLowerCase().indexOf(q) : -1;
+        r.hidden = q !== "" && at < 0; tx.innerHTML = at < 0 ? esc(text) : esc(text.slice(0, at)) + "<mark>" + esc(text.slice(at, at + q.length)) + "</mark>" + esc(text.slice(at + q.length)); });
+    });
+    $("pl-add").addEventListener("click", () => { const last = plList.lastElementChild; const n = last.querySelectorAll(".pstep").length + 1; last.insertAdjacentHTML("beforeend", stepHtml([`C${n}`, "New step", 0, "added by you · now"])); sum(); const tx = last.lastElementChild.querySelector(".tx"); tx.focus(); getSelection().selectAllChildren(tx); });
+    $("pl-agent").addEventListener("click", () => { const cur = rows().find((r) => !r.querySelector("input").checked); if (!cur) return; cur.querySelector("input").checked = true; cur.querySelector(".who").textContent = "ticked by codex · now"; sum(); });
+  }
+
+  // One theme switch for every demo on the page.
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-demo-theme]"); if (!b) return;
+    document.querySelectorAll("[data-demo-theme]").forEach((x) => x.classList.toggle("on", x === b));
+    document.querySelectorAll(".app[data-demo]").forEach((el) => { el.className = el.className.replace(/\b(plotter|tide|night)\b/g, "").replace(/\s+/g, " ").trim() + " " + b.dataset.demoTheme; });
+  });

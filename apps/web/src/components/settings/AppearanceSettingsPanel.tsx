@@ -10,6 +10,7 @@ import {
   MAX_APPEARANCE_CONTRAST,
   MAX_GLASS_OPACITY,
   MAX_PANEL_ANIMATION_DURATION_MS,
+  MAX_PLOTTER_TIDE_FROZEN_BLUR,
   MIN_APPEARANCE_CONTRAST,
   MIN_GLASS_OPACITY,
   MIN_PANEL_ANIMATION_DURATION_MS,
@@ -84,6 +85,74 @@ const EFFORT_DISPLAY_LABELS: Record<EffortDisplay, string> = {
   label: msg("Word", { $context: "show effort as a word" }),
   bars: msg("Bars", { $context: "show effort as bars" }),
 };
+
+const FROZEN_CONTROLS = [
+  ["plotter-frozen-transparency", "plotterTideFrozenTransparency", 100, 1, "%"],
+  ["plotter-frozen-blur", "plotterTideFrozenBlur", MAX_PLOTTER_TIDE_FROZEN_BLUR, 0.5, "px"],
+  ["plotter-frozen-grain", "plotterTideFrozenGrain", 100, 1, "%"],
+] as const;
+
+function PlotterTideFrozenSettings() {
+  const gt = useGT();
+  const searchableSetting = useSearchableSetting();
+  const settings = useScopedSettings();
+  const updateSettings = useUpdateScopedSettings();
+
+  return (
+    <SettingsSection title={gt("Plotter Tide Frozen")}>
+      {FROZEN_CONTROLS.map(([id, setting, max, step, unit]) => {
+        const row = searchableSetting(id);
+        const value = settings[setting];
+        const defaultValue = DEFAULT_UNIFIED_SETTINGS[setting];
+        const fraction = value / max;
+        return (
+          <SettingsRow
+            key={setting}
+            {...row}
+            resetAction={
+              value !== defaultValue ? (
+                <SettingResetButton
+                  ariaLabel={gt("Reset to default")}
+                  onClick={() => updateSettings({ [setting]: defaultValue })}
+                />
+              ) : null
+            }
+            control={
+              <div className="flex w-full items-center gap-3 sm:w-52">
+                <output
+                  className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
+                  htmlFor={`${id}-slider`}
+                >
+                  {value}
+                  {unit}
+                </output>
+                <input
+                  aria-label={row.title}
+                  className="settings-slider min-w-0 flex-1"
+                  id={`${id}-slider`}
+                  type="range"
+                  min={0}
+                  max={max}
+                  step={step}
+                  value={value}
+                  onChange={(event) =>
+                    updateSettings({ [setting]: event.currentTarget.valueAsNumber })
+                  }
+                  style={
+                    {
+                      "--settings-slider-progress": `${fraction * 100}%`,
+                      "--settings-slider-fill-offset": `${0.5 - fraction}rem`,
+                    } as CSSProperties
+                  }
+                />
+              </div>
+            }
+          />
+        );
+      })}
+    </SettingsSection>
+  );
+}
 
 export function AppearanceSettingsPanel() {
   const searchableSetting = useSearchableSetting();
@@ -166,6 +235,8 @@ export function AppearanceSettingsPanel() {
           />
         </div>
       </SettingsSection>
+
+      <PlotterTideFrozenSettings />
 
       <SettingsSection id="appearance-interface" title={gt("Interface")}>
         <SettingsRow

@@ -23,6 +23,7 @@ export type SettingsPath =
   | "/settings/diagnostics"
   | "/settings/voice"
   | "/settings/appearance"
+  | "/settings/tack"
   | "/settings/chat"
   | "/settings/diffs"
   | "/settings/keybindings"
@@ -98,6 +99,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/projects": msg("Projects"),
   "/settings/general": msg("General"),
   "/settings/appearance": msg("Appearance"),
+  "/settings/tack": msg("Tack"),
   "/settings/chat": msg("Chat"),
   "/settings/diffs": msg("Diffs & pull requests"),
   "/settings/keybindings": msg("Keybindings"),
@@ -140,6 +142,7 @@ export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
     paths: [
       "/settings/general",
       "/settings/appearance",
+      "/settings/tack",
       "/settings/chat",
       "/settings/diffs",
       "/settings/keybindings",
@@ -352,6 +355,21 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: msg("Glass opacity"),
     to: "/settings/appearance",
     searchTerms: [msg("transparent transparency solid menus dialogs composer")],
+  },
+  {
+    id: "plotter-frozen-transparency",
+    title: msg("Frozen transparency"),
+    to: "/settings/appearance",
+  },
+  {
+    id: "plotter-frozen-blur",
+    title: msg("Frozen blur"),
+    to: "/settings/appearance",
+  },
+  {
+    id: "plotter-frozen-grain",
+    title: msg("Frozen grain"),
+    to: "/settings/appearance",
   },
   {
     id: "diff-color-scheme",
@@ -1491,6 +1509,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/general": null,
   "/settings/voice": null,
   "/settings/appearance": null,
+  "/settings/tack": null,
   "/settings/chat": null,
   "/settings/diffs": null,
   "/settings/snap-shot": null,

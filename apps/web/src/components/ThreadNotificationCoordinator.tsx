@@ -163,6 +163,8 @@ export function startThreadNotifications(
     }
     if (
       inAppNotificationsEnabled &&
+      // Project Board fork: on the board Tack announces with its own banner and holds the notice.
+      router.state.location.pathname !== "/board" &&
       document.visibilityState === "visible" &&
       document.hasFocus() &&
       (active.environmentId !== environmentId || active.threadId !== thread.id)

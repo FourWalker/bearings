@@ -8,5 +8,9 @@
   "ember-light",
   "ember-dark",
   "iris-light",
-  "iris-dark"
+  "iris-dark",
+  "plotter-tide-light",
+  "plotter-tide-dark",
+  "clay-post-light",
+  "clay-post-dark"
 ]

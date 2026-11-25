@@ -216,6 +216,9 @@ export function promptLinkAppPath(
   const url = parseUrl(value);
   if (!url) return null;
   if (APP_SCHEME.test(url.protocol)) {
+    if (url.host === "board" && (url.pathname === "" || url.pathname === "/")) {
+      return `/board${url.search}`;
+    }
     if (url.host === "new" && (url.pathname === "" || url.pathname === "/")) {
       return `/new${url.search}`;
     }
@@ -235,6 +238,9 @@ export function promptLinkAppPath(
 
 export function promptLinkDeepLink(appPath: string, scheme = "t3code"): string {
   const url = new URL(appPath, "https://app.invalid");
-  const host = url.pathname === "/new" ? "new" : `threads${url.pathname}`;
+  const host =
+    url.pathname === "/new" || url.pathname === "/board"
+      ? url.pathname.slice(1)
+      : `threads${url.pathname}`;
   return `${scheme}://${host}${url.search}`;
 }

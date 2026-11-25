@@ -1,0 +1,896 @@
+/* Clay Post: Claude-style cream and terracotta, with vintage stationery on the board and in
+   dialogs. Everything here is static (no animation) and scoped to the theme id. */
+html[data-theme-id="clay-post"] {
+  --clay-serif:
+    "Anthropic Serif", "Source Serif 4", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --clay-type: "Courier Prime", "Courier New", ui-monospace, monospace;
+  --clay-ink: #2a2620;
+  --clay-ink-soft: #625c50;
+  --clay: #b4532f;
+  --clay-deep: #8e3e22;
+  --clay-wash: #d9a88f;
+  --clay-tape: rgb(217 119 87 / 0.6);
+  --clay-tape-light: rgb(217 119 87 / 0.36);
+  --clay-sage: #4f5b30;
+  --clay-dot: #d8cdb8;
+  --clay-rule: #cfc4af;
+  --clay-shadow: rgb(120 60 30 / 0.45);
+  --clay-stamp: url("./assets/clay-post/stamp-day.svg");
+  --board-note-1: #f7e4d4;
+  --board-note-2: #f3e7c4;
+  --board-note-3: #efe3dc;
+  --board-note-4: #e6e6d0;
+  --board-note-5: #f1ebdd;
+  --board-note-6: #f2dacb;
+  --board-note-ink: #2a2620;
+}
+
+html.dark[data-theme-id="clay-post"] {
+  --clay-ink: #ede6d8;
+  --clay-ink-soft: #b3a894;
+  --clay: #e08a64;
+  --clay-deep: #f0a483;
+  --clay-wash: #8a5a44;
+  --clay-tape: rgb(224 138 100 / 0.5);
+  --clay-tape-light: rgb(224 138 100 / 0.28);
+  --clay-sage: #b5c08a;
+  --clay-dot: #352e27;
+  --clay-rule: #4a4036;
+  --clay-shadow: rgb(0 0 0 / 0.6);
+  --clay-stamp: url("./assets/clay-post/stamp-night.svg");
+  --board-note-1: #3d2b22;
+  --board-note-2: #3a3222;
+  --board-note-3: #382a29;
+  --board-note-4: #2f3226;
+  --board-note-5: #312a22;
+  --board-note-6: #3f2c25;
+  --board-note-ink: #f1ead9;
+}
+
+/* ---------- Type: serif headings, typewriter labels ---------- */
+
+html[data-theme-id="clay-post"]
+  :is(
+    [data-board-note-title],
+    [data-board-task-title],
+    [data-slot="dialog-title"],
+    [data-slot="alert-dialog-title"],
+    [data-slot="sheet-title"],
+    [data-slot="popover-title"],
+    [data-slot="empty-title"]
+  ) {
+  font-family: var(--clay-serif);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+html[data-theme-id="clay-post"]
+  :is(
+    [data-board-note-label],
+    [data-board-card-title],
+    [data-board-panel-heading],
+    [data-board-task-tabs] [role="tab"],
+    [data-board-tag],
+    [data-slot="menu-label"],
+    [data-slot="command-group-label"],
+    [data-slot="kbd"],
+    [data-slot="menu-shortcut"],
+    [data-slot="command-shortcut"]
+  ) {
+  font-family: var(--clay-type);
+  letter-spacing: 0.1em;
+}
+
+/* ---------- The board desk ---------- */
+
+html[data-theme-id="clay-post"] [data-board-surface] {
+  background-color: var(--app-theme-canvas);
+  background-image: radial-gradient(var(--clay-dot) 1px, transparent 1.3px);
+  background-size: 22px 22px;
+  padding: 2rem 1.75rem 3rem;
+}
+
+html[data-theme-id="clay-post"] [data-board-tag] {
+  border-radius: 4px 12px 12px 4px;
+  border: 1px solid color-mix(in srgb, var(--clay-wash) 70%, transparent);
+  background: color-mix(in srgb, var(--clay-wash) 18%, transparent);
+  letter-spacing: 0.02em;
+}
+
+/* Every note is a slip of paper with a soft drop shadow and a slight tilt. */
+html[data-theme-id="clay-post"] [data-board-note] {
+  position: relative;
+  border-radius: 6px;
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--clay-wash) 55%, transparent),
+    0 10px 24px -14px var(--clay-shadow);
+}
+
+html[data-theme-id="clay-post"] [data-board-note][data-note-colour="1"],
+html[data-theme-id="clay-post"] [data-board-note][data-note-colour="4"] {
+  rotate: -0.7deg;
+}
+
+html[data-theme-id="clay-post"] [data-board-note][data-note-colour="2"],
+html[data-theme-id="clay-post"] [data-board-note][data-note-colour="5"] {
+  rotate: 0.9deg;
+}
+
+html[data-theme-id="clay-post"] [data-board-note][data-note-colour="3"],
+html[data-theme-id="clay-post"] [data-board-note][data-note-colour="6"] {
+  rotate: 0.4deg;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme-id="clay-post"] [data-board-note] {
+    rotate: none;
+  }
+}
+
+/* Master notes are taped down with striped washi tape. */
+html[data-theme-id="clay-post"] [data-board-note="note"] {
+  margin-top: 0.75rem;
+  padding-top: 1.25rem;
+}
+
+html[data-theme-id="clay-post"] [data-board-note="note"]::before {
+  content: "";
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  width: 7.5rem;
+  height: 1.5rem;
+  translate: -50% 0;
+  rotate: -3deg;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--clay-tape) 0 7px,
+    var(--clay-tape-light) 7px 14px
+  );
+  clip-path: polygon(3% 0, 97% 4%, 100% 50%, 97% 100%, 2% 96%, 0 50%);
+}
+
+/* Modules are lined notebook pages, clipped on, with a clay margin rule. */
+html[data-theme-id="clay-post"] [data-board-note="module"] {
+  padding-left: 1.75rem;
+  border-radius: 4px;
+  background-image: repeating-linear-gradient(
+    180deg,
+    transparent 0 25px,
+    color-mix(in srgb, var(--board-note-ink) 12%, transparent) 25px 26px
+  );
+}
+
+html[data-theme-id="clay-post"] [data-board-note="module"]::before {
+  content: "";
+  position: absolute;
+  top: -16px;
+  right: 1.5rem;
+  width: 14px;
+  height: 36px;
+  pointer-events: none;
+  background-color: var(--clay-ink-soft);
+  mask: url("./assets/clay-post/paperclip.svg") center / contain no-repeat;
+}
+
+html[data-theme-id="clay-post"] [data-board-note="module"]::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: 0.875rem;
+  pointer-events: none;
+  border-left: 1.5px solid color-mix(in srgb, var(--clay) 45%, transparent);
+}
+
+/* Finished notes fade a little and get an olive "done" seal. */
+html[data-theme-id="clay-post"] [data-board-note][data-note-status="done"] {
+  opacity: 0.85;
+}
+
+html[data-theme-id="clay-post"] [data-board-note="note"][data-note-status="done"]::after {
+  content: "";
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: 3.5rem;
+  height: 3.5rem;
+  rotate: -12deg;
+  pointer-events: none;
+  background-color: var(--clay-sage);
+  mask: url("./assets/clay-post/seal.svg") center / contain no-repeat;
+  opacity: 0.85;
+}
+
+/* A thread of dashed string ties each module to its master note. */
+html[data-theme-id="clay-post"] [data-board-module] {
+  position: relative;
+}
+
+html[data-theme-id="clay-post"] [data-board-module]::before {
+  content: "";
+  position: absolute;
+  bottom: 100%;
+  left: 1.75rem;
+  height: 0.75rem;
+  border-left: 2px dashed var(--clay-wash);
+}
+
+/* Blocked is a rubber stamp. */
+html[data-theme-id="clay-post"] [data-board-stamp="blocked"] {
+  justify-self: start;
+  rotate: -2deg;
+  padding: 0.125rem 0.5rem;
+  border: 3px double var(--clay);
+  border-radius: 5px;
+  color: var(--clay-deep);
+  background: color-mix(in srgb, var(--app-theme-surface-raised) 35%, transparent);
+  font-family: var(--clay-type);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+html[data-theme-id="clay-post"] [data-board-progress] {
+  height: 6px;
+  background: repeating-linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--clay-wash) 75%, transparent) 0 6px,
+    transparent 6px 10px
+  );
+}
+
+html[data-theme-id="clay-post"] [data-board-progress] > * {
+  background: var(--clay);
+}
+
+/* The last action tears off like a ticket stub and reads like a quote. */
+html[data-theme-id="clay-post"] [data-board-note-stub] {
+  position: relative;
+  border-top: 2px dashed color-mix(in srgb, var(--clay-wash) 80%, transparent);
+  background: transparent;
+}
+
+html[data-theme-id="clay-post"] [data-board-note-stub]::before,
+html[data-theme-id="clay-post"] [data-board-note-stub]::after {
+  content: "";
+  position: absolute;
+  top: -10px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--app-theme-canvas);
+  pointer-events: none;
+}
+
+html[data-theme-id="clay-post"] [data-board-note-stub]::before {
+  left: -9px;
+}
+
+html[data-theme-id="clay-post"] [data-board-note-stub]::after {
+  right: -9px;
+}
+
+html[data-theme-id="clay-post"] [data-board-note-quote] {
+  font-family: var(--clay-serif);
+  font-style: italic;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+
+html[data-theme-id="clay-post"] [data-board-note-strip] {
+  border-radius: 0 0 6px 6px;
+}
+
+/* ---------- The ledger (board panel) ---------- */
+
+html[data-theme-id="clay-post"] [data-board-panel] {
+  background-color: var(--app-theme-surface);
+  background-image: var(--clay-stamp);
+  background-repeat: no-repeat;
+  background-position: right 1.5rem bottom 1.5rem;
+  background-size: 6.5rem auto;
+  padding: 1.75rem 1.5rem 10.5rem;
+}
+
+html[data-theme-id="clay-post"] [data-board-panel] > div {
+  gap: 0.75rem;
+}
+
+html[data-theme-id="clay-post"] [data-board-panel-masthead] {
+  display: grid;
+  gap: 0.125rem;
+  margin-bottom: 0.625rem;
+}
+
+html[data-theme-id="clay-post"] [data-board-panel-kicker] {
+  font-family: var(--clay-type);
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--clay-ink-soft);
+}
+
+html[data-theme-id="clay-post"] [data-board-panel-heading-title] {
+  font-family: var(--clay-serif);
+  font-size: 1.375rem;
+  font-weight: 500;
+  color: var(--clay-ink);
+}
+
+html[data-theme-id="clay-post"] [data-board-panel-section] {
+  gap: 0.625rem;
+}
+
+/* Two ruled groups, as in a ledger: what's blocked, then the counts. */
+html[data-theme-id="clay-post"] [data-board-panel-section="blocked"],
+html[data-theme-id="clay-post"] [data-board-panel-masthead] + [data-board-panel-section],
+html[data-theme-id="clay-post"] [data-board-panel-section="blocked"] + [data-board-panel-section] {
+  border-top: 1px solid var(--app-theme-border);
+  padding-top: 0.875rem;
+}
+
+html[data-theme-id="clay-post"] [data-board-panel-section="blocked"] + [data-board-panel-section] {
+  margin-top: 0.75rem;
+}
+
+html[data-theme-id="clay-post"] [data-board-panel-heading] {
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  color: var(--clay-ink);
+}
+
+/* Dotted leaders run from each label to its count. */
+html[data-theme-id="clay-post"] [data-board-panel-heading]::after {
+  content: "";
+  order: 1;
+  flex: 1;
+  translate: 0 -3px;
+  border-bottom: 1.5px dotted var(--clay-rule);
+}
+
+html[data-theme-id="clay-post"] [data-board-panel-count] {
+  order: 2;
+  background: transparent;
+  padding: 0;
+  font-family: var(--clay-type);
+  font-size: 0.8125rem;
+  color: var(--clay-ink-soft);
+}
+
+html[data-theme-id="clay-post"] [data-board-panel-section="blocked"] [data-board-panel-heading] {
+  font-weight: 700;
+  color: var(--clay-deep);
+}
+
+html[data-theme-id="clay-post"]
+  [data-board-panel-section="blocked"]
+  [data-board-panel-heading]::after {
+  border-bottom-color: transparent;
+}
+
+html[data-theme-id="clay-post"] [data-board-panel-section="blocked"] [data-board-panel-row] {
+  padding: 0.625rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--clay-wash) 60%, transparent);
+  background: var(--board-note-1);
+}
+
+html[data-theme-id="clay-post"]
+  [data-board-panel-section="blocked"]
+  [data-board-panel-row]
+  > [aria-hidden] {
+  display: none;
+}
+
+html[data-theme-id="clay-post"]
+  [data-board-panel-section="blocked"]
+  [data-board-panel-row]
+  > span
+  > span:first-child {
+  font-family: var(--clay-serif);
+  font-size: 1rem;
+}
+
+html[data-theme-id="clay-post"] [data-board-panel-none=""] {
+  display: none;
+}
+
+html[data-theme-id="clay-post"] [data-board-panel-none="tidy"] {
+  padding: 0;
+  font-family: var(--clay-serif);
+  font-style: italic;
+  font-size: 0.9375rem;
+  color: var(--clay-sage);
+}
+
+html[data-theme-id="clay-post"] [data-board-panel-section="blocked"] [data-board-panel-count] {
+  display: grid;
+  place-items: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--clay);
+  color: var(--app-theme-accent-foreground);
+  font-family: inherit;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* ---------- Board masthead ---------- */
+
+html[data-theme-id="clay-post"] [data-board-masthead] {
+  gap: 0.75rem;
+  padding: 1rem 1.75rem 0.875rem;
+  background: var(--app-theme-toolbar);
+  border-bottom-color: var(--app-theme-border);
+}
+
+html[data-theme-id="clay-post"] [data-board-masthead-title] {
+  font-family: var(--clay-serif);
+  font-size: 1.625rem;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+html[data-theme-id="clay-post"] [data-board-masthead-accent] {
+  font-style: italic;
+  color: var(--clay-deep);
+}
+
+/* Workspace copies hang off the board like luggage tags. */
+html[data-theme-id="clay-post"] [data-board-masthead] [data-board-tag] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  color: var(--clay-ink);
+  background: color-mix(in srgb, var(--clay-wash) 22%, var(--app-theme-surface-raised));
+  border-color: color-mix(in srgb, var(--clay-wash) 60%, transparent);
+}
+
+html[data-theme-id="clay-post"] [data-board-masthead] [data-board-tag]::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1.5px solid var(--clay-deep);
+}
+
+html[data-theme-id="clay-post"] [data-board-settings] {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--app-theme-border);
+  border-radius: 10px;
+  background: var(--app-theme-surface-raised);
+}
+
+html[data-theme-id="clay-post"] [data-board-new-task] {
+  height: 2.5rem;
+  padding-inline: 1rem;
+  border: 0;
+  border-radius: 10px;
+  background: var(--clay);
+  color: var(--app-theme-accent-foreground);
+  font-size: 0.875rem;
+  font-weight: 600;
+  box-shadow: 0 2px 0 #7a341c;
+}
+
+html.dark[data-theme-id="clay-post"] [data-board-new-task] {
+  box-shadow: 0 2px 0 #8a4a30;
+}
+
+html[data-theme-id="clay-post"] :is([data-board-new-task], [data-sidebar-new-chat])::before {
+  box-shadow: none;
+}
+
+/* View and status filters sit in recessed trays. */
+html[data-theme-id="clay-post"] [data-board-masthead] [data-slot="toggle-group"] {
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--app-theme-border);
+  border-radius: 12px;
+  background: var(--app-theme-secondary);
+}
+
+html[data-theme-id="clay-post"] [data-board-masthead] [data-slot="toggle"] {
+  height: 2.125rem;
+  padding-inline: 0.75rem;
+  border-radius: 9px;
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--clay-ink-soft);
+}
+
+html[data-theme-id="clay-post"] [data-board-masthead] [data-slot="toggle"][data-pressed] {
+  background-color: var(--app-theme-surface-raised);
+  box-shadow: 0 1px 2px rgb(60 40 20 / 0.12);
+  font-weight: 600;
+  color: var(--clay-ink);
+}
+
+html[data-theme-id="clay-post"] [data-board-status-filter] [data-slot="toggle"][data-pressed] {
+  padding-left: 1.5rem;
+  background-image: radial-gradient(circle, var(--clay) 3px, transparent 3.5px);
+  background-position: left 0.5rem center;
+  background-size: 10px 10px;
+  background-repeat: no-repeat;
+}
+
+/* ---------- Sidebar ---------- */
+
+html[data-theme-id="clay-post"] [data-slot="sidebar-inner"] {
+  background-image: url("./assets/clay-post/topo-day.svg");
+  background-repeat: no-repeat;
+  background-position: left -40px bottom 40px;
+  background-size: 260px auto;
+}
+
+html.dark[data-theme-id="clay-post"] [data-slot="sidebar-inner"] {
+  background-image: url("./assets/clay-post/topo-night.svg");
+}
+
+html[data-theme-id="clay-post"] [data-sidebar-brand] {
+  color: var(--clay);
+}
+
+html[data-theme-id="clay-post"] [data-sidebar-brand] > span > span {
+  font-family: var(--clay-serif);
+  font-size: 1.25rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--clay-ink);
+}
+
+/* The environment pill is an inked stamp. */
+html[data-theme-id="clay-post"] [data-environment-identification="pill"] {
+  rotate: -4deg;
+  padding: 1px 6px;
+  border: 1.5px solid var(--clay-wash);
+  border-radius: 4px;
+  background: var(--app-theme-accent-surface);
+  color: var(--clay-deep);
+  font-family: var(--clay-type);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+html[data-theme-id="clay-post"] [data-sidebar-board-entry] {
+  height: 2.5rem;
+  padding-inline: 0.75rem;
+  border-radius: 10px;
+}
+
+html[data-theme-id="clay-post"] [data-sidebar-board-entry][aria-current="page"] {
+  background: var(--app-theme-surface-raised);
+  color: var(--clay-ink);
+  font-weight: 600;
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--clay-wash) 45%, transparent),
+    0 0 0 1px var(--app-theme-border);
+}
+
+html[data-theme-id="clay-post"] [data-sidebar-board-entry][aria-current="page"] svg {
+  color: var(--clay);
+}
+
+html[data-theme-id="clay-post"] [data-sidebar-board-entry][aria-current="page"]::after {
+  content: "";
+  margin-left: auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--clay);
+}
+
+html[data-theme-id="clay-post"] [data-sidebar-new-chat] {
+  height: 2.75rem;
+  border: 1.5px dashed var(--clay-wash);
+  border-radius: 12px;
+  background: var(--app-theme-surface-raised);
+  color: var(--clay-deep);
+  font-weight: 600;
+  box-shadow: none;
+}
+
+html[data-theme-id="clay-post"] [data-sidebar-new-chat] svg {
+  color: var(--clay);
+}
+
+html[data-theme-id="clay-post"] [data-sidebar-section-label] {
+  display: block;
+  padding: 0.5rem 0.5rem 0;
+  font-family: var(--clay-type);
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--clay-ink-soft);
+}
+
+/* Thread rows keep their fixed height (the list is virtualized); the card is drawn inside. */
+html[data-theme-id="clay-post"] [data-testid="sidebar-row-card"] {
+  background: transparent;
+  box-shadow: none;
+}
+
+html[data-theme-id="clay-post"] [data-testid="sidebar-row-card"]::before {
+  content: "";
+  position: absolute;
+  inset: 3px 1px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  pointer-events: none;
+}
+
+html[data-theme-id="clay-post"] [data-testid="sidebar-row-card"]:hover::before {
+  background: color-mix(in srgb, var(--app-theme-surface-raised) 55%, transparent);
+}
+
+html[data-theme-id="clay-post"] [data-testid="sidebar-row-card"][data-row-state]::before {
+  background: var(--app-theme-surface);
+  border-color: var(--app-theme-border);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--clay-wash) 45%, transparent);
+}
+
+html[data-theme-id="clay-post"] [data-sidebar-row-title],
+html[data-theme-id="clay-post"] [data-sidebar-row-title] * {
+  font-family: var(--clay-serif);
+  font-size: 0.9375rem;
+  font-weight: 400;
+}
+
+html[data-theme-id="clay-post"] [data-testid="sidebar-settled-header"] {
+  border-top: 1px dashed var(--clay-rule);
+}
+
+/* ---------- Task page and task modal ---------- */
+
+html[data-theme-id="clay-post"] [data-board-task-header] {
+  background: var(--app-theme-toolbar);
+  border-bottom-style: dashed;
+  border-bottom-color: var(--clay-rule);
+}
+
+html[data-theme-id="clay-post"] [data-board-task-title] {
+  font-size: 1.625rem;
+  line-height: 1.2;
+}
+
+/* Tabs are the tabs on a row of index-card folders. */
+html[data-theme-id="clay-post"] [data-board-task-tabs] {
+  gap: 0.25rem;
+  padding-top: 0.5rem;
+  background: var(--app-theme-toolbar);
+}
+
+html[data-theme-id="clay-post"] [data-board-task-tabs] [role="tab"] {
+  margin-bottom: -1px;
+  padding-inline: 0.75rem;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+html[data-theme-id="clay-post"] [data-board-task-tabs] [role="tab"][data-active] {
+  border-color: var(--app-theme-border);
+  background: var(--app-theme-canvas);
+  color: var(--clay-deep);
+}
+
+html[data-theme-id="clay-post"] [data-board-card] {
+  border-radius: 6px;
+  background: var(--app-theme-surface-raised);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--clay-wash) 45%, transparent);
+}
+
+/* Section headings carry the red rule of an index card. */
+html[data-theme-id="clay-post"] [data-board-card-title] {
+  padding-bottom: 0.375rem;
+  border-bottom: 1.5px solid color-mix(in srgb, var(--clay) 40%, transparent);
+  color: var(--clay-ink-soft);
+}
+
+/* ---------- Dialogs: letters on cream paper ---------- */
+
+html[data-theme-id="clay-post"]
+  :is(
+    [data-slot="dialog-backdrop"],
+    [data-slot="alert-dialog-backdrop"],
+    [data-slot="sheet-backdrop"],
+    [data-slot="command-dialog-backdrop"]
+  ) {
+  background-color: rgb(42 38 32 / 0.32);
+}
+
+html.dark[data-theme-id="clay-post"]
+  :is(
+    [data-slot="dialog-backdrop"],
+    [data-slot="alert-dialog-backdrop"],
+    [data-slot="sheet-backdrop"],
+    [data-slot="command-dialog-backdrop"]
+  ) {
+  background-color: rgb(10 8 6 / 0.6);
+}
+
+html[data-theme-id="clay-post"]
+  :is(
+    [data-slot="dialog-popup"]:not(.bg-transparent),
+    [data-slot="alert-dialog-popup"],
+    [data-slot="sheet-popup"],
+    [data-slot="command-dialog-popup"]
+  ) {
+  background-color: color-mix(
+    in srgb,
+    var(--app-theme-surface-raised) var(--glass-opacity),
+    transparent
+  );
+  border-color: var(--app-theme-border);
+  border-radius: 12px;
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--clay-wash) 50%, transparent),
+    0 28px 60px -28px var(--clay-shadow);
+}
+
+/* A strip of washi tape holds each letter to the desk. */
+html[data-theme-id="clay-post"]
+  :is([data-slot="dialog-popup"]:not(.bg-transparent), [data-slot="alert-dialog-popup"])::before {
+  content: "";
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  z-index: 1;
+  width: 6.5rem;
+  height: 1.375rem;
+  translate: -50% 0;
+  rotate: -2deg;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--clay-tape) 0 7px,
+    var(--clay-tape-light) 7px 14px
+  );
+  clip-path: polygon(3% 0, 97% 4%, 100% 50%, 97% 100%, 2% 96%, 0 50%);
+}
+
+@media (max-width: 639px) {
+  html[data-theme-id="clay-post"] [data-slot="dialog-popup"]::before {
+    display: none;
+  }
+}
+
+/* The footer is the perforated foot of the letter. */
+html[data-theme-id="clay-post"]
+  :is([data-slot="dialog-footer"], [data-slot="alert-dialog-footer"]) {
+  position: relative;
+  border-top: 2px dashed color-mix(in srgb, var(--clay-wash) 70%, transparent);
+  background: color-mix(in srgb, var(--app-theme-muted) 60%, transparent);
+}
+
+html[data-theme-id="clay-post"]
+  :is([data-slot="dialog-footer"], [data-slot="alert-dialog-footer"])::before,
+html[data-theme-id="clay-post"]
+  :is([data-slot="dialog-footer"], [data-slot="alert-dialog-footer"])::after {
+  content: "";
+  position: absolute;
+  top: -9px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--app-theme-canvas);
+  border: 1px solid var(--app-theme-border);
+  pointer-events: none;
+}
+
+html[data-theme-id="clay-post"]
+  :is([data-slot="dialog-footer"], [data-slot="alert-dialog-footer"])::before {
+  left: -9px;
+  clip-path: inset(0 0 0 50%);
+}
+
+html[data-theme-id="clay-post"]
+  :is([data-slot="dialog-footer"], [data-slot="alert-dialog-footer"])::after {
+  right: -9px;
+  clip-path: inset(0 50% 0 0);
+}
+
+/* Confirmations are telegrams: a double clay rule under the heading. */
+html[data-theme-id="clay-post"] [data-slot="alert-dialog-header"] {
+  border-bottom: 3px double color-mix(in srgb, var(--clay) 55%, transparent);
+}
+
+/* The command palette is a card-catalogue drawer. */
+html[data-theme-id="clay-post"] [data-slot="command-group-label"] {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  color: var(--clay-deep);
+}
+
+html[data-theme-id="clay-post"] [data-slot="command-item"][data-highlighted] {
+  background: var(--app-theme-accent-surface);
+  color: var(--app-theme-accent-surface-foreground);
+}
+
+/* ---------- Menus, popovers, tooltips and toasts ---------- */
+
+html[data-theme-id="clay-post"]
+  :is(
+    [data-slot="menu-popup"],
+    [data-slot="menu-sub-content"],
+    [data-slot="popover-popup"],
+    [data-slot="select-popup"],
+    [data-slot="combobox-popup"],
+    [data-slot="autocomplete-popup"],
+    [data-slot="preview-card-popup"],
+    [data-slot="toast-popup"]
+  ) {
+  background-color: color-mix(
+    in srgb,
+    var(--app-theme-surface-overlay) var(--glass-opacity),
+    transparent
+  );
+  border-color: var(--app-theme-border);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--clay-wash) 45%, transparent),
+    0 16px 36px -18px var(--clay-shadow);
+}
+
+html[data-theme-id="clay-post"] [data-slot="menu-label"] {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+}
+
+html[data-theme-id="clay-post"] [data-slot="menu-separator"] {
+  height: 0;
+  background: none;
+  border-top: 1.5px dotted var(--clay-rule);
+}
+
+/* Tooltips are little ink-on-card tags. */
+html[data-theme-id="clay-post"] [data-slot="tooltip-popup"] {
+  border-radius: 4px 10px 10px 4px;
+  background: var(--clay-ink);
+  color: var(--app-theme-canvas);
+  border-color: transparent;
+}
+
+/* The thread list keeps to the paper palette: greens become clay and ochre, and Done takes
+   the artifact's ink olive. Scoped to the list so app-wide success colours stay as they are. */
+html[data-theme-id="clay-post"] [data-slot="sidebar-content"] {
+  --success: var(--clay);
+  --success-foreground: #4f5b30;
+  --color-green-600: #a0522d;
+  --color-emerald-600: #8e3e22;
+  --color-lime-600: #9a6a1e;
+  --color-teal-600: #7e4a2a;
+  --color-green-500: #b4532f;
+  --color-emerald-500: #b4532f;
+  --color-lime-500: #b07a18;
+  --color-teal-500: #a0682f;
+}
+
+html.dark[data-theme-id="clay-post"] [data-slot="sidebar-content"] {
+  --success-foreground: #cfc59a;
+  --color-emerald-300: #f0b496;
+  --color-green-300: #eab08c;
+  --color-green-400: #e8a074;
+  --color-emerald-400: #f0a483;
+  --color-lime-400: #e0b266;
+  --color-teal-400: #d9a88f;
+  --color-green-500: #e08a64;
+  --color-emerald-500: #e08a64;
+  --color-lime-500: #e0b266;
+  --color-teal-500: #d9a88f;
+}
+
+html[data-theme-id="clay-post"] [data-slot="sidebar-content"] .text-success-foreground {
+  font-weight: 600;
+}

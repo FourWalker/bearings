@@ -971,6 +971,17 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
           appVersion: WINDOWS_PAYLOAD_FIXTURE_VERSION,
         });
 
+        const compileCache = path.join(fixture.packagedAppDir, "resources", "server-compile-cache");
+        yield* fs.makeDirectory(compileCache);
+        yield* fs.writeFileString(path.join(compileCache, "85ab0327"), "prepared bytecode");
+        const withCompileCache = yield* validateWindowsPackagedPayload({
+          stageDistDir: fixture.stageDistDir,
+          appExecutableName: fixture.appExecutableName,
+          targetArch: "x64",
+          appVersion: WINDOWS_PAYLOAD_FIXTURE_VERSION,
+          fileLimit: result.fileCount,
+        });
+
         const secondAsarPath = path.join(path.dirname(fixture.generatedAsarPath), "second.asar");
         yield* packWindowsServerAsar({
           sourceDir: fixture.sourceDir,
@@ -985,6 +996,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         assert.equal(result.packagedAppDir, fixture.packagedAppDir);
         assert.deepStrictEqual(result.unpackedFiles, ["node_modules/native/addon.node"]);
         assert.isBelow(result.fileCount, WINDOWS_PACKAGED_PAYLOAD_FILE_LIMIT);
+        assert.equal(withCompileCache.fileCount, result.fileCount);
         assert.deepStrictEqual(secondAsar, firstAsar);
       }),
     ).pipe(Effect.provideService(HostProcess.Platform, "linux")),

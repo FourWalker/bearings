@@ -1,0 +1,619 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Tack: a living assistant on the board (concept)</title>
+<style>
+  :root { --bg:#111; --app:#151515; --card:#1b1b1b; --pop:#1f1f1f; --border:#2c2c2c; --fg:#e8e6e1; --muted:#8d8a84;
+    --accent:#d97757; --ok:#5bb98c; --warn:#f5a524; --bad:#e5484d; --info:#6aa7e8; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.45 ui-sans-serif,system-ui,"Segoe UI",sans-serif; }
+  main { max-width:1180px; margin:0 auto; padding:28px 20px 80px; }
+  h1 { font-size:22px; margin:0 0 4px; } h2 { font-size:16px; margin:36px 0 6px; }
+  .lead, .sub { color:var(--muted); max-width:820px; margin:0 0 14px; }
+  canvas { image-rendering:pixelated; display:block; }
+  .btn { background:#242424; color:var(--fg); border:1px solid var(--border); border-radius:8px; padding:6px 10px; font:inherit; font-size:12.5px; cursor:pointer; }
+  .btn:hover { background:#2e2e2e; } .btn.primary { background:var(--accent); color:#1a1a1a; border-color:var(--accent); font-weight:600; }
+  .toolbar { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:10px 0; }
+  .toolbar .lbl { color:var(--muted); font-size:12px; margin-right:4px; }
+
+  /* ---------- Board mock ---------- */
+  .app { position:relative; height:660px; background:var(--app); border:1px solid var(--border); border-radius:12px; overflow:hidden; display:flex; flex-direction:column; user-select:none; }
+  .mast { padding:10px 16px; border-bottom:1px solid var(--border); display:grid; gap:8px; }
+  .mast h3 { margin:0; font-size:18px; } .mast h3 em { font-style:normal; color:var(--accent); }
+  .mrow { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .tag { border:1px solid var(--border); border-radius:999px; padding:1px 8px; font-size:12px; color:var(--muted); }
+  .tag.on { border-color:#2f6b4f; background:#1b3328; color:#bfe6d1; }
+  .seg { display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  .seg span { padding:3px 9px; font-size:12px; color:var(--muted); } .seg span.on { background:#2a2a2a; color:var(--fg); }
+  .body { flex:1; display:flex; min-height:0; }
+  .surface { position:relative; flex:1; padding:18px; overflow:hidden; }
+  .notes { display:grid; grid-template-columns:repeat(3, 1fr); gap:26px 18px; padding-top:22px; }
+  .note { position:relative; background:var(--card); border:1px solid var(--border); border-radius:10px; padding:10px 12px; min-height:112px; transition:box-shadow .2s steps(2), border-color .2s steps(2); }
+  .note .lab { font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
+  .note h4 { margin:2px 0 6px; font-size:14px; }
+  .note p { margin:0 0 8px; font-size:12px; color:#b5b1aa; }
+  .bar { height:4px; border-radius:4px; background:#2a2a2a; overflow:hidden; } .bar i { display:block; height:100%; background:#8f8a82; }
+  .stamp { display:inline-block; font-size:11px; font-weight:600; color:var(--bad); margin-bottom:4px; }
+  .note.lit { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent), 0 0 0 6px #d9775722; }
+  .note.new { border-color:var(--accent); animation:drop .45s steps(4); }
+  @keyframes drop { 0% { transform:translateY(-14px); opacity:.2 } 100% { transform:none; opacity:1 } }
+  .note .pin { position:absolute; top:-7px; left:50%; width:10px; height:10px; background:var(--bad); border-radius:50%; box-shadow:0 2px 0 #7d2227; transform:translateX(-50%); }
+  .panel { width:280px; border-left:1px solid var(--border); background:#171717; display:flex; flex-direction:column; position:relative; }
+  .ptabs { display:flex; gap:2px; padding:8px 10px 0; border-bottom:1px solid var(--border); }
+  .ptabs button { background:none; border:0; color:var(--muted); padding:6px 10px; font:inherit; font-size:12.5px; cursor:pointer; border-bottom:2px solid transparent; }
+  .ptabs button.on { color:var(--fg); border-color:var(--accent); }
+  .pbody { flex:1; overflow:auto; padding:10px 12px; }
+  .psec { margin-bottom:14px; } .psec h5 { margin:0 0 6px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); display:flex; justify-content:space-between; }
+  .prow { font-size:12.5px; padding:5px 8px; border-radius:6px; background:#1d1d1d; margin-bottom:4px; }
+  .prow small { display:block; color:var(--muted); font-size:11px; }
+  .prow.goal-done { outline:1px solid #2f6b4f; }
+  .corner { height:96px; border-top:1px dashed #2a2a2a; position:relative; background:
+      linear-gradient(#1a1715,#1a1715) bottom/100% 14px no-repeat; }
+  .corner .rug { position:absolute; left:50%; bottom:8px; width:120px; height:8px; transform:translateX(-50%); background:repeating-linear-gradient(90deg,#3b2a24 0 8px,#4a332b 8px 16px); border-radius:2px; }
+  .corner .label { position:absolute; left:10px; top:6px; font-size:10px; color:#5d5a55; text-transform:uppercase; letter-spacing:.08em; }
+  .hist { display:grid; gap:8px; } .hist .m { font-size:12.5px; padding:6px 9px; border-radius:8px; background:#232323; max-width:92%; }
+  .hist .m.me { justify-self:end; background:#3a2a22; }
+  .hist .when { text-align:center; color:#5d5a55; font-size:10.5px; }
+
+  /* Tack + speech */
+  .tack { position:absolute; z-index:30; cursor:grab; }
+  .tack:active { cursor:grabbing; }
+  .bed { position:absolute; z-index:5; pointer-events:none; }
+  .speech { position:absolute; z-index:40; width:290px; background:#f4eedc; color:#1d1b18; border-radius:4px;
+    box-shadow:0 0 0 2px #1d1b18, 0 0 0 4px #f4eedc, 6px 6px 0 4px #00000055; padding:10px 12px; font-size:13px; }
+  .speech .tail { position:absolute; width:12px; height:12px; background:#f4eedc; box-shadow:2px 2px 0 0 #1d1b18; transform:rotate(45deg); bottom:-7px; }
+  .speech.side-r .tail { bottom:auto; left:-7px; box-shadow:-2px 2px 0 0 #1d1b18; }
+  .speech.side-l .tail { bottom:auto; left:auto; right:-7px; box-shadow:2px -2px 0 0 #1d1b18; }
+  .speech .who { font:600 10px ui-monospace,monospace; letter-spacing:.08em; color:#a0522d; text-transform:uppercase; margin-bottom:3px; display:flex; justify-content:space-between; }
+  .speech .who button { background:none; border:0; color:#7b746a; cursor:pointer; font:inherit; padding:0; }
+  .speech .me { font-size:12px; color:#6b655b; border-left:2px solid #c9bfa8; padding-left:7px; margin-bottom:6px; }
+  .speech .chips { display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; }
+  .speech .chips button { background:#fffaf0; color:#1d1b18; border:1.5px solid #1d1b18; border-radius:3px; padding:2px 8px; font:inherit; font-size:12px; cursor:pointer; }
+  .speech .chips button.go { background:#1d1b18; color:#f4eedc; }
+  .speech form { display:flex; gap:6px; margin-top:9px; }
+  .speech input { flex:1; min-width:0; border:1.5px solid #1d1b18; border-radius:3px; background:#fffaf0; padding:5px 7px; font:inherit; font-size:12.5px; color:#1d1b18; outline:none; }
+  .speech input:focus { box-shadow:0 0 0 2px #d9775766; }
+  .speech .send { border:0; background:#d97757; color:#1d1b18; font-weight:700; border-radius:3px; width:28px; cursor:pointer; box-shadow:0 0 0 1.5px #1d1b18; }
+  .speech .foot { display:flex; justify-content:space-between; margin-top:7px; font-size:11px; color:#7b746a; }
+  .speech .foot a { color:#a0522d; cursor:pointer; text-decoration:underline; }
+  .peek { position:absolute; z-index:41; background:#1d1b18; color:#f4eedc; font:11px ui-monospace,monospace; padding:3px 6px; border-radius:3px; pointer-events:none; }
+  .hint { position:absolute; left:16px; bottom:12px; z-index:4; font:11px ui-monospace,monospace; color:#5d5a55; }
+  .hint b { color:#8d8a84; }
+
+  /* Concept cards */
+  .concepts { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  .concept { background:#181818; border:1px solid var(--border); border-radius:12px; padding:12px; }
+  .concept.rec { border-color:var(--accent); }
+  .concept h3 { margin:8px 0 2px; font-size:14px; } .concept .tagline { color:var(--muted); font-size:12.5px; }
+  .concept ul { margin:8px 0 0; padding-left:18px; font-size:12.5px; color:#c9c5be; } .concept li { margin:2px 0; }
+  .mini { position:relative; height:170px; background:#141414; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  .mini .m-mast { height:22px; border-bottom:1px solid var(--border); }
+  .mini .m-notes { position:absolute; left:8px; top:32px; right:86px; display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .mini .m-notes i { height:46px; background:#1d1d1d; border:1px solid #2a2a2a; border-radius:4px; }
+  .mini .m-panel { position:absolute; right:0; top:22px; bottom:0; width:78px; border-left:1px solid var(--border); background:#171717; }
+  .mini .m-bub { position:absolute; background:#f4eedc; border-radius:2px; box-shadow:0 0 0 1px #1d1b18; height:24px; }
+  .mini .m-bar { position:absolute; background:#222; border:1px solid #333; border-radius:6px; }
+  .rules { display:grid; grid-template-columns:repeat(2,1fr); gap:10px 24px; font-size:13px; }
+  .rules div { background:#181818; border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
+  .rules b { display:block; margin-bottom:2px; } .rules span { color:#bdb9b2; }
+  .surfaces { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  .surf { background:#181818; border:1px solid var(--border); border-radius:12px; padding:12px; font-size:12.5px; color:#c9c5be; }
+  .surf b { color:var(--fg); }
+  .phone { margin:0 auto 10px; width:150px; height:250px; border:2px solid #333; border-radius:20px; background:#141414; position:relative; overflow:hidden; }
+  .phone .p-head { height:26px; border-bottom:1px solid #2a2a2a; }
+  .phone .p-note { margin:8px; height:44px; background:#1d1d1d; border:1px solid #2a2a2a; border-radius:4px; }
+  .phone .p-bar { position:absolute; left:0; right:0; bottom:0; height:44px; border-top:1px solid #2a2a2a; background:#181818; }
+  .taskpage { height:250px; border:1px solid #2a2a2a; border-radius:8px; background:#141414; position:relative; margin-bottom:10px; overflow:hidden; }
+  .taskpage .t-head { position:absolute; left:0; right:0; top:0; height:56px; border-bottom:1px solid #2a2a2a; padding:30px 10px 0; font-size:12px; font-weight:600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Tack, living on the board</h1>
+  <p class="lead">No "Ask Tack" button. Tack lives on the board itself: it sleeps in its corner of the panel, walks over to
+    the notes it's talking about, pins new notes where they belong, and talks in speech bubbles that hold
+    the conversation. Concept only, nothing here is built.</p>
+
+  <h2>1 · The board with Tack in it (interactive)</h2>
+  <p class="sub"><b>Try:</b> click Tack in its bed. Drag Tack onto a note to ask about that note. Type into the speech bubble.
+    Or use the buttons, which act out what happens when Tack answers a question or reacts to something on the board.</p>
+  <div class="toolbar">
+    <span class="lbl">You ask</span>
+    <button class="btn" data-ask="What is blocked?">"What is blocked?"</button>
+    <button class="btn" data-ask="Add a task for login bug">"Add a task for login bug"</button>
+    <button class="btn" data-ask="What should I pick up next?">"What should I pick up next?"</button>
+    <span style="width:12px"></span>
+    <span class="lbl">The board changes</span>
+    <button class="btn" data-event="blocked">A task gets blocked</button>
+    <button class="btn" data-event="goal">A Goal finishes</button>
+    <button class="btn" data-event="approval">Tack needs approval</button>
+    <button class="btn" data-event="bed">Idle (back to bed)</button>
+  </div>
+
+  <div class="app" id="app">
+    <div class="mast">
+      <h3>Payments <em>board</em></h3>
+      <div class="mrow">
+        <span class="tag on">checkout-api ●</span><span class="tag">web</span><span class="tag">ledger</span>
+        <span style="flex:1"></span>
+        <span class="seg"><span>Tree</span><span>Level 1</span><span class="on">Level 2</span><span>Level 3</span><span>By service</span><span>Register</span><span>Goals</span></span>
+        <span class="seg"><span class="on">Active</span><span>Paused</span><span>Done</span><span>All</span></span>
+      </div>
+    </div>
+    <div class="body">
+      <div class="surface" id="surface">
+        <div class="notes" id="notes"></div>
+        <div class="hint">Drag Tack onto a note · <b>T</b> calls Tack · <b>Esc</b> sends it off</div>
+      </div>
+      <aside class="panel" id="panel">
+        <div class="ptabs"><button class="on" data-tab="board">Where things stand</button><button data-tab="tack">Tack</button></div>
+        <div class="pbody" id="pbody"></div>
+        <div class="corner" id="corner"><span class="label">Tack's corner</span><div class="rug"></div></div>
+      </aside>
+    </div>
+  </div>
+
+  <h2>2 · Rules that make it feel alive, without getting in the way</h2>
+  <div class="rules">
+    <div><b>It has a home</b><span>A bed in the corner of the panel. When nothing is happening, Tack walks back and goes to sleep. You always know where to find it.</span></div>
+    <div><b>It goes where the work is</b><span>When an answer is about a note, Tack walks over and stands on it, and that note is highlighted. This uses the "show a task in the open window" channel the board already has.</span></div>
+    <div><b>The bubble is the chat</b><span>A speech bubble shows Tack's latest reply, with an input for your answer. The full history is a "Tack" tab in the panel, next to "Where things stand". There's no separate chat window.</span></div>
+    <div><b>It speaks up, but rarely</b><span>It only interrupts for things you'd want to know: a task got blocked, a Goal finished, or it needs your approval. At most one interruption every 10 minutes, never while you're typing, and none at all in quiet mode.</span></div>
+    <div><b>You can pick it up</b><span>Drag Tack onto a note to ask about that note. Drop it anywhere else and it stays put. <b>T</b> calls it to you and <b>Esc</b> sends it home.</span></div>
+    <div><b>Cheap when quiet</b><span>Tack only moves when something happens. Asleep, it's a 2 fps loop that stops after a minute. With reduced motion turned on, it jumps between spots and holds a pose instead of walking.</span></div>
+  </div>
+
+  <h2>3 · Three ways Tack could live on the board</h2>
+  <p class="sub">The interactive mock above is A. B and C are calmer options if roaming feels like too much.</p>
+  <div class="concepts">
+    <div class="concept rec">
+      <div class="mini" id="miniA"><div class="m-mast"></div><div class="m-notes"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="m-panel"></div>
+        <div class="m-bub" style="left:62px;top:56px;width:70px"></div></div>
+      <h3>A · Roamer (recommended)</h3>
+      <div class="tagline">Tack walks the board, and the speech bubble is the chat.</div>
+      <ul><li>Feels alive: it stands next to what it's talking about</li><li>Keeps the board in full view</li><li>Needs the rules above so it doesn't get in the way</li></ul>
+    </div>
+    <div class="concept">
+      <div class="mini" id="miniB"><div class="m-mast"></div><div class="m-notes"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="m-panel" style="width:110px"></div>
+        <div class="m-bub" style="right:8px;top:62px;width:94px;height:60px"></div></div>
+      <h3>B · Host of the panel</h3>
+      <div class="tagline">Tack sits at the top of the panel and tells you where things stand in its own words.</div>
+      <ul><li>The panel becomes a conversation that mixes status and chat</li><li>Calm: Tack only hops out to point at a note</li><li>Takes more space away from the panel's lists</li></ul>
+    </div>
+    <div class="concept">
+      <div class="mini" id="miniC"><div class="m-mast"></div><div class="m-notes"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="m-panel"></div>
+        <div class="m-bar" style="left:44px;top:3px;width:120px;height:16px"></div></div>
+      <h3>C · On the header</h3>
+      <div class="tagline">Tack sits on the board's header next to an "Ask the board…" box.</div>
+      <ul><li>Most discoverable, like a search bar with a face</li><li>Answers drop down as a sheet under the header</li><li>Less of a character: mostly a mascot</li></ul>
+    </div>
+  </div>
+
+  <h2>4 · Everywhere else Tack shows up</h2>
+  <div class="surfaces">
+    <div class="surf"><div class="taskpage"><div class="t-head">Refund flow edge cases</div><div id="miniTask" style="position:absolute;right:14px;top:4px"></div></div>
+      <b>Task page.</b> Tack comes along and stands on the task's header. The speech bubble opens downward and is about this task by default.</div>
+    <div class="surf"><div class="phone"><div class="p-head"></div><div class="p-note"></div><div class="p-note"></div><div class="p-note"></div><div class="p-bar"></div><div id="miniPhone" style="position:absolute;left:8px;bottom:30px"></div></div>
+      <b>Mobile.</b> There isn't room to walk around, so Tack lives on the bottom bar. Tapping it opens a sheet with the speech bubble at the top and the history below.</div>
+    <div class="surf"><div class="taskpage" style="display:grid;place-items:center"><div id="miniGoal"></div></div>
+      <b>Goals screen.</b> While a Goal runs, Tack sits by its card in the "write" pose and pins each task as it finishes. It's the same character, so it all feels like one board.</div>
+  </div>
+</main>
+
+<script>
+// ===================== Pixel sprites (same art as the samples) =====================
+const W = 26, H = 20;
+const SK = { O: "#D97757", K: "#1B1A18" };
+const FX = { P:"#F4EEDC", L:"#8E8670", Y:"#F2C14E", G:"#3A3A3A", Z:"#B8B2A4", A:"#F5A524", R:"#E5484D", B:"#7CC4F2", Wh:"#FFFFFF" };
+const BED = { pillow:"#F1EAD8", shade:"#CFC4AA", sheet:"#F4EEDC", red:"#C8363D", redDark:"#A42B32", edge:"#8C2329" };
+const Z_SMALL = ["111","..1","1..","111"], Z_BIG = ["11111","...1.","..1..",".1...","11111"];
+const SPARK = [["..1..","..1..","11111","..1..","..1.."],["1...1",".1.1.","..1..",".1.1.","1...1"],["1.1.1",".111.","11111",".111.","1.1.1"]];
+const TWINKLE = [".1.","111",".1."];
+const glyph = (g, rows, x, y, c) => rows.forEach((r, j) => [...r].forEach((ch, i) => ch === "1" && g.px(x + i, y + j, c)));
+
+function clawd(g, o = {}) {
+  const ox = o.x || 0, oy = o.y || 0, sq = o.squash ? 1 : 0;
+  const ground = 17 + oy, bx = 8 + ox, bot = ground - 2, top = ground - 7 + sq;
+  const legs = o.legs || "stand";
+  [[bx,0],[bx+2,1],[bx+7,0],[bx+9,1]].forEach(([lx, grp]) => {
+    let h = 2; if (legs === "tuck") h = 1; if (legs === "stepA" && grp === 0) h = 1; if (legs === "stepB" && grp === 1) h = 1;
+    for (let i = 0; i < h; i++) g.px(lx, bot + 1 + i, SK.O);
+  });
+  for (let y = top; y <= bot; y++) for (let x = bx; x < bx + 10; x++) g.px(x, y, SK.O);
+  const ar = top + 3;
+  const arm = (m, d) => { const s = d < 0 ? bx - 1 : bx + 10;
+    if (m === "out") { g.px(s, ar, SK.O); g.px(s + d, ar, SK.O); }
+    if (m === "down") g.px(s, ar + 1, SK.O);
+    if (m === "up") { g.px(s, ar - 1, SK.O); g.px(s + d, ar - 2, SK.O); g.px(s + d, ar - 3, SK.O); }
+    if (m === "wave") { g.px(s, ar - 1, SK.O); g.px(s + d, ar - 2, SK.O); g.px(s + 2 * d, ar - 2, SK.O); }
+    if (m === "hold") { g.px(s, ar + 1, SK.O); g.px(s + d, ar + 1, SK.O); }
+    if (m === "point") { g.px(s, ar - 1, SK.O); g.px(s + d, ar - 1, SK.O); g.px(s + 2 * d, ar - 2, SK.O); }
+  };
+  arm(o.armL || "out", -1); arm(o.armR || "out", 1);
+  const ey = top + 1;
+  [[bx + 2, -1], [bx + 7, 1]].forEach(([ex, side]) => eye(g, o.eyes || "open", ex, ey, side, top));
+  return { bx, top, bot, ground };
+}
+function eye(g, mode, ex, ey, side, top) {
+  const p = (x, y) => g.px(x, y, SK.K);
+  switch (mode) {
+    case "open": p(ex, ey); p(ex, ey + 1); break;
+    case "blink": p(ex, ey + 1); break;
+    case "closed": p(ex, ey + 1); p(ex - side, ey + 1); break;
+    case "down": p(ex, ey + 1); p(ex, ey + 2); break;
+    case "downR": p(ex + 1, ey + 1); p(ex + 1, ey + 2); break;
+    case "up": p(ex, top); p(ex, top + 1); break;
+    case "upL": p(ex - 1, top); p(ex - 1, top + 1); break;
+    case "left": p(ex - 1, ey); p(ex - 1, ey + 1); break;
+    case "right": p(ex + 1, ey); p(ex + 1, ey + 1); break;
+    case "happy": p(ex - 1, ey + 1); p(ex, ey); p(ex + 1, ey + 1); break;
+    case "wide": p(ex, ey); p(ex, ey + 1); p(ex - side, ey); p(ex - side, ey + 1); break;
+  }
+}
+function tucked(g, sq) {
+  const [x0, x1, y0, y1] = sq ? [3, 14, 9, 14] : [4, 13, 8, 14];
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    if ((y === y0 || y === y1) && (x === x0 || x === x1)) continue;
+    g.px(x, y, y === y1 || x === x0 ? BED.shade : BED.pillow);
+  }
+  g.px(x0 + 2, y0 + 2, BED.shade); g.px(x0 + 2, y0 + 3, BED.shade);
+  const b = clawd(g, { x: 1, eyes: "closed", squash: sq, armL: "down", armR: "down", legs: "tuck" });
+  blanket(g, b.bx, b.top + 4);
+}
+function blanket(g, bx, bt) {
+  for (let y = bt; y <= 18; y++) for (let x = bx - 2; x <= bx + 11; x++) {
+    if (y === bt && (x === bx - 2 || x === bx + 11)) continue;
+    let c = (x + y) % 4 === 0 ? BED.redDark : BED.red; if (y === bt) c = BED.sheet; if (y === 18) c = BED.edge;
+    g.px(x, y, c);
+  }
+}
+function emptyBed(g) {
+  for (let y = 12; y <= 15; y++) for (let x = 4; x <= 11; x++) if (!((y === 12 || y === 15) && (x === 4 || x === 11))) g.px(x, y, y === 15 || x === 4 ? BED.shade : BED.pillow);
+  blanket(g, 9, 15);
+}
+const seq = (p) => p.flatMap(([n, f]) => Array(n).fill(f));
+const CLIPS = {
+  sleep: { fps: 2, loop: true, frames: [
+    (g) => { tucked(g, 1); glyph(g, Z_SMALL, 20, 8, FX.Z); }, (g) => { tucked(g, 0); glyph(g, Z_SMALL, 21, 6, FX.Z); },
+    (g) => { tucked(g, 1); glyph(g, Z_SMALL, 22, 4, FX.Z); }, (g) => { tucked(g, 0); glyph(g, Z_BIG, 21, 1, FX.Z); } ] },
+  idle: { fps: 4, loop: true, frames: seq([[10, (g) => clawd(g)], [1, (g) => clawd(g, { eyes: "blink" })], [6, (g) => clawd(g)],
+    [3, (g) => clawd(g, { eyes: "left" })], [1, (g) => clawd(g)], [3, (g) => clawd(g, { eyes: "right" })], [4, (g) => clawd(g)]]) },
+  wake: { fps: 8, loop: false, frames: [
+    (g) => { tucked(g, 0); }, (g) => { tucked(g, 1); },
+    (g) => clawd(g, { eyes: "wide" }), (g) => clawd(g, { eyes: "wide", squash: 1, armL: "down", armR: "down" }),
+    (g) => clawd(g, { eyes: "wide", y: -2, armL: "up", armR: "up", legs: "tuck" }), (g) => clawd(g, { eyes: "happy", y: -3, armL: "up", armR: "up", legs: "tuck" }),
+    (g) => clawd(g, { eyes: "happy", y: -1, armL: "up", armR: "up" }), (g) => clawd(g, { eyes: "happy", squash: 1 }),
+    ...seq([[2, (g) => clawd(g, { eyes: "happy", armR: "up" })], [2, (g) => clawd(g, { eyes: "happy", armR: "wave" })]]),
+    ...seq([[2, (g) => clawd(g, { eyes: "happy", armR: "up" })], [2, (g) => clawd(g, { eyes: "happy", armR: "wave" })]]) ] },
+  walk: { fps: 8, loop: true, frames: [
+    (g) => clawd(g, { eyes: "right", legs: "stepA", armL: "out", armR: "down" }), (g) => clawd(g, { eyes: "right", y: -1, armL: "out", armR: "out" }),
+    (g) => clawd(g, { eyes: "right", legs: "stepB", armL: "down", armR: "out" }), (g) => clawd(g, { eyes: "right", y: -1, armL: "out", armR: "out" }) ] },
+  dangle: { fps: 6, loop: true, frames: [
+    (g) => clawd(g, { eyes: "wide", y: -1, armL: "up", armR: "up", legs: "stepA" }), (g) => clawd(g, { eyes: "wide", y: -1, armL: "up", armR: "up", legs: "stepB" }) ] },
+  point: { fps: 4, loop: true, frames: seq([[3, (g) => clawd(g, { eyes: "downR", armR: "point" })], [1, (g) => clawd(g, { eyes: "blink", armR: "point" })],
+    [3, (g) => clawd(g, { eyes: "downR", armR: "point", squash: 1 })], [3, (g) => clawd(g, { eyes: "right", armR: "point" })]]) },
+  listen: { fps: 8, loop: true, frames: [0,1,2,3,4,5,6,7].map((i) => (g) => clawd(g, {
+    eyes: ["down","down","downR","downR","down","down","right","down"][i], squash: i % 4 === 3, legs: i % 2 ? "stepA" : "stepB" })) },
+  think: { fps: 6, loop: true, frames: [0,1,2,3,4,5].map((i) => (g) => {
+    const b = clawd(g, { eyes: i < 3 ? "up" : "upL", legs: i % 2 ? "stepA" : "stand", squash: i === 5 });
+    glyph(g, SPARK[[0,1,0,1,2,1][i]], b.bx + 2, b.top - 7, SK.O); }) },
+  write: { fps: 6, loop: false, frames: Array.from({ length: 20 }, (_, i) => (g) => {
+    const happy = i >= 14;
+    const b = clawd(g, { x: -3, eyes: happy ? "happy" : "downR", armR: "hold", armL: happy && i % 2 ? "up" : "out", squash: i === 14 });
+    const px = b.bx + 12, py = b.top - 1;
+    for (let y = py; y < py + 7; y++) for (let x = px; x < px + 6; x++) g.px(x, y, FX.P);
+    const lines = [py + 2, py + 4, py + 5];
+    lines.forEach((ly, k) => { const n = Math.max(0, Math.min(4, Math.min(i, 12) - k * 4)); for (let x = 0; x < n; x++) g.px(px + 1 + x, ly, FX.L); });
+    if (i < 12) { const tx = px + 1 + (i % 4), ty = lines[Math.floor(i / 4)] + (i % 2 ? 0 : -1);
+      g.px(tx, ty, FX.G); g.px(tx + 1, ty - 1, FX.Y); g.px(tx + 2, ty - 2, FX.Y); g.px(tx + 3, ty - 3, FX.Y); }
+    if (i >= 12) { const pinY = py + [-6, -3, 0, 0, 0, 0, 0, 0][i - 12];
+      for (let x = px + 1; x <= px + 3; x++) { g.px(x, pinY - 2, FX.R); g.px(x, pinY - 1, FX.R); } g.px(px + 2, pinY, FX.G); }
+    if (i >= 15 && i % 2) glyph(g, TWINKLE, px + 5, py - 4, FX.Y);
+  }) },
+  alert: { fps: 4, loop: true, frames: [0,1,2,3].map((i) => (g) => {
+    const b = clawd(g, { eyes: "wide", armL: i % 2 ? "up" : "wave", legs: i % 2 ? "stepA" : "stand" });
+    const y = b.top - 7 + (i % 2);
+    for (let k = 0; k < 3; k++) { g.px(b.bx + 4, y + k, FX.A); g.px(b.bx + 5, y + k, FX.A); }
+    g.px(b.bx + 4, y + 4, FX.A); g.px(b.bx + 5, y + 4, FX.A); }) },
+  done: { fps: 8, loop: false, frames: [
+    (g) => clawd(g, { squash: 1 }), (g) => clawd(g, { eyes: "happy", y: -2, armL: "up", armR: "up", legs: "tuck" }),
+    (g) => { const b = clawd(g, { eyes: "happy", y: -3, armL: "up", armR: "up", legs: "tuck" }); glyph(g, TWINKLE, b.bx - 4, b.top - 2, FX.Y); glyph(g, TWINKLE, b.bx + 12, b.top - 3, FX.Wh); },
+    (g) => { const b = clawd(g, { eyes: "happy", y: -1, armL: "up", armR: "up" }); glyph(g, TWINKLE, b.bx - 4, b.top - 4, FX.Wh); glyph(g, TWINKLE, b.bx + 12, b.top - 1, FX.Y); },
+    (g) => clawd(g, { eyes: "happy", squash: 1 }), (g) => clawd(g, { eyes: "happy" }), (g) => clawd(g, { eyes: "happy" }) ] },
+};
+
+class Sprite {
+  constructor(scale, clip = "idle") {
+    this.cv = document.createElement("canvas"); this.cv.width = W * scale; this.cv.height = H * scale;
+    this.ctx = this.cv.getContext("2d"); this.s = scale; this.flip = false; this.play(clip);
+  }
+  play(clip) {
+    clearTimeout(this.t); this.clip = clip; this.i = 0;
+    return new Promise((done) => { this.done = done; this.tick(); });
+  }
+  tick() {
+    const c = CLIPS[this.clip]; this.draw(c.frames[this.i]);
+    this.t = setTimeout(() => {
+      this.i++;
+      if (this.i >= c.frames.length) { if (!c.loop) { const d = this.done; this.done = null; d && d(); return; } this.i = 0; }
+      this.tick();
+    }, 1000 / c.fps);
+  }
+  draw(frame) {
+    const { ctx, s } = this; ctx.clearRect(0, 0, this.cv.width, this.cv.height);
+    frame({ px: (x, y, col) => { if (x < 0 || x >= W || y < 0 || y >= H) return; ctx.fillStyle = col; ctx.fillRect((this.flip ? W - 1 - x : x) * s, y * s, s, s); } });
+  }
+}
+function still(container, scale, frame) {
+  const cv = document.createElement("canvas"); cv.width = W * scale; cv.height = H * scale;
+  const ctx = cv.getContext("2d");
+  frame({ px: (x, y, col) => { if (x < 0 || x >= W || y < 0 || y >= H) return; ctx.fillStyle = col; ctx.fillRect(x * scale, y * scale, scale, scale); } });
+  container.append(cv); return cv;
+}
+
+// ===================== Board mock =====================
+const NOTES = [
+  { id: "refund", label: "Level 2 · checkout-api", title: "Refund flow edge cases", body: "Partial refunds, currency rounding.", p: 40 },
+  { id: "fees", label: "Level 2 · ledger", title: "Seller fee table", body: "Per-region fee tiers and caps.", p: 70 },
+  { id: "avatars", label: "Level 2 · web", title: "Board Assistant avatars", body: "Skins, moods and the living Tack.", p: 55 },
+  { id: "payouts", label: "Level 2 · ledger", title: "Weekly payouts", body: "Batch schedule and retries.", p: 20 },
+  { id: "webhooks", label: "Level 2 · checkout-api", title: "Webhook signatures", body: "Rotate secrets without downtime.", p: 90 },
+];
+const app = document.getElementById("app"), notesEl = document.getElementById("notes");
+function renderNotes() {
+  notesEl.innerHTML = NOTES.map((n) => `<div class="note ${n.isNew ? "new" : ""}" data-id="${n.id}">
+    ${n.isNew ? '<span class="pin"></span>' : ""}${n.blocked ? '<span class="stamp">⛔ Blocked by Seller fee table</span>' : ""}
+    <div class="lab">${n.label}</div><h4>${n.title}</h4><p>${n.body}</p><div class="bar"><i style="width:${n.p}%"></i></div></div>`).join("");
+}
+renderNotes();
+let goalDone = false, tab = "board";
+const history = [];
+function renderPanel() {
+  document.querySelectorAll(".ptabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
+  const el = document.getElementById("pbody");
+  if (tab === "tack") {
+    el.innerHTML = history.length ? `<div class="hist"><div class="when">Today</div>${history.map((m) => `<div class="m ${m.me ? "me" : ""}">${m.text}</div>`).join("")}</div>`
+      : `<div class="prow">Nothing yet. Click Tack to start a conversation. Everything said in its speech bubble is kept here.</div>`;
+    return;
+  }
+  const blocked = NOTES.filter((n) => n.blocked);
+  el.innerHTML = `
+    <div class="psec" data-sec="goals"><h5>Goals <span>1</span></h5><div class="prow ${goalDone ? "goal-done" : ""}">Checkout v2<small>${goalDone ? "3/3 done · finished" : "2/3 done · Auto mode · running"}</small></div></div>
+    <div class="psec"><h5>Blocked <span>${blocked.length}</span></h5>${blocked.length ? blocked.map((n) => `<div class="prow">${n.title}<small>by Seller fee table</small></div>`).join("") : '<div class="prow" style="color:#8d8a84">None</div>'}</div>
+    <div class="psec"><h5>Open decisions <span>1</span></h5><div class="prow">Round refunds per line or per order?<small>raised in Refund flow</small></div></div>
+    <div class="psec"><h5>To do <span>2</span></h5><div class="prow">Weekly payouts</div><div class="prow">Webhook signatures</div></div>`;
+}
+document.querySelectorAll(".ptabs button").forEach((b) => (b.onclick = () => { tab = b.dataset.tab; renderPanel(); }));
+renderPanel();
+
+// ===================== Tack, the character =====================
+const S = 3;                               // board pixel scale
+const FEET = 18 * S;                       // feet line inside the canvas
+const tack = new Sprite(S, "sleep");
+tack.cv.className = "tack"; app.append(tack.cv);
+const bed = new Sprite(S, "sleep"); bed.cv.className = "bed"; bed.draw(emptyBed); clearTimeout(bed.t); app.append(bed.cv);
+const pos = { x: 0, y: 0 };
+let asleep = true, busy = false, idleTimer = 0, walkTimer = 0, speech = null;
+
+function rel(el) { const a = app.getBoundingClientRect(), r = el.getBoundingClientRect(); return { x: r.left - a.left, y: r.top - a.top, w: r.width, h: r.height }; }
+function home() { const c = rel(document.getElementById("corner")); return { x: Math.round(c.x + c.w / 2), y: Math.round(c.y + c.h - 14) }; }
+function place(x, y) {
+  pos.x = x; pos.y = y;
+  tack.cv.style.left = `${Math.round((x - (W * S) / 2) / S) * S}px`;
+  tack.cv.style.top = `${Math.round((y - FEET) / S) * S}px`;
+  placeSpeech();
+}
+function placeBed() { const h = home(); bed.cv.style.left = `${h.x - (W * S) / 2}px`; bed.cv.style.top = `${h.y - FEET}px`; }
+placeBed(); { const h = home(); place(h.x, h.y); } bed.cv.style.display = "none";
+
+function walkTo(x, y) {
+  clearInterval(walkTimer); bed.cv.style.display = "block";
+  tack.flip = x < pos.x; tack.play("walk");
+  // A trip takes at most ~1.5 s, so Tack never makes you wait on its legs.
+  const step = Math.max(9, Math.hypot(x - pos.x, y - pos.y) / 18);
+  return new Promise((done) => {
+    walkTimer = setInterval(() => {
+      const dx = x - pos.x, dy = y - pos.y, d = Math.hypot(dx, dy);
+      if (d <= step) { clearInterval(walkTimer); place(x, y); tack.flip = false; done(); return; }
+      place(pos.x + (dx / d) * step, pos.y + (dy / d) * step);
+    }, 1000 / 12);
+  });
+}
+const atHome = () => { const h = home(); return Math.hypot(pos.x - h.x, pos.y - h.y) < 4; };
+function noteSpot(id) { const n = rel(document.querySelector(`.note[data-id="${id}"]`)); return { x: Math.round(n.x + n.w - 34), y: Math.round(n.y + 1) }; }
+function light(ids) { document.querySelectorAll(".note").forEach((n) => n.classList.toggle("lit", ids.includes(n.dataset.id))); }
+async function wakeUp() { if (!asleep) return; asleep = false; await tack.play("wake"); bed.cv.style.display = "block"; tack.play("idle"); }
+function touch() { clearTimeout(idleTimer); idleTimer = setTimeout(goToBed, 14000); }
+async function goToBed() {
+  if (busy) return touch();
+  closeSpeech(); light([]);
+  const h = home(); if (!atHome()) await walkTo(h.x, h.y);
+  bed.cv.style.display = "none"; asleep = true; tack.play("sleep");
+}
+
+// ===================== Speech bubble = the chat =====================
+
+function say(html, opts = {}) {
+  closeSpeech();
+  speech = document.createElement("div"); speech.className = "speech";
+  speech.innerHTML = `<div class="who"><span>Tack</span><button title="Close">✕</button></div>
+    ${opts.you ? `<div class="me">You: ${opts.you}</div>` : ""}<div class="msg">${html}</div>
+    ${opts.chips ? `<div class="chips">${opts.chips.map((c, i) => `<button class="${c.go ? "go" : ""}" data-i="${i}">${c.label}</button>`).join("")}</div>` : ""}
+    ${opts.input === false ? "" : `<form><input placeholder="Reply to Tack…" /><button class="send">↑</button></form>`}
+    ${history.length ? `<div class="foot"><span>${opts.foot || ""}</span><a data-hist>Full history</a></div>` : ""}
+    <span class="tail"></span>`;
+  app.append(speech);
+  speech.querySelector(".who button").onclick = () => { closeSpeech(); touch(); };
+  speech.querySelectorAll(".chips button").forEach((b) => (b.onclick = () => opts.chips[b.dataset.i].run()));
+  const hl = speech.querySelector("[data-hist]"); if (hl) hl.onclick = () => { tab = "tack"; renderPanel(); };
+  const form = speech.querySelector("form");
+  if (form) {
+    const input = form.querySelector("input"); let typing = 0;
+    input.addEventListener("input", () => { touch(); if (busy) return; if (tack.clip !== "listen") tack.play("listen");
+      clearTimeout(typing); typing = setTimeout(() => !busy && tack.play("idle"), 800); });
+    form.onsubmit = (e) => { e.preventDefault(); const v = input.value.trim(); if (v) ask(v); };
+    setTimeout(() => input.focus({ preventScroll: true }), 30);
+  }
+  if (!opts.silent) history.push({ text: html.replace(/<[^>]+>/g, "") });
+  if (tab === "tack") renderPanel();
+  placeSpeech(); touch();
+}
+function closeSpeech() { if (speech) { speech.remove(); speech = null; } }
+function placeSpeech() {
+  if (!speech) return;
+  const aw = app.clientWidth, w = speech.offsetWidth, h = speech.offsetHeight;
+  const headTop = pos.y - 9 * S;
+  const tail = speech.querySelector(".tail");
+  let left = Math.min(Math.max(pos.x - w / 2, 8), aw - w - 8);
+  let top = headTop - h - 14;
+  speech.classList.remove("side-r", "side-l");
+  tail.style.top = ""; tail.style.left = "";
+  if (top < 8) {
+    // No room above: speak from the side, so the note Tack is standing on stays visible.
+    const right = pos.x + 44 + w < aw - 8;
+    left = right ? pos.x + 44 : pos.x - 44 - w;
+    top = Math.max(8, headTop - 18);
+    speech.classList.add(right ? "side-r" : "side-l");
+    tail.style.top = `${Math.max(12, headTop + 10 - top)}px`;
+  } else tail.style.left = `${Math.min(Math.max(pos.x - left - 6, 14), w - 26)}px`;
+  speech.style.left = `${left}px`; speech.style.top = `${top}px`;
+}
+
+// ===================== What Tack does =====================
+function greet() {
+  say("Hi. I keep this board pinned together. Ask me anything about it, or drag me onto a note.", {
+    silent: true, chips: [{ label: "What is blocked?", run: () => ask("What is blocked?") }, { label: "Add a task for login bug", run: () => ask("Add a task for login bug") }] });
+}
+async function ask(text) {
+  if (busy) return;
+  busy = true; history.push({ me: true, text }); closeSpeech(); light([]);
+  await wakeUp();
+  tack.play("think");
+  say(`<span style="color:#7b746a">Checking the board…</span>`, { you: text, input: false, silent: true });
+  await wait(1600);
+  const t = text.toLowerCase();
+  if (/\b(add|create|new)\b.*\btask\b/.test(t)) {
+    const title = (text.match(/for (.+)$/i)?.[1] || "New task").replace(/^\w/, (c) => c.toUpperCase());
+    closeSpeech();
+    const last = rel(notesEl.lastElementChild), cols = 3, idx = NOTES.length;
+    const colW = (notesEl.clientWidth - 36) / cols;
+    const n0 = rel(notesEl);
+    const tx = n0.x + (idx % cols) * (colW + 18) + colW / 2, ty = last.y + (idx % cols === 0 ? last.h + 26 : 0) + 60;
+    await walkTo(Math.round(tx - 20), Math.round(ty));
+    await tack.play("write");
+    NOTES.push({ id: "login", label: "Level 2 · web", title, body: "Added by Tack from your request.", p: 0, isNew: true });
+    renderNotes(); light(["login"]);
+    await walkTo(...Object.values(noteSpot("login")));
+    tack.play("done").then(() => tack.play("idle"));
+    say(`Pinned <b>${title}</b> under Level 2, in <b>web</b>.`, { you: text, chips: [{ label: "Open it", go: true, run: () => say("This would open the task, just like clicking the note.", { silent: true }) }, { label: "Undo", run: () => undo() }] });
+  } else if (/block/.test(t)) {
+    if (!NOTES.some((n) => n.blocked)) { NOTES[0].blocked = true; renderNotes(); renderPanel(); }
+    closeSpeech();
+    await walkTo(...Object.values(noteSpot("refund")));
+    light(["refund"]); tack.play("point");
+    say("<b>Refund flow edge cases</b> is blocked. It's waiting on <b>Seller fee table</b>, which is 70% done.", { you: text,
+      chips: [{ label: "Show the blocker", go: true, run: showBlocker }, { label: "Open task", run: () => say("This would open Refund flow edge cases.", { silent: true }) }] });
+  } else if (/next|pick/.test(t)) {
+    closeSpeech();
+    await walkTo(...Object.values(noteSpot("webhooks")));
+    light(["webhooks"]); tack.play("point");
+    say("<b>Webhook signatures</b> is 90% done, nothing is blocking it, and the Checkout v2 Goal needs it. It's the quickest win.", { you: text,
+      chips: [{ label: "Start it", go: true, run: () => say("This would start a thread linked to the task.", { silent: true }) }, { label: "Something else", run: () => ask("What else could I pick up?") }] });
+  } else {
+    tack.play("done").then(() => tack.play("idle"));
+    say("Two tasks are moving, one is blocked, and the Checkout v2 Goal is 2 of 3 done.", { you: text });
+  }
+  busy = false; touch();
+}
+async function showBlocker() {
+  closeSpeech(); await walkTo(...Object.values(noteSpot("fees"))); light(["fees"]); tack.play("point");
+  say("<b>Seller fee table</b>: 3 of 5 steps done. The last thing done was the EU tier caps, yesterday.", { chips: [{ label: "Nudge its chat", go: true, run: () => say("I'd post a nudge to that task's chat. Not built in this concept.", { silent: true }) }] });
+}
+function undo() { const i = NOTES.findIndex((n) => n.id === "login"); if (i >= 0) NOTES.splice(i, 1); renderNotes(); light([]); tack.play("oops").catch(() => {}); tack.play("idle"); say("Unpinned it.", { silent: true }); }
+CLIPS.oops = CLIPS.idle;
+
+async function onBlocked() {
+  if (busy) return; busy = true; closeSpeech();
+  NOTES[0].blocked = true; renderNotes(); renderPanel();
+  await wakeUp();
+  await walkTo(...Object.values(noteSpot("refund")));
+  light(["refund"]); tack.play("alert");
+  say("Heads up: <b>Refund flow edge cases</b> just got blocked by <b>Seller fee table</b>.", {
+    chips: [{ label: "Show me", go: true, run: showBlocker }, { label: "Later", run: () => { closeSpeech(); light([]); goToBed(); } }] });
+  busy = false;
+}
+async function onGoal() {
+  if (busy) return; busy = true; closeSpeech(); light([]);
+  goalDone = true; tab = "board"; renderPanel();
+  await wakeUp();
+  const g = rel(document.querySelector('[data-sec="goals"]'));
+  await walkTo(Math.round(g.x + g.w - 40), Math.round(g.y + 2));
+  await tack.play("done"); tack.play("idle");
+  say("The <b>Checkout v2</b> Goal is finished: 3 of 3 tasks done and one decision filed in the Register.", {
+    chips: [{ label: "Review it", go: true, run: () => say("This would open the Goals screen on Checkout v2.", { silent: true }) }, { label: "Nice", run: () => { closeSpeech(); goToBed(); } }] });
+  busy = false;
+}
+async function onApproval() {
+  if (busy) return; busy = true; closeSpeech();
+  await wakeUp();
+  if (atHome()) await walkTo(pos.x - 90, pos.y - 120);
+  tack.play("alert");
+  say("Can I mark <b>Webhook signatures</b> as done? Its last step passed.", { input: false,
+    chips: [{ label: "Approve", go: true, run: async () => { closeSpeech(); await tack.play("done"); tack.play("idle"); say("Done. It's ticked off.", { silent: true }); } },
+            { label: "Decline", run: () => { tack.play("idle"); say("Okay, I'll leave it open.", { silent: true }); } }] });
+  busy = false;
+}
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Click / drag Tack
+let drag = null;
+tack.cv.addEventListener("pointerdown", (e) => {
+  drag = { sx: e.clientX, sy: e.clientY, moved: false, ox: pos.x, oy: pos.y };
+  tack.cv.setPointerCapture(e.pointerId);
+});
+tack.cv.addEventListener("pointermove", (e) => {
+  if (!drag || busy) return;
+  const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+  if (!drag.moved && Math.hypot(dx, dy) < 5) return;
+  if (!drag.moved) { drag.moved = true; asleep = false; closeSpeech(); light([]); tack.play("dangle"); bed.cv.style.display = "block"; }
+  place(drag.ox + dx, drag.oy + dy + 20);
+  const over = noteUnder(e.clientX, e.clientY); light(over ? [over.dataset.id] : []);
+});
+tack.cv.addEventListener("pointerup", async (e) => {
+  const d = drag; drag = null; if (!d) return;
+  if (!d.moved) { if (asleep) { await wakeUp(); greet(); } else if (!speech) greet(); touch(); return; }
+  const over = noteUnder(e.clientX, e.clientY);
+  if (over) {
+    const n = NOTES.find((x) => x.id === over.dataset.id);
+    const spot = noteSpot(n.id); place(spot.x, spot.y);
+    await tack.play("done"); tack.play("point");
+    say(`<b>${n.title}</b> is ${n.p}% done${n.blocked ? " and blocked by Seller fee table" : ""}. ${n.body}`, {
+      silent: false, chips: [{ label: "What's left?", go: true, run: () => ask(`What's left on ${n.title}?`) }, { label: "Open task", run: () => say(`This would open ${n.title}.`, { silent: true }) }] });
+  } else { place(pos.x, pos.y - 20 + 20); tack.play("idle"); }
+  touch();
+});
+function noteUnder(cx, cy) {
+  tack.cv.style.pointerEvents = "none"; const el = document.elementFromPoint(cx, cy); tack.cv.style.pointerEvents = "";
+  return el && el.closest(".note");
+}
+document.addEventListener("keydown", async (e) => {
+  if (e.target.tagName === "INPUT") { if (e.key === "Escape") { closeSpeech(); goToBed(); } return; }
+  if (e.key === "t" || e.key === "T") { if (busy) return; await wakeUp(); const s = rel(document.getElementById("surface")); await walkTo(Math.round(s.x + s.w / 2), Math.round(s.y + s.h - 40)); tack.play("idle"); greet(); }
+  if (e.key === "Escape") { closeSpeech(); goToBed(); }
+});
+document.querySelectorAll("[data-ask]").forEach((b) => (b.onclick = () => ask(b.dataset.ask)));
+document.querySelectorAll("[data-event]").forEach((b) => (b.onclick = () => ({ blocked: onBlocked, goal: onGoal, approval: onApproval, bed: () => { busy = false; goToBed(); } })[b.dataset.event]()));
+window.addEventListener("resize", () => { placeBed(); if (asleep) { const h = home(); place(h.x, h.y); } });
+
+// ===================== Concept thumbnails =====================
+function miniSprite(id, clip, x, y, scale = 2) { const sp = new Sprite(scale, clip); sp.cv.style.position = "absolute"; sp.cv.style.left = `${x}px`; sp.cv.style.top = `${y}px`; document.getElementById(id).append(sp.cv); return sp; }
+miniSprite("miniA", "point", 92, 70);
+miniSprite("miniB", "idle", 258, 22);
+miniSprite("miniC", "idle", 4, -12);
+{ const sp = new Sprite(2, "idle"); document.getElementById("miniTask").append(sp.cv); }
+{ const sp = new Sprite(2, "idle"); document.getElementById("miniPhone").append(sp.cv); }
+{ const sp = new Sprite(4, "write"); const loop = () => sp.play("write").then(() => setTimeout(loop, 600)); loop(); document.getElementById("miniGoal").append(sp.cv); }
+</script>
+</body>
+</html>

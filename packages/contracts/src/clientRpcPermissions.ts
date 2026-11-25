@@ -54,6 +54,17 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   // Writing a guide runs a model on this environment's providers, which reading one does not.
   [WS_METHODS.pullRequestsGenerateReviewGuide]: AuthOrchestrationOperateScope,
   [WS_METHODS.projectsCreateFromThread]: AuthOrchestrationOperateScope,
+  // Project Board fork: puts a thread on a task, whose plan and handoff its turns then carry.
+  [WS_METHODS.boardLinkThread]: AuthOrchestrationOperateScope,
+  // Board edits change what every thread on the task works from, as linking one does.
+  [WS_METHODS.boardEditTask]: AuthOrchestrationOperateScope,
+  [WS_METHODS.boardCreateTask]: AuthOrchestrationOperateScope,
+  // A board's workspaces, rules and Board Mode shape every thread on it: settings, as elsewhere.
+  [WS_METHODS.boardArchivedThreads]: AuthSettingsWriteScope,
+  [WS_METHODS.boardOpenFile]: AuthSettingsWriteScope,
+  [WS_METHODS.boardExportFile]: AuthSettingsWriteScope,
+  [WS_METHODS.boardEditBoard]: AuthSettingsWriteScope,
+  [WS_METHODS.boardCreateBoard]: AuthSettingsWriteScope,
   [WS_METHODS.sourceControlCloneRepository]: AuthSourceControlWriteScope,
   [WS_METHODS.sourceControlPublishRepository]: AuthSourceControlWriteScope,
   [WS_METHODS.sourceControlStar]: AuthSourceControlWriteScope,

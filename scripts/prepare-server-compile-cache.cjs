@@ -55,6 +55,19 @@ module.exports = async ({ appOutDir, electronPlatformName, arch, packager }) => 
   env.T3CODE_HOME = state;
   let result;
   try {
+    let cacheExecutable = executable;
+    if (electronPlatformName === "win32") {
+      // Running the final image can leave it mapped when resource editing follows.
+      // The same packaged engine can generate its cache from a temporary copy.
+      const engine = path.join(state, "engine");
+      fs.mkdirSync(engine);
+      for (const entry of fs.readdirSync(appOutDir, { withFileTypes: true })) {
+        if (entry.isFile()) {
+          fs.copyFileSync(path.join(appOutDir, entry.name), path.join(engine, entry.name));
+        }
+      }
+      cacheExecutable = path.join(engine, path.basename(executable));
+    }
     // Run a script file, not -e: -e defines a global __filename of "[eval]", which
     // @effect/platform-node passes to createRequire and fails on.
     const runner = path.join(state, "prepare-server-compile-cache-runner.cjs");
@@ -62,9 +75,9 @@ module.exports = async ({ appOutDir, electronPlatformName, arch, packager }) => 
       runner,
       `require(${JSON.stringify(helper)}).generatePreparedServerCache(${JSON.stringify(resources)}).then(()=>process.exit(0),e=>{console.error(e);process.exit(1)})`,
     );
-    result = spawnSync(executable, [runner], { env, encoding: "utf8", timeout: 120000 });
+    result = spawnSync(cacheExecutable, [runner], { env, encoding: "utf8", timeout: 120000 });
   } finally {
-    fs.rmSync(state, { recursive: true, force: true });
+    fs.rmSync(state, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
   if (result.status !== 0)
     throw new Error(`Server compile cache generation failed: ${result.error || result.stderr}`);

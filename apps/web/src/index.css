@@ -1,6 +1,11 @@
 /* Clerk injects its component styles into the clerk layer (clerkAppearance.cssLayerName). */
 @layer theme, base, clerk, components, utilities;
 @import "tailwindcss";
+@import "./plotter-tide.css";
+@import "./clay-post.css";
+@import "./plotter.css";
+@import "./tack-plotter.css";
+@import "./board-pin.css";
 
 @custom-variant dark (&:is(.dark, .dark *));
 @custom-variant light (&:not(.dark, .dark *));
@@ -576,6 +581,18 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     animation: live-tool-shine 2.2s steps(30) infinite;
     animation-play-state: var(--visible-animation-state, paused);
   }
+}
+
+@keyframes tack-strip {
+  to {
+    background-position-x: var(--tack-strip-end);
+  }
+}
+
+@utility tack-avatar {
+  background-repeat: repeat-x;
+  image-rendering: pixelated;
+  animation-play-state: var(--visible-animation-state, paused);
 }
 
 @utility visible-animate-spin {
@@ -2652,4 +2669,38 @@ code {
 
 .messages-timeline-scroll:focus-visible {
   outline: none;
+}
+
+/* Project Board fork: the board app's sticky-note colours, light and dark. */
+@theme inline {
+  --color-board-note-1: var(--board-note-1);
+  --color-board-note-2: var(--board-note-2);
+  --color-board-note-3: var(--board-note-3);
+  --color-board-note-4: var(--board-note-4);
+  --color-board-note-5: var(--board-note-5);
+  --color-board-note-6: var(--board-note-6);
+  --color-board-note-ink: var(--board-note-ink);
+  --color-board-attention: var(--board-attention);
+}
+
+:root {
+  --board-note-1: #fff1a8;
+  --board-note-2: #d6f0d9;
+  --board-note-3: #d9e7fb;
+  --board-note-4: #fadbd6;
+  --board-note-5: #e6ddf7;
+  --board-note-6: #fde2c3;
+  --board-note-ink: #2a2721;
+  /* A chat halted on the person's answer. A theme with an accent of its own uses that. */
+  --board-attention: var(--warning);
+}
+
+.dark {
+  --board-note-1: #4a4425;
+  --board-note-2: #2b4432;
+  --board-note-3: #2b3a52;
+  --board-note-4: #4d302b;
+  --board-note-5: #3b3350;
+  --board-note-6: #4d3a24;
+  --board-note-ink: #f1ede4;
 }

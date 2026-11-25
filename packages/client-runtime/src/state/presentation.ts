@@ -341,6 +341,14 @@ export function createEnvironmentSummaryAtoms(input: {
           .issues === true,
     ),
   );
+  // Project Board fork.
+  const projectBoardSupportedAtom = Atom.make((get) =>
+    get(environmentIdsAtom).some(
+      (environmentId) =>
+        get(input.presentationAtom(environmentId))?.serverConfig?.environment.capabilities
+          .projectBoard === true,
+    ),
+  );
   return {
     environmentIdsAtom,
     connectedEnvironmentIdsAtom,
@@ -349,5 +357,6 @@ export function createEnvironmentSummaryAtoms(input: {
     machineByIdAtom,
     pullRequestsSupportedAtom,
     issuesSupportedAtom,
+    projectBoardSupportedAtom,
   };
 }

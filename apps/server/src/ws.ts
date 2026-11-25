@@ -259,6 +259,8 @@ import * as PullRequestService from "./pullRequest/PullRequestService.ts";
 import * as IssueService from "./issue/IssueService.ts";
 import * as ThreadIssueService from "./orchestration-v2/ThreadIssueService.ts";
 import * as IssueTrackerConnections from "./issue/IssueTrackerConnections.ts";
+import * as BoardIntents from "./board/BoardIntents.ts";
+import * as BoardService from "./board/BoardService.ts";
 import * as PullRequestReviewGuideService from "./pullRequest/PullRequestReviewGuideService.ts";
 import { listLinkedPullRequestThreads } from "./pullRequest/linkedThreads.ts";
 import { pullRequestSyncKey } from "./pullRequest/pullRequestSyncKey.ts";
@@ -1496,6 +1498,8 @@ export const layerWsRpc = (
       const issues = yield* IssueService.IssueService;
       const threadIssues = yield* ThreadIssueService.ThreadIssueService;
       const issueTrackers = yield* IssueTrackerConnections.IssueTrackerConnections;
+      const boards = yield* BoardService.BoardService;
+      const boardIntents = yield* BoardIntents.BoardIntents;
       const reviewGuides = yield* PullRequestReviewGuideService.PullRequestReviewGuideService;
       const pullRequestSync = yield* PullRequestSyncReactor.PullRequestSyncReactor;
       const deviceService = yield* DeviceService.DeviceService;
@@ -2002,6 +2006,23 @@ export const layerWsRpc = (
         [WS_METHODS.issueTrackersList]: () => issueTrackers.list,
         [WS_METHODS.issueTrackersConnect]: (input) => issueTrackers.connect(input),
         [WS_METHODS.issueTrackersBindProject]: (input) => issueTrackers.bindProject(input),
+        // Project Board fork.
+        [WS_METHODS.boardList]: () => boards.list,
+        [WS_METHODS.boardUnassigned]: () => boards.unassigned,
+        [WS_METHODS.boardView]: (input) => boards.view(input),
+        [WS_METHODS.boardTaskDetail]: (input) => boards.taskDetail(input),
+        [WS_METHODS.boardEditTask]: (input) => boards.editTask(input),
+        [WS_METHODS.boardCreateTask]: (input) => boards.createTask(input),
+        [WS_METHODS.boardSettings]: (input) => boards.settings(input),
+        [WS_METHODS.boardArchivedThreads]: (input) => boards.archivedThreads(input),
+        [WS_METHODS.boardOpenFile]: (input) => boards.openFile(input),
+        [WS_METHODS.boardExportFile]: (input) => boards.exportFile(input),
+        [WS_METHODS.boardEditBoard]: (input) => boards.editBoard(input),
+        [WS_METHODS.boardCreateBoard]: (input) => boards.createBoard(input),
+        [WS_METHODS.boardWorkspaceCandidates]: () => boards.workspaceCandidates,
+        [WS_METHODS.boardLinkThread]: (input) => boards.linkThread(input),
+        [WS_METHODS.boardSubscribeIntents]: (input) => boardIntents.forClient(input.clientId),
+        [WS_METHODS.boardAckIntent]: (input) => boardIntents.acknowledge(input),
         [ORCHESTRATION_V2_WS_METHODS.dispatchCommand]: (command) =>
           Effect.annotateCurrentSpan({
             "orchestration_v2.command_id": command.commandId,
@@ -3692,6 +3713,7 @@ export const layer = Layer.unwrap(
     const reviewGuides = yield* PullRequestReviewGuideService.PullRequestReviewGuideService;
     const peerLinks = yield* PeerLinks.PeerLinks;
     const peerLinkRequests = yield* PeerLinkRequests.PeerLinkRequests;
+    const boardIntentsService = yield* BoardIntents.BoardIntents;
     const peerThreadRelay = yield* PeerThreadRelay.PeerThreadRelay;
     const peerClientPairing = yield* PeerClientPairing.PeerClientPairing;
     const sql = yield* SqlClient.SqlClient;
@@ -3786,6 +3808,8 @@ export const layer = Layer.unwrap(
                 Layer.succeed(IssueTrackerConnections.IssueTrackerConnections, issueTrackers),
               ),
               Layer.provide(OtlpEndpointCheck.layer),
+              // Project Board fork.
+              Layer.provide(BoardService.layer),
               Layer.provide(
                 Layer.succeed(
                   PullRequestReviewGuideService.PullRequestReviewGuideService,
@@ -3794,6 +3818,7 @@ export const layer = Layer.unwrap(
               ),
               Layer.provide(Layer.succeed(PeerLinks.PeerLinks, peerLinks)),
               Layer.provide(Layer.succeed(PeerLinkRequests.PeerLinkRequests, peerLinkRequests)),
+              Layer.provide(Layer.succeed(BoardIntents.BoardIntents, boardIntentsService)),
               Layer.provide(Layer.succeed(PeerThreadRelay.PeerThreadRelay, peerThreadRelay)),
               Layer.provide(Layer.succeed(PeerClientPairing.PeerClientPairing, peerClientPairing)),
               Layer.provide(

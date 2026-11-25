@@ -104,6 +104,8 @@ export function createNewThreadHandler(router: AnyRouter) {
       replace?: boolean;
       /** Composer text for the draft, set before it shows. A draft with user text keeps it. */
       prompt?: string;
+      /** Prepares a fresh draft before it can accept a first turn. */
+      prepareNewDraft?: (threadId: ThreadId) => Promise<boolean>;
     },
   ): Promise<{ draftId: DraftId; threadId: ThreadId } | null> => {
     const projects = readProjects();
@@ -278,7 +280,7 @@ export function createNewThreadHandler(router: AnyRouter) {
         ? getDraftThread(currentRouteTarget.threadRef)
         : getDraftSession(currentRouteTarget.draftId)
       : null;
-    if (emptyStoredDraftThread) {
+    if (emptyStoredDraftThread && !options?.prepareNewDraft) {
       return (async () => {
         const isDraftAlreadyOpen =
           currentRouteTarget?.kind === "draft" &&
@@ -373,6 +375,7 @@ export function createNewThreadHandler(router: AnyRouter) {
     }
 
     if (
+      !options?.prepareNewDraft &&
       latestActiveDraftThread &&
       currentRouteTarget?.kind === "draft" &&
       latestActiveDraftThread.logicalProjectKey === logicalProjectKey &&
@@ -407,11 +410,17 @@ export function createNewThreadHandler(router: AnyRouter) {
     return (async () => {
       const initialEnvMode = options?.envMode ?? (await resolveDefaultEnvMode());
       if (abandonedSinceRequest()) {
-        return resultIfAbandoned();
+        return options?.prepareNewDraft ? null : resultIfAbandoned();
       }
+      if (
+        options?.prepareNewDraft &&
+        (!(await options.prepareNewDraft(threadId)) || abandonedSinceRequest())
+      )
+        return null;
       // Reuse drafts registered while awaiting so their pending navigation cannot lose them.
       const racedDraft = getDraftSessionByLogicalProjectKey(logicalProjectKey);
       if (
+        !options?.prepareNewDraft &&
         racedDraft &&
         racedDraft.draftId !== storedDraftThread?.draftId &&
         readThreadShell(scopeThreadRef(racedDraft.environmentId, racedDraft.threadId)) === null

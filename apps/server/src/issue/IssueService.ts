@@ -205,6 +205,20 @@ const make = Effect.gen(function* () {
     }));
   };
 
+  /** The local trackers covering the project's folder, with no binding in Settings. */
+  const resolveLocalBindings = (workspaceRoot: string) =>
+    Effect.forEach(registry.local, (api) =>
+      api.scopesFor(workspaceRoot).pipe(
+        Effect.map((scopes) =>
+          scopes.map((scope): ProjectTrackerBinding => ({
+            tracker: api.kind,
+            host: api.local.host,
+            scope,
+          })),
+        ),
+      ),
+    ).pipe(Effect.map((all) => all.flat()));
+
   /**
    * Where a project's issues live: its bound standalone tracker, its git host's, or both. The
    * tracker bound in Settings leads, as the one the user chose for the project.
@@ -217,10 +231,14 @@ const make = Effect.gen(function* () {
       ? Effect.succeed(project.repositoryIdentity)
       : repositoryIdentities.resolve(project.workspaceRoot)
     ).pipe(
-      Effect.map((repositoryIdentity) => {
-        const gitHost = resolveGitHostBindings({ ...project, repositoryIdentity });
-        return [...resolveStandaloneBindings(binding), ...gitHost];
-      }),
+      Effect.flatMap((repositoryIdentity) =>
+        resolveLocalBindings(project.workspaceRoot).pipe(
+          Effect.map((local) => {
+            const gitHost = resolveGitHostBindings({ ...project, repositoryIdentity });
+            return [...resolveStandaloneBindings(binding), ...local, ...gitHost];
+          }),
+        ),
+      ),
     );
 
   const listProjects = (filter: {

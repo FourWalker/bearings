@@ -147,6 +147,12 @@ export const GlassOpacity = Schema.Int.check(
 export type GlassOpacity = typeof GlassOpacity.Type;
 const DEFAULT_GLASS_OPACITY: GlassOpacity = 80;
 
+export const MAX_PLOTTER_TIDE_FROZEN_BLUR = 12;
+const PlotterTideFrozenPercent = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 }));
+const PlotterTideFrozenBlur = Schema.Number.check(
+  Schema.isBetween({ minimum: 0, maximum: MAX_PLOTTER_TIDE_FROZEN_BLUR }),
+);
+
 export const MIN_APPEARANCE_CONTRAST = 50;
 export const MAX_APPEARANCE_CONTRAST = 200;
 export const AppearanceContrast = Schema.Int.check(
@@ -487,6 +493,13 @@ export const ClientSettingsSchema = Schema.Struct({
   ),
   glassOpacity: GlassOpacity.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_GLASS_OPACITY)),
+  ),
+  plotterTideFrozenTransparency: PlotterTideFrozenPercent.pipe(
+    Schema.withDecodingDefault(Effect.succeed(68)),
+  ),
+  plotterTideFrozenBlur: PlotterTideFrozenBlur.pipe(Schema.withDecodingDefault(Effect.succeed(1))),
+  plotterTideFrozenGrain: PlotterTideFrozenPercent.pipe(
+    Schema.withDecodingDefault(Effect.succeed(25)),
   ),
   fontSizeInterface: InterfaceFontSize.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_INTERFACE_FONT_SIZE)),
@@ -2091,6 +2104,9 @@ export const ClientSettingsPatch = Schema.Struct({
   diffLayout: Schema.optionalKey(DiffLayout),
   environmentIdentificationMode: Schema.optionalKey(EnvironmentIdentificationMode),
   glassOpacity: Schema.optionalKey(GlassOpacity),
+  plotterTideFrozenTransparency: Schema.optionalKey(PlotterTideFrozenPercent),
+  plotterTideFrozenBlur: Schema.optionalKey(PlotterTideFrozenBlur),
+  plotterTideFrozenGrain: Schema.optionalKey(PlotterTideFrozenPercent),
   onboardingCompletedAt: Schema.optionalKey(Schema.NullOr(Schema.String)),
   fontSizeInterface: Schema.optionalKey(InterfaceFontSize),
   fontSizePrompt: Schema.optionalKey(PromptFontSize),

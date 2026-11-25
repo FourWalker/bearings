@@ -1,0 +1,958 @@
+/* Project Board fork: Tack's Plotter skin. Strokes use pathLength=1, so one dash covers a stroke
+   and the pen's timing is only delays and durations set per stroke. All of it is paused off screen
+   through --visible-animation-state, and the drawing's own motion stops once its clip played out. */
+.tack-plotter {
+  color: var(--foreground);
+  --tp-rust: var(--app-theme-accent, var(--primary));
+}
+
+.tack-plotter svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.tack-plotter :is(path, g, circle, .tp-clock) {
+  animation-play-state: var(--visible-animation-state, paused);
+}
+
+.tack-plotter path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: var(--tp-w);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tack-plotter path[data-tone="rust"] {
+  stroke: var(--tp-rust);
+}
+
+.tack-plotter path[data-tone="fill-ink"] {
+  fill: currentColor;
+}
+
+.tack-plotter path[data-tone="fill-rust"] {
+  fill: var(--tp-rust);
+  stroke: var(--tp-rust);
+}
+
+.tack-plotter path[data-tone="fill-paper"] {
+  fill: var(--card);
+}
+
+/* ---------- The pen draws ---------- */
+
+.tp-sheet[data-mode="draw"] path[data-drawn] {
+  stroke-dasharray: 1 2;
+  stroke-dashoffset: 1.01;
+  animation: tp-draw var(--t) linear var(--d) forwards;
+}
+
+.tp-sheet[data-mode="draw"] path[data-drawn]:is([data-tone^="fill"]) {
+  fill-opacity: 0;
+  animation:
+    tp-draw var(--t) linear var(--d) forwards,
+    tp-fill 0.12s steps(2) calc(var(--d) + var(--t)) forwards;
+}
+
+.tack-plotter[data-motion="still"] .tp-sheet path[data-drawn] {
+  animation: none;
+  stroke-dasharray: none;
+  stroke-dashoffset: 0;
+  fill-opacity: 1;
+}
+
+.tp-pen {
+  fill: var(--tp-rust);
+  opacity: 0;
+  animation: tp-pen var(--t) linear var(--d) forwards;
+}
+
+/* ---------- The old drawing leaves ---------- */
+
+.tp-sheet[data-mode="chase"] path {
+  stroke-dasharray: 1 2;
+  fill-opacity: 0;
+  animation: tp-chase 300ms linear calc(var(--i) * 4ms) forwards;
+}
+
+.tp-sheet[data-mode="retrace"] path {
+  stroke-dasharray: 1 2;
+  fill-opacity: 0;
+  animation: tp-retrace var(--t) linear var(--d) forwards;
+}
+
+@keyframes tp-draw {
+  from {
+    stroke-dashoffset: 1.01;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes tp-fill {
+  to {
+    fill-opacity: 1;
+  }
+}
+
+@keyframes tp-chase {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -1.01;
+  }
+}
+
+@keyframes tp-retrace {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: 1.01;
+  }
+}
+
+@keyframes tp-pen {
+  0%,
+  99.9% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Counts a clip's runs, so a one-shot clip hands over once it has played. */
+.tp-clock {
+  position: absolute;
+  width: 0;
+  height: 0;
+  animation: tp-clock var(--tp-len) steps(1) var(--tp-live) var(--tp-runs);
+}
+
+@keyframes tp-clock {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ---------- Each drawing's rest pose ---------- */
+
+.tack-plotter
+  :is(
+    [data-part="smoke-2"],
+    [data-part="smoke-3"],
+    [data-part^="arc-"],
+    [data-part^="ring-"],
+    [data-part="wing-mid"],
+    [data-part="wing-down"],
+    [data-part="script"],
+    [data-part^="drop-"]
+  ) {
+  opacity: 0;
+}
+
+.tack-plotter[data-tack-clip="idle"] [data-part="pupil"] {
+  translate: -2.4px 1.7px;
+}
+
+.tack-plotter[data-tack-clip="wake"] [data-part="brow"] {
+  translate: 0 -2.2px;
+}
+
+.tack-plotter :is([data-part="gear-a"], [data-part="gear-b"], [data-part="bell"]) {
+  transform-box: view-box;
+}
+
+.tack-plotter [data-part="gear-a"] {
+  transform-origin: 70px 124px;
+}
+
+.tack-plotter [data-part="gear-b"] {
+  transform-origin: 114px 87px;
+}
+
+.tack-plotter [data-part="bell"] {
+  transform-origin: 100px 52px;
+}
+
+/* ---------- Each drawing's own motion, a few frames a second ---------- */
+
+.tack-plotter[data-live][data-tack-clip="idle"] [data-part="pupil"] {
+  animation: tp-read 2s steps(1) var(--tp-live) 30;
+}
+
+.tack-plotter[data-live][data-tack-clip="idle"] [data-part="brow"] {
+  animation: tp-brow 6s steps(1) var(--tp-live) 10;
+}
+
+.tack-plotter[data-live][data-tack-clip="idle"] [data-part="line"] {
+  animation: tp-page 8s steps(1) var(--tp-live) 7;
+}
+
+.tack-plotter[data-live][data-tack-clip="listen"] [data-part^="arc-"] {
+  animation: tp-arc 0.9s steps(1) var(--tp-live) infinite;
+}
+
+.tack-plotter[data-live][data-tack-clip="listen"] [data-part="arc-2"] {
+  animation-delay: calc(var(--tp-live) + 0.3s);
+}
+
+.tack-plotter[data-live][data-tack-clip="listen"] [data-part="arc-3"] {
+  animation-delay: calc(var(--tp-live) + 0.6s);
+}
+
+.tack-plotter[data-live][data-tack-clip="think"] [data-part="gear-a"] {
+  animation: tp-turn 6s steps(30) var(--tp-live) infinite;
+}
+
+.tack-plotter[data-live][data-tack-clip="think"] [data-part="gear-b"] {
+  animation: tp-turn 3.5s steps(30) var(--tp-live) infinite reverse;
+}
+
+.tack-plotter[data-live][data-tack-clip="write"] [data-part="quill"] {
+  animation: tp-bob 0.5s steps(2) var(--tp-live) 6;
+}
+
+.tack-plotter[data-live][data-tack-clip="write"] [data-part="script"] {
+  opacity: 1;
+}
+
+.tack-plotter[data-live][data-tack-clip="write"] [data-part="script"] path {
+  stroke-dasharray: 1 2;
+  stroke-dashoffset: 1.01;
+  animation: tp-draw 0.6s linear calc(var(--tp-live) + (var(--i) - 7) * 0.65s) forwards;
+}
+
+.tack-plotter[data-live][data-tack-clip="alert"] [data-part="bell"] {
+  animation: tp-ring 0.6s steps(4) var(--tp-live) 6;
+}
+
+.tack-plotter[data-live][data-tack-clip="alert"] [data-part="ring-l"] {
+  animation: tp-blink 0.6s steps(1) var(--tp-live) 6;
+}
+
+.tack-plotter[data-live][data-tack-clip="alert"] [data-part="ring-r"] {
+  animation: tp-blink 0.6s steps(1) calc(var(--tp-live) + 0.3s) 6;
+}
+
+.tack-plotter[data-live][data-tack-clip="done"] [data-part="wing-up"] {
+  animation: tp-wing-up 0.5s steps(1) var(--tp-live) 4;
+}
+
+.tack-plotter[data-live][data-tack-clip="done"] [data-part="wing-mid"] {
+  animation: tp-wing-mid 0.5s steps(1) var(--tp-live) 4;
+}
+
+.tack-plotter[data-live][data-tack-clip="done"] [data-part="wing-down"] {
+  animation: tp-wing-down 0.5s steps(1) var(--tp-live) 4;
+}
+
+.tack-plotter[data-live][data-tack-clip="done"] :is([data-part="bird"], [data-part^="wing-"]) {
+  translate: 0 0;
+}
+
+.tack-plotter[data-live][data-tack-clip="done"] .tp-sheet {
+  animation: tp-rise 2s steps(8) var(--tp-live) forwards;
+}
+
+.tack-plotter[data-live][data-tack-clip="oops"] [data-part^="drop-"] {
+  animation: tp-show 0.01s steps(1) calc(var(--tp-live) + 0.3s) forwards;
+}
+
+.tack-plotter[data-live][data-tack-clip="oops"] [data-part="drop-2"] {
+  animation-delay: calc(var(--tp-live) + 0.6s);
+}
+
+.tack-plotter[data-live][data-tack-clip="oops"] [data-part="drop-3"] {
+  animation-delay: calc(var(--tp-live) + 0.9s);
+}
+
+.tack-plotter[data-live][data-tack-clip="sleep"] [data-part="smoke-1"] {
+  animation: tp-third-1 2s steps(1) var(--tp-live) 15;
+}
+
+.tack-plotter[data-live][data-tack-clip="sleep"] [data-part="smoke-2"] {
+  animation: tp-third-2 2s steps(1) var(--tp-live) 15;
+}
+
+.tack-plotter[data-live][data-tack-clip="sleep"] [data-part="smoke-3"] {
+  animation: tp-third-3 2s steps(1) var(--tp-live) 15;
+}
+
+.tack-plotter[data-live][data-tack-clip="sleep"] [data-part="z-1"] {
+  animation: tp-blink 2s steps(1) var(--tp-live) 15;
+}
+
+.tack-plotter[data-live][data-tack-clip="sleep"] [data-part="z-2"] {
+  animation: tp-blink 2s steps(1) calc(var(--tp-live) + 1s) 15;
+}
+
+@keyframes tp-read {
+  0% {
+    translate: -3.2px 1.7px;
+  }
+  25% {
+    translate: -2.4px 1.7px;
+  }
+  50% {
+    translate: -1.6px 1.8px;
+  }
+  75% {
+    translate: -0.8px 1.9px;
+  }
+}
+
+@keyframes tp-brow {
+  80% {
+    translate: 0 -1.6px;
+  }
+  95% {
+    translate: 0 0;
+  }
+}
+
+@keyframes tp-page {
+  90% {
+    opacity: 0;
+  }
+  95% {
+    opacity: 1;
+  }
+}
+
+@keyframes tp-arc {
+  0% {
+    opacity: 1;
+  }
+  33% {
+    opacity: 0;
+  }
+}
+
+@keyframes tp-turn {
+  to {
+    rotate: 360deg;
+  }
+}
+
+@keyframes tp-bob {
+  50% {
+    translate: 0 -2px;
+  }
+}
+
+@keyframes tp-ring {
+  0% {
+    rotate: -14deg;
+  }
+  25% {
+    rotate: 0deg;
+  }
+  50% {
+    rotate: 14deg;
+  }
+  75% {
+    rotate: 0deg;
+  }
+}
+
+@keyframes tp-blink {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes tp-wing-up {
+  0% {
+    opacity: 1;
+  }
+  25% {
+    opacity: 0;
+  }
+  75% {
+    opacity: 0;
+  }
+}
+
+@keyframes tp-wing-mid {
+  0% {
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+  75% {
+    opacity: 1;
+  }
+}
+
+@keyframes tp-wing-down {
+  0% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  75% {
+    opacity: 0;
+  }
+}
+
+@keyframes tp-rise {
+  to {
+    translate: 6px -10px;
+  }
+}
+
+@keyframes tp-show {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes tp-third-1 {
+  0% {
+    opacity: 1;
+  }
+  33% {
+    opacity: 0;
+  }
+}
+
+@keyframes tp-third-2 {
+  0% {
+    opacity: 0;
+  }
+  33% {
+    opacity: 1;
+  }
+  66% {
+    opacity: 0;
+  }
+}
+
+@keyframes tp-third-3 {
+  0% {
+    opacity: 0;
+  }
+  66% {
+    opacity: 1;
+  }
+}
+
+/* ---------- Opening a task: the pen draws its card first ---------- */
+
+.plotter-card-draw {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+
+html[data-theme-id="plotter"] .plotter-card-draw,
+.plotter-card-draw[data-skin] {
+  display: block;
+}
+
+.plotter-card-draw svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.plotter-card-draw rect {
+  x: 1px;
+  y: 1px;
+  width: calc(100% - 2px);
+  height: calc(100% - 2px);
+  rx: 10px;
+  fill: none;
+  stroke: var(--foreground);
+  stroke-width: 1.5px;
+  stroke-dasharray: 1 2;
+  stroke-dashoffset: 1.01;
+  animation:
+    tp-draw 0.65s linear forwards,
+    tp-card-out 0.4s linear 0.9s forwards;
+}
+
+.plotter-card-pen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: var(--app-theme-accent, var(--primary));
+  offset-path: inset(1px round 10px);
+  offset-rotate: 0deg;
+  animation: tp-card-pen 0.65s linear forwards;
+}
+
+html[data-theme-id="plotter"] [data-board-task-view] > :not(.plotter-card-draw),
+[data-board-task-view]:has(> .plotter-card-draw[data-skin]) > :not(.plotter-card-draw) {
+  animation: tp-card-in 0.35s steps(4) 0.3s backwards;
+}
+
+@keyframes tp-card-pen {
+  from {
+    offset-distance: 0%;
+  }
+  99% {
+    offset-distance: 100%;
+    opacity: 1;
+  }
+  to {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+
+@keyframes tp-card-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes tp-card-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* Tack's motion set to Still switches this off too, as reduced motion does. */
+.plotter-card-draw[data-still] {
+  display: none !important;
+}
+
+[data-board-task-view]:has(> .plotter-card-draw[data-still]) > * {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plotter-card-draw {
+    display: none !important;
+  }
+
+  [data-board-task-view] > * {
+    animation: none !important;
+  }
+}
+
+/* ---------- Tack's hello when a board opens ---------- */
+
+.tack-greeting {
+  animation: tack-greeting 8s linear forwards;
+}
+
+@keyframes tack-greeting {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+  6% {
+    opacity: 1;
+    translate: 0 0;
+  }
+  88% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* ---------- Tack crossing the board to a note and back ---------- */
+
+.tack-travel {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.tack-travel > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* The Plotter's old ink is chased off where Tack stood, as when it changes drawing. */
+.tack-travel-ink .tack-plotter path {
+  stroke-dasharray: 1 2 !important;
+  fill-opacity: 0 !important;
+  animation: tp-chase 300ms linear calc(var(--i, 0) * 4ms) forwards !important;
+}
+
+.tack-travel-ink .tp-pen {
+  display: none;
+}
+
+.tack-travel mask path {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 10px;
+  stroke-dasharray: 1 2;
+  stroke-dashoffset: 1.01;
+}
+
+.tack-travel-trail {
+  fill: none;
+  stroke: var(--app-theme-accent, var(--primary));
+  stroke-width: 1.3px;
+  stroke-linecap: round;
+  stroke-dasharray: 2 5;
+  opacity: 0.8;
+}
+
+.tack-travel-pen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--app-theme-accent, var(--primary));
+  offset-rotate: 0deg;
+}
+
+/* The note Tack stands on is the one it is talking about. */
+[data-board-task]:has(> [data-tack-perch]) {
+  outline: 2px solid var(--app-theme-accent, var(--primary));
+  outline-offset: 3px;
+}
+
+/* ---------- The scholar holding a notice ---------- */
+
+.tack-plotter [data-part="card"] {
+  transform-box: view-box;
+  transform-origin: 70px 188px;
+}
+
+.tack-plotter[data-tack-clip="attention"] [data-part="brow"] {
+  translate: 0 -2.2px;
+}
+
+.tack-plotter[data-tack-clip="attention"] [data-part="pupil"] {
+  translate: 0 0.6px;
+}
+
+/* An urgent notice: he glances at the card and lifts it toward the person, for a minute. */
+.tack-plotter[data-live][data-tack-clip="attention"][data-hold="needs"] [data-part="card"] {
+  animation: tp-hail 4s steps(1) var(--tp-live) 15;
+}
+
+.tack-plotter[data-live][data-tack-clip="attention"][data-hold="needs"] [data-part="pupil"] {
+  animation: tp-glance 4s steps(1) var(--tp-live) 15;
+}
+
+.tack-plotter[data-live][data-tack-clip="attention"][data-hold="needs"] [data-part="brow"] {
+  animation: tp-lift 4s steps(1) var(--tp-live) 15;
+}
+
+@keyframes tp-hail {
+  0% {
+    translate: 0 0;
+    rotate: 0deg;
+  }
+  62% {
+    translate: 0 -6px;
+    rotate: -6deg;
+  }
+  70% {
+    translate: 0 -3px;
+    rotate: -2deg;
+  }
+  78% {
+    translate: 0 -6px;
+    rotate: -6deg;
+  }
+  86% {
+    translate: 0 -3px;
+    rotate: -2deg;
+  }
+  94% {
+    translate: 0 0;
+    rotate: 0deg;
+  }
+}
+
+@keyframes tp-glance {
+  0% {
+    translate: 0 0.6px;
+  }
+  40% {
+    translate: -2.4px 1.7px;
+  }
+  58% {
+    translate: 0 0.6px;
+  }
+}
+
+@keyframes tp-lift {
+  0% {
+    translate: 0 -2.2px;
+  }
+  62% {
+    translate: 0 -3.6px;
+  }
+  94% {
+    translate: 0 -2.2px;
+  }
+}
+
+/* ---------- What Tack holds: the pixel skins' sign, and a count ---------- */
+
+.tack-sign {
+  background-size: 100% 100%;
+  image-rendering: pixelated;
+  transform-origin: 50% 100%;
+  animation-duration: 0.5s;
+  animation-timing-function: steps(2);
+  animation-iteration-count: 3;
+}
+
+@keyframes tack-sign-a {
+  50% {
+    rotate: 10deg;
+  }
+}
+
+@keyframes tack-sign-b {
+  50% {
+    rotate: 10deg;
+  }
+}
+
+.tack-count {
+  display: grid;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 5px;
+  place-items: center;
+  border: 1.4px solid currentColor;
+  border-radius: 3px;
+  background: var(--popover);
+  color: var(--board-attention);
+  font: 700 11px var(--plotter-mono, var(--font-mono));
+  rotate: 5deg;
+}
+
+.tack-count[data-tack-count="calm"] {
+  color: var(--muted-foreground);
+}
+
+/* ---------- Tack's banner for a notice ---------- */
+
+.tack-banner {
+  position: relative;
+  color: var(--popover-foreground);
+  --tp-rust: var(--app-theme-accent, var(--primary));
+  --tack-banner-tone: var(--board-attention);
+  /* Its time on screen; hovering holds it. */
+  animation: tack-banner-life 7s linear forwards;
+}
+
+.tack-banner:hover {
+  animation-play-state: paused;
+}
+
+.tack-banner[data-tack-banner="finished"] {
+  --tack-banner-tone: var(--success);
+}
+
+.tack-banner[data-tack-banner="stopped"] {
+  --tack-banner-tone: var(--destructive);
+}
+
+@keyframes tack-banner-life {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.tack-banner-paper {
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--popover);
+  box-shadow:
+    0 10px 15px -3px rgb(0 0 0 / 0.12),
+    0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+.tack-banner-stamp {
+  padding: 1px 6px;
+  color: var(--tack-banner-tone);
+  font: 700 10px var(--plotter-mono, var(--font-mono));
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+}
+
+.tack-banner-crumb {
+  font: 10px var(--plotter-mono, var(--font-mono));
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.tack-banner-title {
+  font-family: var(--plotter-serif, inherit);
+}
+
+.tack-banner-ink,
+.tack-banner-pen {
+  display: none;
+}
+
+/* Plotter: a second pen leaves Tack on a dotted trail and draws the slip. */
+.tack-banner[data-skin="plotter"] .tack-banner-paper {
+  border-color: transparent;
+  border-radius: 6px;
+}
+
+.tack-banner[data-skin="plotter"] .tack-banner-ink {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.tack-banner-ink path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tack-banner-ink [data-ink] {
+  stroke: var(--foreground);
+  stroke-width: 1.4px;
+  stroke-dasharray: 1 2;
+}
+
+.tack-banner-ink [data-ink="stamp"] {
+  stroke: var(--tack-banner-tone);
+}
+
+.tack-banner-ink [data-trail] {
+  stroke: var(--tp-rust);
+  stroke-width: 1.3px;
+  stroke-dasharray: 2 5;
+  opacity: 0;
+}
+
+.tack-banner-ink mask path {
+  stroke: #fff;
+  stroke-width: 10px;
+  stroke-dasharray: 1 2;
+}
+
+.tack-banner[data-skin="plotter"] .tack-banner-pen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  display: block;
+  width: 5.6px;
+  height: 5.6px;
+  margin: -2.8px 0 0 -2.8px;
+  border-radius: 50%;
+  background: var(--tp-rust);
+  offset-rotate: 0deg;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Pixel skins: a hard-edged card with a tail toward Tack, popping in stepped frames. */
+.tack-banner[data-skin="pixel"] .tack-banner-paper {
+  border: 3px solid var(--foreground);
+  border-radius: 0;
+  box-shadow: 6px 6px 0 color-mix(in oklab, var(--foreground) 85%, transparent);
+}
+
+.tack-banner[data-skin="pixel"] .tack-banner-paper::after {
+  position: absolute;
+  right: 48px;
+  bottom: -12px;
+  width: 12px;
+  height: 9px;
+  border: 3px solid var(--foreground);
+  border-top: 0;
+  background: var(--popover);
+  content: "";
+}
+
+.tack-banner[data-skin="pixel"] .tack-banner-stamp {
+  background: var(--foreground);
+  color: #f5a524;
+}
+
+.tack-banner[data-skin="pixel"][data-tack-banner="finished"] .tack-banner-stamp {
+  color: #7dd9a4;
+}
+
+.tack-banner[data-skin="pixel"][data-tack-banner="stopped"] .tack-banner-stamp {
+  color: #f28a8d;
+}
+
+.tack-banner[data-skin="pixel"] :is(.tack-banner-title, .tack-banner-line) {
+  font-family: var(--font-mono);
+}
+
+.tack-banner[data-skin="pixel"][data-moving] {
+  transform-origin: 85% 100%;
+  animation:
+    tack-banner-life 7s linear forwards,
+    tack-banner-pop 0.28s steps(4) backwards;
+}
+
+.tack-banner[data-skin="pixel"][data-moving][data-leaving] {
+  animation: tack-banner-unpop 0.28s steps(4) forwards;
+}
+
+@keyframes tack-banner-pop {
+  0% {
+    opacity: 0;
+    scale: 0.3;
+    translate: 0 30px;
+  }
+  70% {
+    scale: 1.06;
+  }
+}
+
+@keyframes tack-banner-unpop {
+  to {
+    opacity: 0;
+    scale: 0.15;
+    translate: 20px 110px;
+  }
+}

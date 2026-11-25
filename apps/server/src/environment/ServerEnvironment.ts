@@ -229,6 +229,7 @@ export const make = Effect.gen(function* () {
       pullRequests: true,
       pullRequestChecks: true,
       issues: true,
+      projectBoard: true,
       linkedThreadRefreshes: true,
       issueLinkedThreads: true,
       sideChats: true,

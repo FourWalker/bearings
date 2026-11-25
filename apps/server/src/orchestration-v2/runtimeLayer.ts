@@ -1,4 +1,5 @@
 import * as WorktreeBranchSync from "./WorktreeBranchSync.ts";
+import * as BoardTurnContext from "../board/BoardTurnContext.ts";
 import * as GuestShareService from "../guest/GuestShareService.ts";
 import * as UsageLimitRecoveryWorker from "./UsageLimitRecoveryWorker.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
@@ -350,6 +351,10 @@ const layerThreadTitleRegenerationProvided = ThreadTitleRegenerationService.laye
     ),
   ),
 );
+// Project Board fork: the board's context in every thread's turns (read with serviceOption).
+const layerProviderTurnStartWithBoard = layerProviderTurnStartServiceProvided.pipe(
+  Layer.provide(BoardTurnContext.layer.pipe(Layer.provide(layerThreadManagementProvided))),
+);
 const layerEffectExecutorProvided = EffectWorker.layerExecutor.pipe(
   Layer.provide(
     Layer.mergeAll(
@@ -357,7 +362,7 @@ const layerEffectExecutorProvided = EffectWorker.layerExecutor.pipe(
       layerCheckpointRollbackServiceProvided,
       layerProviderSessionManagerProvided,
       layerProviderTurnControlServiceProvided,
-      layerProviderTurnStartServiceProvided,
+      layerProviderTurnStartWithBoard,
       layerRuntimeRequestServiceProvided,
       layerThreadTitleRegenerationProvided,
       layerThreadManagementProvided,

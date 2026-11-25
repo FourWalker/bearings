@@ -226,3 +226,17 @@ export interface StandaloneIssueTrackerApi extends IssueTrackerApi {
 export function isStandaloneIssueTracker(api: IssueTrackerApi): api is StandaloneIssueTrackerApi {
   return "standalone" in api;
 }
+
+/**
+ * A tracker kept on this machine that covers projects by folder, with no credential and no
+ * binding in Settings: the Project Board. A project lists its scopes beside its git host's.
+ */
+export interface LocalIssueTrackerApi extends IssueTrackerApi {
+  readonly local: { readonly host: string };
+  /** The scopes whose folders contain the project's root; empty when none does. */
+  readonly scopesFor: (workspaceRoot: string) => Effect.Effect<ReadonlyArray<string>>;
+}
+
+export function isLocalIssueTracker(api: IssueTrackerApi): api is LocalIssueTrackerApi {
+  return "local" in api;
+}

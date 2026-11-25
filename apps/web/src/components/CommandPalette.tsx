@@ -76,6 +76,7 @@ import {
   PaletteIcon,
   RotateCcwIcon,
   SettingsIcon,
+  SquareKanbanIcon,
   MonitorIcon,
   PinIcon,
   PinOffIcon,
@@ -1787,6 +1788,31 @@ function OpenCommandPaletteDialog(props: {
       await navigate({ to: "/settings" });
     },
   });
+
+  if (
+    environments.some(({ serverConfig }) => serverConfig?.environment.capabilities.projectBoard)
+  ) {
+    actionItems.push({
+      kind: "action",
+      value: "action:project-board",
+      title: gt("Open Project Board"),
+      searchTerms: ["board", "tasks", "recommendations", "register"],
+      icon: <SquareKanbanIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await navigate({ to: "/board", search: {} });
+      },
+    });
+    actionItems.push({
+      kind: "action",
+      value: "action:project-board-new",
+      title: gt("New board"),
+      searchTerms: ["board", "create", "workspace"],
+      icon: <SquareKanbanIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await navigate({ to: "/board", search: { picker: true, create: true } });
+      },
+    });
+  }
 
   // Every group, so an archived project's thread still opens its own settings.
   const currentProjectGroup =

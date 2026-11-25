@@ -1,4 +1,5 @@
 import {
+  OrchestrationV2ThreadTranscript,
   OrchestrationV2SearchThreadError,
   OrchestrationV2SearchThreadInput,
   OrchestrationV2SearchThreadResult,
@@ -182,6 +183,28 @@ import {
   ReviewDiffPreviewResult,
 } from "./review.ts";
 import { KeybindingsConfigError } from "./keybindings.ts";
+import {
+  BoardChat,
+  BoardCreateTaskInput,
+  BoardEditBoardInput,
+  BoardCreateBoardInput,
+  BoardCreateBoardResult,
+  BoardWorkspaceCandidate,
+  BoardEditFailure,
+  BoardEditResult,
+  BoardSettings,
+  BoardEditTaskInput,
+  BoardIntent,
+  BoardIntentAck,
+  BoardLinkError,
+  BoardLinkThreadInput,
+  BoardReadError,
+  BoardSummary,
+  BoardTaskDetail,
+  BoardTaskDetailInput,
+  BoardView,
+  BoardViewInput,
+} from "./board.ts";
 import { OrchestrationSearchThreadsError } from "./threadSearch.ts";
 import {
   ProviderMcpSignInCompleteInput,
@@ -681,6 +704,23 @@ export const WS_METHODS = {
   issueTrackersList: "issueTrackers.list",
   issueTrackersConnect: "issueTrackers.connect",
   issueTrackersBindProject: "issueTrackers.bindProject",
+  // Project Board fork.
+  boardList: "board.list",
+  boardUnassigned: "board.unassigned",
+  boardView: "board.view",
+  boardTaskDetail: "board.taskDetail",
+  boardEditTask: "board.editTask",
+  boardCreateTask: "board.createTask",
+  boardSettings: "board.settings",
+  boardArchivedThreads: "board.archivedThreads",
+  boardOpenFile: "board.openFile",
+  boardExportFile: "board.exportFile",
+  boardEditBoard: "board.editBoard",
+  boardCreateBoard: "board.createBoard",
+  boardWorkspaceCandidates: "board.workspaceCandidates",
+  boardLinkThread: "board.linkThread",
+  boardSubscribeIntents: "board.subscribeIntents",
+  boardAckIntent: "board.ackIntent",
 
   sourceControlLookupRepository: "sourceControl.lookupRepository",
   sourceControlCloneRepository: "sourceControl.cloneRepository",
@@ -1474,6 +1514,116 @@ const WsIssuesReactRpc = Rpc.make(WS_METHODS.issuesReact, {
   payload: IssueReactionInput,
   success: Schema.Void,
   error: IssueRpcError,
+});
+
+const BoardRpcError = Schema.Union([BoardReadError, EnvironmentAuthorizationError]);
+
+/** Project Board fork: the boards on this machine's ~/.claude-board. */
+const WsBoardListRpc = Rpc.make(WS_METHODS.boardList, {
+  payload: Schema.Struct({}),
+  success: Schema.Array(BoardSummary),
+  error: BoardRpcError,
+});
+
+const WsBoardUnassignedRpc = Rpc.make(WS_METHODS.boardUnassigned, {
+  payload: Schema.Struct({}),
+  success: Schema.Array(BoardChat),
+  error: BoardRpcError,
+});
+
+/** Project Board fork: one board's tasks and the chats on them. */
+const WsBoardViewRpc = Rpc.make(WS_METHODS.boardView, {
+  payload: BoardViewInput,
+  success: BoardView,
+  error: BoardRpcError,
+});
+
+/** Project Board fork: one task's plan, handoff, master plan, docs and decisions. */
+const WsBoardTaskDetailRpc = Rpc.make(WS_METHODS.boardTaskDetail, {
+  payload: BoardTaskDetailInput,
+  success: BoardTaskDetail,
+  error: BoardRpcError,
+});
+
+const BoardEditRpcError = Schema.Union([BoardEditFailure, EnvironmentAuthorizationError]);
+
+/** Project Board fork: one change to a task, made in its views. */
+const WsBoardEditTaskRpc = Rpc.make(WS_METHODS.boardEditTask, {
+  payload: BoardEditTaskInput,
+  success: BoardEditResult,
+  error: BoardEditRpcError,
+});
+
+/** Project Board fork: a new master task on a board. */
+const WsBoardCreateTaskRpc = Rpc.make(WS_METHODS.boardCreateTask, {
+  payload: BoardCreateTaskInput,
+  success: BoardEditResult,
+  error: BoardEditRpcError,
+});
+
+/** Project Board fork: a board's settings, for ⚙. */
+const WsBoardSettingsRpc = Rpc.make(WS_METHODS.boardSettings, {
+  payload: BoardViewInput,
+  success: BoardSettings,
+  error: BoardRpcError,
+});
+
+/** Project Board fork: one change to a board's settings. */
+const WsBoardArchivedThreadsRpc = Rpc.make(WS_METHODS.boardArchivedThreads, {
+  payload: BoardViewInput,
+  success: Schema.Array(OrchestrationV2ThreadTranscript),
+  error: BoardRpcError,
+});
+
+const WsBoardOpenFileRpc = Rpc.make(WS_METHODS.boardOpenFile, {
+  payload: Schema.Struct({ contents: Schema.String }),
+  success: Schema.String,
+  error: BoardEditRpcError,
+});
+
+const WsBoardExportFileRpc = Rpc.make(WS_METHODS.boardExportFile, {
+  payload: Schema.Struct({ boardId: Schema.String, includeThreads: Schema.Boolean }),
+  success: Schema.String,
+  error: BoardRpcError,
+});
+
+const WsBoardEditBoardRpc = Rpc.make(WS_METHODS.boardEditBoard, {
+  payload: BoardEditBoardInput,
+  success: BoardEditResult,
+  error: BoardEditRpcError,
+});
+
+const WsBoardCreateBoardRpc = Rpc.make(WS_METHODS.boardCreateBoard, {
+  payload: BoardCreateBoardInput,
+  success: BoardCreateBoardResult,
+  error: BoardEditRpcError,
+});
+
+const WsBoardWorkspaceCandidatesRpc = Rpc.make(WS_METHODS.boardWorkspaceCandidates, {
+  payload: Schema.Struct({}),
+  success: Schema.Array(BoardWorkspaceCandidate),
+  error: BoardRpcError,
+});
+
+/** Project Board fork: a new thread on a task, linked before its first turn. */
+const WsBoardLinkThreadRpc = Rpc.make(WS_METHODS.boardLinkThread, {
+  payload: BoardLinkThreadInput,
+  success: Schema.Void,
+  error: Schema.Union([BoardLinkError, EnvironmentAuthorizationError]),
+});
+
+/** Project Board fork: what the server asks this one window to show. */
+const WsBoardSubscribeIntentsRpc = Rpc.make(WS_METHODS.boardSubscribeIntents, {
+  payload: Schema.Struct({ clientId: Schema.String }),
+  success: BoardIntent,
+  error: EnvironmentAuthorizationError,
+  stream: true,
+});
+
+const WsBoardAckIntentRpc = Rpc.make(WS_METHODS.boardAckIntent, {
+  payload: BoardIntentAck,
+  success: Schema.Void,
+  error: EnvironmentAuthorizationError,
 });
 
 const IssueTrackerRpcError = Schema.Union([
@@ -2385,6 +2535,22 @@ export const WsRpcGroup = RpcGroup.make(
   WsIssueTrackersListRpc,
   WsIssueTrackersConnectRpc,
   WsIssueTrackersBindProjectRpc,
+  WsBoardListRpc,
+  WsBoardUnassignedRpc,
+  WsBoardViewRpc,
+  WsBoardTaskDetailRpc,
+  WsBoardEditTaskRpc,
+  WsBoardCreateTaskRpc,
+  WsBoardSettingsRpc,
+  WsBoardArchivedThreadsRpc,
+  WsBoardOpenFileRpc,
+  WsBoardExportFileRpc,
+  WsBoardEditBoardRpc,
+  WsBoardCreateBoardRpc,
+  WsBoardWorkspaceCandidatesRpc,
+  WsBoardLinkThreadRpc,
+  WsBoardSubscribeIntentsRpc,
+  WsBoardAckIntentRpc,
   WsGuestShareCreateRpc,
   WsServerProbeRpc,
   WsServerGetConfigRpc,

@@ -1,0 +1,214 @@
+# Board integration: where it stands (2026-11-23)
+
+Resume from here. The design is in [INTEGRATION.md](INTEGRATION.md) and the concept and protocol
+mapping in [RECONCILIATION.md](RECONCILIATION.md).
+
+## Repos and folders
+
+- **Fork:** `C:\Claude Works\t3code-board`. Continuation is on `board/continue-integration`, based on Claude's `board/integration` at `b4fbdfc`.
+  - `origin` = github.com/FourWalker/t3code-board (public fork)
+  - `upstream` = pingdotgg/t3code
+- **Board project:** `C:\Claude Works\Claude Project Board`. The matching standalone changes are on `board/shared-app-edits`, based on `main` at `3380791`.
+  - The Claude mod is in `mod/project-board/`; the board app is `mod/project-board/app/server.js`.
+  - Its previous `register.ts` is kept in `backup/`.
+- **Board data:** `%USERPROFILE%\.claude-board`. Boards today: NEFX (3 workspaces) and Claude Project Board.
+- **Tools:** gh, glab, vp and Codex CLI (signed in with ChatGPT) are installed; no Claude CLI on PATH.
+  In PowerShell, reload PATH from the User and Machine environment first.
+
+## Done
+
+| Step   | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Commit                  |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| Design | INTEGRATION.md, RECONCILIATION.md                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `1434c5f`               |
+| 1      | `packages/board-core`: the board's rules, storage, context and 16 tools, ported from the mod's `register.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `4b42195`               |
+| 2      | `packages/issue-tracker-board` + `LocalIssueTrackerApi`: board tasks appear as issues for projects inside a board root                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `0616d5e`               |
+| 3      | `apps/server/src/mcp/toolkits/board` + `board/BoardChats.ts`: board tools for every provider's threads; `T3_BOARD_HOST=t3` for Claude threads                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `239f5b8`               |
+| 4      | `board/BoardTurnContext.ts`: the board's context (placement, linked task's plan and handoff, Board Mode, project rules) goes inline ahead of the user's message for every provider, only when it changed, and again for a new native thread or after compaction                                                                                                                                                                                                                                                                                                                                                                                                                   | `81aa292`               |
+| 5      | `board/BoardReactor.ts`: from committed events, a run sets the thread working, its answer becomes the task's last action, checkpoint files tag services, archive/delete ends the chat; a 60 s heartbeat keeps open threads online                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `e20a6e1`               |
+| Fixes  | First dev run: Windows-safe record names, board context on plain turns, prompts of CLI/agent-started threads                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `0b1005d`               |
+| 6a     | Board view, first slice: `board.list` / `board.view` RPCs and `projectBoard` capability; `board/BoardService.ts` (T3 threads take status and title from T3, so they are never "offline"); web `/board` page with the task tree, threads per task, threads not on a task, sidebar entry                                                                                                                                                                                                                                                                                                                                                                                            | see `git log`           |
+| 6b     | "Continue in new thread" on a task card: opens a local draft in the task's workspace project (the owning copy only, when its module is owned) with a "continue from its handoff" prompt; `board.linkThread` (guarded, operate scope) links the draft's thread id to the task before the first turn. Unsent drafts stay off the board view                                                                                                                                                                                                                                                                                                                                         | see `git log`           |
+| P1     | Board screen (read-only): a column per master task with sticky notes, Level 1-3 and By service views, status filters, workspace chips and collision warning, right panel, board picker, Board row at the top of the sidebar                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `e03ae94`               |
+| Review | Fixes from the outside review (Astra): a finished subtask ticks the parent step it took over; `board_handoff` saves step note, living handoff and tick in one call; binding decisions lead the resume context                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `6f12834`               |
+| Port   | From Codex's `codex/project-board-handoff` (`fd25e89`), rebuilt: T3 threads get a short resume summary; unlinked threads see 8 recent tasks plus board_find; worktree threads fall back to their project's board; `board.taskDetail` RPC; the board task shows on the thread as a T3 issue link, mirrored both ways by BoardReactor                                                                                                                                                                                                                                                                                                                                               | see `git log`           |
+| P2     | Task views (read-only), as the board app's: a master task opens as a page (Overview: modules and tasks, threads, must-dos and to-dos), modules and tasks open beside the board; tabs Threads, Plan & Docs (master plan, phases with delegated steps and notes, docs incl. parents'), Handoff (living handoff, repo state, step notes), Tasks, Decisions (own / raised here / from parents); side column (last action, workspace, blockers, bugs, services, linked tasks, parent context, items). The open task is in the URL (`task=`). `board.taskDetail` carries plan phases, step notes, docs, grouped decisions, repo state, parent objectives, chats' last prompt and answer | see `git log`           |
+| P3a    | Editing from T3, first slice: `board-core/edit.ts` is the one implementation of task edits (agents' board tools now share its create, decision, link and delegated-step code); guarded `board.editTask` (one typed op per change) and `board.createTask` RPCs, serialized per board; in the task views: title, purpose, status, must-dos and to-dos, phase plan (edit, tick steps, step → module/task), living handoff, master plan, docs, links, service tags, new module/task, decisions (file, decide, drop, reopen, recommendations with R#); "+ New task" on the board                                                                                                       | see `git log`           |
+| P3b    | Editing, rest: move and promote (agents' tools share the code), ownership (assign a workspace copy, soft release with the push/clean/checkpoint checks, reclaim, release), editing a decision's text and its "How implemented" record, board settings ⚙ (`board.settings` / `board.editBoard`, settings-write scope: name, workspaces, services, project rules, Board Mode, registers). Fixes from the owner's review: tree columns no longer overlap (pinned grid tracks, long words wrap); modules and tasks open in one big modal (`open=`) over the board or a master task's page (`task=`), and a task that becomes a master task moves to its page                          | see `git log`           |
+| Mod    | Claude mod switched to board-core (vendored by `tools/sync-board-core.mjs`; thin `register.ts`; stands down under `T3_BOARD_HOST`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | board project `e4dbb9d` |
+| Core 1 | Protocol profiles for T3 threads: rules sent once per thread and after compaction, task state only when changed outside the thread; a short core for linked threads, with out-of-scope, decision and ownership rules delivered in the tool reply that meets them; plain threads get one hygiene line. The Claude mod keeps its full text                                                                                                                                                                                                                                                                                                                                          | `4746e7a`               |
+| Core 2 | Search: `board_find` ranks across titles, plan step names, decisions, docs and purposes; finished tasks are reference only; `board_create_task` lists similar work first (`createAnyway` overrides)                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `4746e7a`               |
+| Core 3 | Done evidence: marking a task done records commit, files and latest check; `verifyDone` answers verified / re-run / not merged here / unverified; an unverified finished dependency shows in the resume summary                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `0ce72a9`               |
+| Core 4 | Goal Mode, inline: `board_goal` (start, resume, status, task, done, decide, include, pause); one executor thread, groups by module ordered by `blocked_by`, Auto and ask modes, drift on resume, one active Goal per task. Goals are stored in the board's `goals/` folder                                                                                                                                                                                                                                                                                                                                                                                                        | `2f5e9f5`               |
+
+Each step passed `vp run check:changed`, apart from the Windows-only failures listed below.
+
+## Next
+
+**Goal (from the owner, 2026-11-22):** the whole board app's UI flow, built into T3 Code itself, with
+linked chats opening as T3 threads in the same app: no jumping to Claude Desktop or VS Code. The board
+app (`mod/project-board/app`, screenshots in the board project's `docs/preview/`) is the reference
+for layout and behaviour; it keeps working alongside on the same `~/.claude-board`.
+
+**Rule (from the review):** T3 records facts (which thread is on which task, its workspace, checks
+and their exit codes, step completion); the model records judgments (why, what a check proves,
+what's still unverified).
+
+**Acceptance test:** hand step A1 to another workspace, finish it there, interrupt the thread
+mid-completion, then open the parent and resume in a fresh thread with another provider. Board and
+thread must agree on what's done, blocked and verified, and on the next action.
+
+### Continuation on `board/continue-integration`
+
+- **Phase 3.** The standalone app uses board-core for board and task edits, including delegated
+  completion, ownership, decisions and chat links. T3 shows the plan, current activity, and recorded
+  results in separate sections. For recognized standalone check commands reported by a provider,
+  T3 records the command name and exit code. The parent includes the results of delegated steps
+  marked complete. Raw arguments and output stay in the thread.
+- **Phase 4.** The Recommendations register lists and filters board-wide R#s, links to external
+  registers, and opens the task's Decisions tab. The board picker lists recent chats without a
+  board. Users can create service backlogs and report a bug against a finished task. By service,
+  the Blocked panel, Move, and settings are part of the same flow.
+- **Phase 5.** Board links open against the correct T3 environment. The command palette opens the
+  board. Task views offer Copy task link and Copy handoff. Continue in new thread links a fresh
+  draft before it opens; choosing a different workspace can override once or take over. A soft
+  release's pickup instructions persist into the first turn.
+- **Review follow-up.** The agent protocol calls for recording a blocker when it is found.
+  Compatible hosts serialize decision filing and reserve R#s with exclusive file creation. A T3
+  handoff records the matching checkpoint ref when the run's checkpoint is captured, even if the
+  original board chat has been reopened since the handoff was written.
+
+### Acceptance verified on 2026-11-23
+
+- Real Codex `gpt-6-luna` completed delegated A1 in workspace copy-b, ran `npm test`
+  with exit code 0, saved its handoff, and was interrupted before its final answer.
+  The interrupted run's checkpoint ref reached both the step note and living handoff.
+  A fresh Claude Haiku `claude-haiku-4-5` parent thread, using only injected context and
+  zero tool calls, correctly reported completed A1, the check and exit code, next step A2,
+  and the Review sign-off blocker. All data and Git workspaces were isolated fixtures.
+- The live T3 Browser panel exercised register navigation, board rename, editing and deciding
+  a recommendation, and recording its four implementation fields. The saved values persisted
+  on the board. The native Electron Browser panel also displayed this board and register.
+  Desktop task-header measurement confirmed zero overlap after widening the status selector.
+  The register Area column now fits its label.
+- Fixed check capture for Codex's PowerShell-wrapped commands and included explicit completed
+  delegated steps in fresh-thread context. Compound shell commands remain outside check capture.
+- The Threads list now exposes a visible New chat action using T3's normal composer.
+  Unlinked conversations use the standard workflow. Models can create board items and hierarchy
+  with `board_create_task` during discussion. Taking a task with `board_link` activates the
+  board workflow when Board Mode is enabled for that board. Shared code is synced to the mod.
+- Changed-file checks passed formatting, lint, both knip passes, GraphQL generation,
+  typechecks across 41 packages, and 190 tests. After the chat changes, all 18 focused
+  chat/reactor tests passed. Packaging regression tests passed 53 cases with 2 platform skips.
+- Windows packaging now excludes the generated server bytecode cache from the loose-file budget.
+  The production payload passed its native-load and self-contained bundle probes with 66
+  budgeted files and 26 sidecar native files.
+- Follow-up UI changes put New chat in a centered, full-width row immediately above the
+  threads. Plotter Tide is a built-in theme with light and night appearances, using the
+  reference repository's corner animations and matching app, sidebar, composer, terminal,
+  menu and dialog colors. Existing glass surfaces retain translucency. The mobile palette
+  and generated theme declarations include both appearances. Palette and generation tests
+  passed all 51 cases.
+- Fresh extraction caught a desktop entry-file loss during the multi-entry bundle build.
+  All secondary desktop outputs now preserve the output directory, and packaging explicitly
+  requires main.cjs, boot.cjs and preload.cjs before staging.
+- The Windows cache-generation hook runs a temporary copy of the packaged engine so the
+  final executable stays available for electron-builder's resource editing.
+  Appearance settings now use the shared built-in theme list, matching the command palette.
+  Plotter Tide also honors the existing Glass opacity control.
+- The Windows x64 transfer build `0.1.11-board.5` includes Clay Post, Plotter Tide's serif
+  headings, and the board masthead. On a fresh extraction, both launchers worked against
+  isolated data. The desktop app showed both themes in light and dark, styled the board settings
+  dialog, kept the palette selection after reload, and opened the standard composer from New
+  chat. The extracted native payload also passed its probes.
+- Mobile includes both Clay Post palettes and the generated Uniwind types. Its appearance tests
+  and typecheck passed. Native phone layout checks remain deferred.
+- **Phase 6 remains deferred.** Mobile and Board Mode with T3-created worktrees.
+
+## How to run it (dev, isolated)
+
+`.t3/` in the clone is gitignored and holds the dev state:
+
+- `.t3/claude-board`: a copy of `~/.claude-board` plus a throwaway "Dev Board" rooted at
+  `.t3/board-ws` (a small git repo, T3 project `board-ws`, module `math-helpers` with four done tasks).
+  If `.t3` is missing, copy the board folder again and add the workspace with `t3 project add`.
+- Start: in PowerShell, `$env:T3_BOARD_HOME = "<clone>\.t3\claude-board"`, then
+  `vp run dev --home-dir <clone>\.t3`. Open the `pairingUrl` from the log, then `/board`.
+- Free turns: `node apps/server/src/bin.ts thread start --base-dir .t3 --provider devReplay
+  --model showcase <folder> "go"`. Real cheap turns: `--provider codex --model gpt-6-luna`.
+- Board app on the copy: `BOARD_ROOT=<copy> BOARD_PORT=4318 node server.js` in the mod's `app/`.
+- `~/.t3/userdata` is the owner's real T3 data: always pass `--home-dir` / `--base-dir`, never run without it.
+
+## Verified
+
+- First dev run fixed three bugs: T3 thread ids hold colons (Windows NTFS streams), so board-core
+  names records with the board app's `safe()` rule; plain turns now carry the board context; CLI- and
+  agent-started threads' prompts are recorded (only server wakes are skipped).
+- Codex `gpt-6-luna` read the board context (named the board, workspace and project rule) and used
+  the board tools: created and linked a task, saved a plan, ticked a step, wrote handoffs. The board
+  app showed it.
+- `/board` in the dev web app: shows the Dev Board and the copied NEFX board (tree, steps, services,
+  paused module, offline Claude Code chat not clickable); the Codex thread shows idle after a restart;
+  clicking it opens the T3 thread; the sidebar Board entry opens the page.
+- "Continue in new thread" on the Dev Board: the draft opened in board-ws with the prompt, its board
+  record was linked to `refund-api` before sending, and after a Replay turn the thread showed on the
+  task with its answer as the last action. NEFX (no T3 project in its folders) shows no button.
+- Core 1 to 4 live (Codex `gpt-6-luna`, Dev Board): a thread linked itself to a task and received the
+  short T3 profile, the task with its parents and the project rules; a Goal on a module took its tasks
+  one by one in a single turn, committed each and finished. The first run showed three evidence bugs,
+  now fixed and re-run: a check logged to a file with its exit code passed on is recorded; files are
+  recorded as the agent writes them (Codex and Claude; other providers still only at the turn's
+  checkpoint); `.local-run` logs no longer count as uncommitted work.
+- One `BoardChats` is shared by every user of `BoardChats.layer` in a build (checked against Effect).
+
+## Not verified yet / known gaps
+
+- Model-behaviour evals were not run though tool descriptions and rules text changed, and live checks
+  used Codex only (no Claude thread). `vp run check:changed` cannot finish in this checkout: mobile and marketing
+  dependencies are not installed.
+- Goal Mode: the web board shows open Goals in its panel and marks their tasks, both seen in the dev
+  app with seeded Goals only. A paused Goal soft-releases the modules it claimed when their work is
+  pushed and clean (tested, not seen live).
+- Goal delegation ran live once (Codex): the executor handed a group to a child thread, which took
+  it, worked it and reported; T3 woke the executor, which finished the Goal. The child ran in a T3
+  worktree and could not commit there (the Codex sandbox denied the linked git metadata), so the
+  executor committed its files. Several groups out at once (parallel) is rules text plus the same
+  mechanism and was not run live. Two threads writing one Goal file at once is narrowed, not locked.
+- `board_show` ran live: a Codex thread asked for a task, the browser opened it with the view and
+  filter named, and the thread got the window's answer. Mobile does not act on it. `t3 board`
+  (list, find, show, link) was run by hand on the dev copy.
+- Board Assistant ran live from "Ask the board" (Codex `gpt-6-luna`, supervised): it found a task and
+  showed it, and created one only after a yes. Not built: a card, screen state with each message, an
+  instant matcher, an allowlist for T3's own tools, and voice beyond the composer microphone.
+- A thread's place on the board (Assistant, Goal executor, worker) used to be lost when its record
+  was reopened, as after a server restart; fixed and tested.
+- Search: other names for an item, file paths, roll-up, `level`, superseded tasks and the first-turn
+  line are tested, not run live. Other names are saved through `board_find` only; the web board
+  cannot list or remove them. `board_create_task` in a T3 thread now needs `parentId` or `topLevel`.
+- A task marked done from the board UI records the repo state of its owning workspace (or of the
+  only workspace); on a board with several copies and no owner it records nothing. These fixes after
+  the live run are tested but were not re-run live.
+- The design for what comes next is in [NEXT-FEATURES.md](NEXT-FEATURES.md).
+
+- The board app still shows T3 threads unused since a restart as "offline", and its jump link
+  (`claude://…`) is wrong for T3 threads. T3's own Board page has neither problem.
+- Claude threads in T3 (`T3_BOARD_HOST=t3`) passed the real-provider handoff acceptance above.
+- Service tags arrive with the turn's checkpoint, after the turn, so the "outside this task's
+  services" note isn't shown to the agent (the mod shows it mid-turn).
+- Threads in folders on no board get the short "not on a board yet" note, as the mod does.
+- "Continue in new thread" picks the model in the composer, not on the button (the draft uses the
+  project's defaults like any new thread). It always starts a local draft: a T3 worktree sits outside
+  the board's roots, so the thread would land off the board.
+- The switched Claude mod has been smoke-tested with a fake host, not yet in a real new Claude chat.
+- Windows-only test failures, with and without the board changes: 4 `ProviderTurnStartService.test.ts`
+  cases (Git worktrees) and one `ServerEnvironment.test.ts` case (symlink EPERM). The mobile
+  `i18n:check` step can't spawn `gt` on Windows; web catalogs pass.
+
+## Codex's branch
+
+`refs/remotes/codex/project-board-handoff` (fetched from its bundle) is kept for reference. Not
+taken: board file reads inside the Orchestrator, plan repair on every save and read, handoff parsing
+by heading patterns, its task-detail tabs (phase 2 rebuilds them to match the board app).
+
+## After editing board-core
+
+Run `node tools/sync-board-core.mjs` in the board project to refresh the mod's copy.
