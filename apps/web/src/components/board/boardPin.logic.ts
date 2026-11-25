@@ -195,7 +195,7 @@ export function pinPeekRows(
             ? { verb: "wants", text: item.prompt ?? item.title ?? item.requestKind }
             : null;
         case "dynamic_tool": {
-          const name = (item.toolName ?? "").replace(/^mcp__[^_]+(?:_[^_]+)*__/, "");
+          const name = (item.toolName ?? "").replace(/^.*(?:__|\.)/, "");
           return { verb: name.startsWith("board_") ? "board" : "tool", text: name };
         }
         default:
