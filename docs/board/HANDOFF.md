@@ -102,6 +102,11 @@ the detail; update the board task after it.
 - **Outputs** (`ffd3944`): `addOutputs` in `chat.ts` lists document files a thread writes and up to three
   links of its final answer as task docs of kind "Output" (newest 20; a removed one is kept off
   by `outputsDropped`). Tests only; not watched with a real thread.
+- **Checks, reviews, CLI writes** (`19c9c7a08a`, `27bce128f6`, `4553bf3ba4`): `boardChecks.ts` reads
+  check results from Claude commands too (no exit code there; `echo "rc $?"` is read from the
+  output); replayed over the owner's stored commands, not yet seen live. `board_update review`
+  records a read of finished work. `t3 board add|update`. Other names can be removed in the task's
+  side column (not seen in a browser). Not recorded: checks run through Claude's PowerShell tool.
 - **New board and workspace binding** (2026-11-25, seen running on the Dev Board): a board binds to
   folders; the T3 project is looked up from the folder and never stored (project ids are per
   install, `boards.json` is shared). `BoardCreateDialog.tsx` (picker card, Switch board menu,
