@@ -1296,7 +1296,7 @@ function DecisionCard(
             ? gt("L{level} recommendation", { level: d.level })
             : gt("L{level} decision", { level: d.level })}
         </Badge>
-        <b className="min-w-0 flex-1 text-sm">{d.title}</b>
+        <b className="min-w-48 flex-1 text-sm">{d.title}</b>
         <DecisionTypeSelect decisionId={d.id} type={d.type} />
         <Badge variant={d.status === "decided" ? "success" : "outline"}>
           {d.status === "open"
