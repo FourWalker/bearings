@@ -830,7 +830,8 @@ html[data-theme-id="clay-post"]
     [data-slot="combobox-popup"],
     [data-slot="autocomplete-popup"],
     [data-slot="preview-card-popup"],
-    [data-slot="toast-popup"]
+    [data-slot="toast-popup"],
+    [data-slot="tooltip-popup"].dropdown-glass
   ) {
   background-color: color-mix(
     in srgb,
@@ -854,8 +855,8 @@ html[data-theme-id="clay-post"] [data-slot="menu-separator"] {
   border-top: 1.5px dotted var(--clay-rule);
 }
 
-/* Tooltips are little ink-on-card tags. */
-html[data-theme-id="clay-post"] [data-slot="tooltip-popup"] {
+/* Tooltips are little ink-on-card tags; a hover card (the glass kind) keeps the menus' paper. */
+html[data-theme-id="clay-post"] [data-slot="tooltip-popup"]:not(.dropdown-glass) {
   border-radius: 4px 10px 10px 4px;
   background: var(--clay-ink);
   color: var(--app-theme-canvas);

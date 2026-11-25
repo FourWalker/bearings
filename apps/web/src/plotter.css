@@ -440,7 +440,8 @@ html[data-theme-id="plotter"]
     [data-slot="command-dialog-popup"],
     [data-slot="menu-popup"],
     [data-slot="popover-popup"],
-    [data-slot="select-popup"]
+    [data-slot="select-popup"],
+    [data-slot="tooltip-popup"].dropdown-glass
   ) {
   border-color: var(--plotter-line);
   box-shadow:
@@ -454,7 +455,9 @@ html[data-theme-id="plotter"] [data-slot="menu-separator"] {
   border-top: 1px dotted var(--plotter-line);
 }
 
-html[data-theme-id="plotter"] [data-slot="tooltip-popup"] {
+/* A one-line tooltip is an ink tag. A hover card (the glass kind) sets its own text colours, so
+   it stays a cream card like the menus. */
+html[data-theme-id="plotter"] [data-slot="tooltip-popup"]:not(.dropdown-glass) {
   border-color: transparent;
   border-radius: 4px;
   background: var(--plotter-ink);
