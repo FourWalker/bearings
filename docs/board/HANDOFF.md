@@ -150,10 +150,10 @@ the detail; update the board task after it.
   without starting the Goal and shows a chat panel with Start now; a Chat toggle on every Goal card
   (`GoalChat`, messages followed only while open); each finished task's full result.
 - Windows build: the owner's install `Outputs/T3-Project-Board-Frozen-Windows-x64` holds
-  `8b8baaec9b` (New board and workspace binding) since 2026-11-25 18:10, swapped in on the owner's say-so; ask before the next
+  `161ba9d207` (Tree deck, order, filters, stars) since 2026-11-25 21:01, swapped in on the owner's say-so; ask before the next
   swap. The app must be closed first: its exe locks the folder.
   Older installs sit there as
-  `win-unpacked.backup-20261125-181035` (ffd3944), `-121607` (e47a57c), `-103704` (19695a4), `-003448` (1b8d6a0), `-20261124-203554` (02f758c), `-143000`
+  `win-unpacked.backup-20261125-210142` (8b8baaec9b), `-181035` (ffd3944), `-121607` (e47a57c), `-103704` (19695a4), `-003448` (1b8d6a0), `-20261124-203554` (02f758c), `-143000`
   (3e74c49), `-090747` (22ad144) and `-082118` (fd7f86b). `Outputs/Board-rebuild-d3e1aed94b`, `-c5028dba08` and `-98d0dec660` were
   built and never installed. Not launched by me.
 
