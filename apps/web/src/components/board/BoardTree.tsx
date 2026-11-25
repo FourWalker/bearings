@@ -23,8 +23,9 @@ import {
 } from "./boardTree.logic";
 
 /**
- * Project Board fork: the Tree view as a deck. Cards are shut to one line until opened; a bar
- * orders them, hides done work, filters by name and by star. Kept per board on this device.
+ * Project Board fork: the Tree view as a deck. Module cards are shut to one line until opened and
+ * feature cards are open until shut; a bar orders them, hides done work, filters by name and by
+ * star. Kept per board on this device.
  */
 const PrefsSchema = Schema.Record(
   Schema.String,
@@ -33,6 +34,8 @@ const PrefsSchema = Schema.Record(
     reversed: Schema.Boolean,
     showDone: Schema.Boolean,
     open: Schema.Array(Schema.String),
+    /** Feature cards the person shut: they are open otherwise. */
+    shut: Schema.optional(Schema.Array(Schema.String)),
   }),
 );
 type TreePrefs = (typeof PrefsSchema.Type)[string];
@@ -41,12 +44,17 @@ const DEFAULT_PREFS: TreePrefs = { order: "last", reversed: false, showDone: fal
 
 export interface BoardTree {
   readonly options: TreeOptions;
+  /** Module cards the person opened. */
   readonly open: ReadonlySet<string>;
+  /** Feature cards the person shut. */
+  readonly shut: ReadonlySet<string>;
   readonly set: (patch: Partial<Omit<TreeOptions, "query" | "starredOnly">>) => void;
   /** The name filter and the star filter last only while the board is open. */
   readonly setQuery: (query: string) => void;
   readonly setStarredOnly: (on: boolean) => void;
   readonly toggle: (taskId: string) => void;
+  readonly toggleFeature: (taskId: string) => void;
+  /** Opens exactly these modules; opening any also reopens every feature card. */
   readonly setOpen: (taskIds: ReadonlyArray<string>) => void;
 }
 
@@ -66,6 +74,7 @@ export function useBoardTree(boardId: string): BoardTree {
       query,
     },
     open: new Set(prefs.open),
+    shut: new Set(prefs.shut ?? []),
     set: (patch) => update((previous) => ({ ...previous, ...patch })),
     setQuery,
     setStarredOnly,
@@ -76,13 +85,26 @@ export function useBoardTree(boardId: string): BoardTree {
           ? previous.open.filter((id) => id !== taskId)
           : [...previous.open, taskId],
       })),
-    setOpen: (taskIds) => update((previous) => ({ ...previous, open: [...taskIds] })),
+    toggleFeature: (taskId) =>
+      update((previous) => {
+        const shut = previous.shut ?? [];
+        return {
+          ...previous,
+          shut: shut.includes(taskId) ? shut.filter((id) => id !== taskId) : [...shut, taskId],
+        };
+      }),
+    setOpen: (taskIds) =>
+      update((previous) => ({
+        ...previous,
+        open: [...taskIds],
+        shut: taskIds.length > 0 ? [] : (previous.shut ?? []),
+      })),
   };
 }
 
 export function BoardTreeBar(props: {
   readonly tree: BoardTree;
-  /** Every card the view shows now, for "Open all". */
+  /** Every module card the view shows now, for "Open all". */
   readonly cards: ReadonlyArray<string>;
   readonly starred: number;
   readonly onReview: () => void;
@@ -164,8 +186,8 @@ export function BoardTreeBar(props: {
   );
 }
 
-export const treeCardIds = (columns: ReadonlyArray<TreeColumn>): ReadonlyArray<string> =>
-  columns.flatMap((column) => [column.root.id, ...column.modules.map((entry) => entry.task.id)]);
+export const treeModuleIds = (columns: ReadonlyArray<TreeColumn>): ReadonlyArray<string> =>
+  columns.flatMap((column) => column.modules.map((entry) => entry.task.id));
 
 export function BoardTreeColumns(props: {
   readonly index: BoardIndex;
@@ -186,8 +208,8 @@ export function BoardTreeColumns(props: {
             serviceName={props.serviceName}
             actions={props.actions}
             deck={{
-              open: tree.open.has(column.root.id),
-              onToggle: () => tree.toggle(column.root.id),
+              open: !tree.shut.has(column.root.id),
+              onToggle: () => tree.toggleFeature(column.root.id),
             }}
           />
           <div className="mt-3 grid grid-cols-[minmax(0,1fr)]">

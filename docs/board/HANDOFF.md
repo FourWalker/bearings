@@ -111,7 +111,9 @@ the detail; update the board task after it.
   op `star`, people only: no agent tool). A star goes first and stays in view when done. The star
   review opens the first time a board opens each day (`useStarReview`, `t3.board.stars.review`);
   its switch is Settings, Tack, "Starred items", and "Review stars" in the bar opens it by hand.
-  Design: `concepts/tree-deck-concept.html`. Not seen: Plotter and Clay Post themes with shut
+  Feature cards are open until shut (`shut` in the same prefs); Shut all and Open all act on
+  modules (owner, 2026-11-25). Plotter draws the shut card's stamp itself (`data-board-peek-stamp`).
+  Design: `concepts/tree-deck-concept.html`. Not seen: the Clay Post theme with shut
   cards, the star in an open task's header, the Settings switch. Not built: mobile, the other views'
   bar, sorting the columns. Starring bumps `updatedAt`, so the column moves left on its own.
 - **Checks, reviews, CLI writes** (`19c9c7a08a`, `27bce128f6`, `4553bf3ba4`): `boardChecks.ts` reads

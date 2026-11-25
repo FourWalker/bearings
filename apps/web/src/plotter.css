@@ -178,6 +178,29 @@ html[data-theme-id="plotter"] [data-board-stamp="blocked"] {
   text-transform: uppercase;
 }
 
+/* A shut card's status is a small stamp: outlined, and filled rust when it needs the person. */
+html[data-theme-id="plotter"] [data-board-peek-stamp] {
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--plotter-ink-soft);
+  font-family: var(--plotter-mono);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
+html[data-theme-id="plotter"] [data-board-peek-stamp="working"] {
+  color: var(--plotter-ink);
+}
+
+html[data-theme-id="plotter"] [data-board-peek-stamp="blocked"],
+html[data-theme-id="plotter"] [data-board-peek-stamp="needs"],
+html[data-theme-id="plotter"] [data-board-peek-stamp="stopped"] {
+  border-color: var(--plotter-rust);
+  background: var(--plotter-rust);
+  color: var(--background);
+}
+
 html[data-theme-id="plotter"] [data-board-progress] {
   height: 3px;
   background: var(--plotter-line);

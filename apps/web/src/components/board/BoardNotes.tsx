@@ -461,7 +461,7 @@ function NotePeek(props: {
       </h3>
       {stamp !== null ? (
         <span
-          data-board-stamp={stamp}
+          data-board-peek-stamp={stamp}
           className={cn(
             "shrink-0 rounded-full px-1.5 py-px font-semibold text-3xs uppercase tracking-wide",
             STAMP_TONE[stamp],

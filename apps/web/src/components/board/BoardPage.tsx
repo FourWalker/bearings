@@ -80,7 +80,7 @@ import {
   BoardStarReview,
   BoardTreeBar,
   BoardTreeColumns,
-  treeCardIds,
+  treeModuleIds,
   useBoardTree,
   useStarReview,
 } from "./BoardTree";
@@ -819,7 +819,7 @@ function BoardScreen(props: {
       {props.mode === "tree" ? (
         <BoardTreeBar
           tree={tree}
-          cards={treeCardIds(columns)}
+          cards={treeModuleIds(columns)}
           starred={starred.length}
           onReview={starReview.show}
         />
