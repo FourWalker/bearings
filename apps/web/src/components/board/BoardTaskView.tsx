@@ -76,6 +76,7 @@ import {
 import { BoardTaskTack } from "./BoardTaskTack";
 import { PlotterCardDraw } from "./PlotterCardDraw";
 import { useTaskTackSize } from "./useTaskChat";
+import { useMediaQuery } from "~/hooks/useMediaQuery";
 
 /**
  * Project Board fork: the board app's task views. A master task opens as a page with its
@@ -123,7 +124,9 @@ export function BoardTaskView(props: BoardTaskViewProps) {
   const openDecisions = openDecisionCount(index, task);
   // Tack in the task: the threads it can load, and the one it shows. A thread that waits for an
   // answer or is working is shown when the task opens; after that the person chooses.
-  const [tackSize, setTackSize] = useTaskTackSize();
+  const [storedTackSize, setTackSize] = useTaskTackSize();
+  // A phone or an upright tablet has no room for a column beside the task: Tack is a row at its foot.
+  const tackSize = useMediaQuery("max-lg") ? "line" : storedTackSize;
   const tackChats = chatsForView(index, task, master)
     .filter((entry) => entry.worked === undefined)
     .map(({ chat }) => chat)
@@ -302,8 +305,8 @@ function TaskHeader(props: BoardTaskViewProps & { readonly detail: BoardTaskDeta
           </Badge>
         ) : null}
       </div>
-      <div className="flex items-start gap-2">
-        <div className="min-w-0 flex-1">
+      <div className="flex items-start gap-2 max-md:flex-wrap">
+        <div className="min-w-0 flex-1 max-md:basis-full">
           <EditableText
             value={task.title}
             label={gt("Title")}

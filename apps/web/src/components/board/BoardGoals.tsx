@@ -706,7 +706,7 @@ function GoalCard(props: {
           onAnswer={(answer) => props.onAnswer(decision, answer)}
         />
       ))}
-      <div className="flex items-start gap-3 overflow-x-auto pb-1">
+      <div className="flex items-start gap-3 overflow-x-auto pb-1 max-md:flex-col max-md:items-stretch">
         {lanes.map((lane) => (
           <GoalLane
             key={lane.group.id}
@@ -756,7 +756,7 @@ function GoalLane(props: {
     <section
       data-board-goal-lane={lane.state}
       className={cn(
-        "grid w-64 shrink-0 grid-cols-[minmax(0,1fr)] content-start gap-1.5 rounded-lg border p-2",
+        "grid w-64 shrink-0 grid-cols-[minmax(0,1fr)] content-start gap-1.5 rounded-lg border p-2 max-md:w-full",
         lane.state === "working" && "border-info/60",
         lane.state === "waiting" && "opacity-70",
       )}

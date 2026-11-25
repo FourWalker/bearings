@@ -278,7 +278,7 @@ export function useTackRelease(): (() => void) | null {
   return use(TackBoardContext)?.release ?? null;
 }
 
-function useTackBoard() {
+export function useTackBoard() {
   return use(TackBoardContext);
 }
 

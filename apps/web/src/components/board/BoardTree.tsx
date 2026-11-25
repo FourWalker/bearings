@@ -199,7 +199,7 @@ export function BoardTreeColumns(props: {
   const gt = useGT();
   const { index, tree } = props;
   return (
-    <div className="flex items-start gap-4">
+    <div data-board-columns className="flex items-start gap-4">
       {props.columns.map((column) => (
         <section key={column.root.id} className="grid w-80 shrink-0 grid-cols-[minmax(0,1fr)]">
           <BoardNote
