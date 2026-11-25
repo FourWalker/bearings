@@ -1541,6 +1541,7 @@ function SideColumn(
       ) : null}
       <BugsCard {...props} />
       <ServicesCard {...props} />
+      <OtherNamesCard names={props.detail?.aliases ?? []} />
       <Card title={gt("Linked tasks")}>
         <LinkedTasks {...props} />
       </Card>
@@ -1697,6 +1698,33 @@ function ServicesCard(props: BoardTaskViewProps) {
           </MenuPopup>
         </Menu>
       ) : null}
+    </Card>
+  );
+}
+
+/** Other names are learned from missed searches; here they can be seen and dropped. */
+function OtherNamesCard(props: { readonly names: ReadonlyArray<string> }) {
+  const gt = useGT();
+  const { canEdit, edit } = useBoardEdit();
+  if (props.names.length === 0) return null;
+  return (
+    <Card title={gt("Other names")}>
+      <div className="flex flex-wrap gap-1">
+        {props.names.map((name) => (
+          <Badge key={name} variant="outline">
+            {name}
+            {canEdit ? (
+              <button
+                type="button"
+                aria-label={gt("Remove other name {name}", { name })}
+                onClick={() => void edit({ op: "removeAlias", alias: name })}
+              >
+                <XIcon className="size-3" />
+              </button>
+            ) : null}
+          </Badge>
+        ))}
+      </div>
     </Card>
   );
 }

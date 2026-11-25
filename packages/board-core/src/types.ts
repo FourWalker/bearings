@@ -113,6 +113,16 @@ export interface DoneEvidence {
   repos: { repo: string; name: string; branch: string; head: string; dirty: number }[];
   files: string[];
   check?: CheckResult | undefined;
+  /** What a later reader of its handoff and diff found, at the commits they read it at. */
+  review?:
+    | {
+        ok: boolean;
+        note: string;
+        repos: { repo: string; name: string; head: string }[];
+        at: number;
+        by?: string | undefined;
+      }
+    | undefined;
   at: number;
 }
 

@@ -383,6 +383,8 @@ export interface BoardTaskDetail {
   /** The living handoff, without its header comment. */
   readonly handoff: string;
   readonly handoffCheckpoint: string | null;
+  /** Other names search finds the task by. */
+  readonly aliases: ReadonlyArray<string>;
   readonly checks: ReadonlyArray<CheckResult & { readonly taskTitle: string }>;
   /** Step notes, newest first. */
   readonly stepNotes: ReadonlyArray<{
@@ -535,6 +537,7 @@ export async function readTaskDetail(
     planMarkdown: plan,
     handoff: stripHeader(handoff),
     handoffCheckpoint: checkpointOf(handoff),
+    aliases: task.aliases ?? [],
     checks: await checksForTask(store, boardId, task, phases),
     stepNotes: stepNotes.map((n) => ({
       ...n,

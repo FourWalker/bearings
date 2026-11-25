@@ -1804,7 +1804,31 @@ ${this.related}`
     return `${prefix}${upper ? t.toUpperCase() : t}${suffixMax ? this.store.clock.random(suffixMax) : ""}`;
   }
 
+  /** Reading finished work changes none of it, so another workspace's module takes a review too. */
+  private async reviewDone(id: string, review: Record<string, unknown>): Promise<BoardReply> {
+    const t = this.board ? await this.lookupTask(id) : null;
+    if (!t) return reply(`No task "${id}".`);
+    if (t.status !== "done") return reply(`"${t.title}" is not done: there is nothing to review.`);
+    const note = clip(str(review.note).trim(), 300);
+    if (typeof review.ok !== "boolean" || !note)
+      return reply("A review needs ok (true or false) and a note saying what was found.");
+    const repos = (await this.reposFor(t)).map(({ repo, name, head }) => ({ repo, name, head }));
+    const at = this.now();
+    t.doneEvidence = {
+      ...(t.doneEvidence ?? { repos: [], files: t.files ?? [], at }),
+      review: { ok: review.ok, note, repos, at, by: this.sess?.sessionId },
+    };
+    await this.saveTask(t);
+    this.doneChecks.delete(t.id);
+    return reply(`Review recorded for "${t.title}": ${(await this.doneCheck(t)).text}`);
+  }
+
   async updateTask(a: Record<string, unknown>): Promise<BoardReply> {
+    if (typeof a.review === "object" && a.review !== null)
+      return this.reviewDone(
+        str(a.taskId) || (this.sess?.taskId ?? ""),
+        a.review as Record<string, unknown>,
+      );
     const t = await this.requireTask(a);
     if (typeof t === "string") return reply(t);
     const by = this.sess?.sessionId;

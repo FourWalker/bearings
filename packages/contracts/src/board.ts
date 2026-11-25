@@ -225,6 +225,8 @@ export const BoardTaskDetail = Schema.Struct({
   planMarkdown: Schema.String,
   handoff: Schema.String,
   handoffCheckpoint: Schema.optional(Schema.NullOr(Schema.String)),
+  /** Other names search finds the task by; absent from servers made before they were listed. */
+  aliases: Schema.optional(Schema.Array(Schema.String)),
   checks: Schema.optional(
     Schema.Array(
       Schema.Struct({
@@ -360,6 +362,7 @@ export const BoardTaskEdit = Schema.Union([
     note: Schema.String,
   }),
   Schema.Struct({ op: Schema.Literal("removeDoc"), docId: Schema.String }),
+  Schema.Struct({ op: Schema.Literal("removeAlias"), alias: Schema.String }),
   Schema.Struct({
     op: Schema.Literal("addLink"),
     to: Schema.String,

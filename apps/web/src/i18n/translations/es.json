@@ -12992,5 +12992,7 @@
   "3c6c4c98735c14f4": "Añadir el espacio de trabajo {label}",
   "1e34422e35b72edf": "Proyecto de T3",
   "8a8f2fcb7d119cbe": "Sin proyecto aquí",
-  "e08fe8c4224e57af": "Un espacio de trabajo necesita un proyecto de T3 para que un hilo pueda empezar ahí desde el tablero."
+  "e08fe8c4224e57af": "Un espacio de trabajo necesita un proyecto de T3 para que un hilo pueda empezar ahí desde el tablero.",
+  "f616264e015cab5c": "Otros nombres",
+  "b4430c0bf13e6583": "Quitar el otro nombre {name}"
 }

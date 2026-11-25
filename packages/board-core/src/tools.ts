@@ -385,6 +385,13 @@ export const SCHEMA = {
       },
       mainService: { type: "string" },
       kind: { type: "string", enum: ["feature", "backlog"] },
+      review: {
+        type: "object",
+        description:
+          "Alone, on a done task: whether its work holds, after reading its handoff and the diff of its files.",
+        properties: { ok: { type: "boolean" }, note: { type: "string" } },
+        required: ["ok", "note"],
+      },
     },
   },
   plan: {

@@ -13004,5 +13004,7 @@
   "3c6c4c98735c14f4": "Lägg till arbetsytan {label}",
   "1e34422e35b72edf": "T3-projekt",
   "8a8f2fcb7d119cbe": "Inget projekt här",
-  "e08fe8c4224e57af": "En arbetsyta behöver ett T3-projekt innan en tråd kan startas där från tavlan."
+  "e08fe8c4224e57af": "En arbetsyta behöver ett T3-projekt innan en tråd kan startas där från tavlan.",
+  "f616264e015cab5c": "Andra namn",
+  "b4430c0bf13e6583": "Ta bort det andra namnet {name}"
 }

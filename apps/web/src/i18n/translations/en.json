@@ -13006,5 +13006,7 @@
   "3c6c4c98735c14f4": "Add workspace {label}",
   "1e34422e35b72edf": "T3 project",
   "8a8f2fcb7d119cbe": "No project here",
-  "e08fe8c4224e57af": "A workspace needs a T3 project before a thread can start there from the board."
+  "e08fe8c4224e57af": "A workspace needs a T3 project before a thread can start there from the board.",
+  "f616264e015cab5c": "Other names",
+  "b4430c0bf13e6583": "Remove other name {name}"
 }

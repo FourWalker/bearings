@@ -12997,5 +12997,7 @@
   "3c6c4c98735c14f4": "Ajouter l’espace de travail {label}",
   "1e34422e35b72edf": "Projet T3",
   "8a8f2fcb7d119cbe": "Aucun projet ici",
-  "e08fe8c4224e57af": "Un espace de travail a besoin d’un projet T3 avant qu’un fil puisse y démarrer depuis le tableau."
+  "e08fe8c4224e57af": "Un espace de travail a besoin d’un projet T3 avant qu’un fil puisse y démarrer depuis le tableau.",
+  "f616264e015cab5c": "Autres noms",
+  "b4430c0bf13e6583": "Supprimer l’autre nom {name}"
 }

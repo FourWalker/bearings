@@ -12997,5 +12997,7 @@
   "3c6c4c98735c14f4": "Arbeitsbereich {label} hinzufügen",
   "1e34422e35b72edf": "T3-Projekt",
   "8a8f2fcb7d119cbe": "Kein Projekt hier",
-  "e08fe8c4224e57af": "Ein Arbeitsbereich braucht ein T3-Projekt, bevor dort vom Board aus ein Thread starten kann."
+  "e08fe8c4224e57af": "Ein Arbeitsbereich braucht ein T3-Projekt, bevor dort vom Board aus ein Thread starten kann.",
+  "f616264e015cab5c": "Andere Namen",
+  "b4430c0bf13e6583": "Anderen Namen {name} entfernen"
 }

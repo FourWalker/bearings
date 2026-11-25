@@ -199,6 +199,24 @@ describe("editTask", () => {
     await edit("retries", { op: "update", status: "active" });
     expect((await task("retries")).doneEvidence).toBeUndefined();
     expect(nextStep(await plan("billing"))?.id).toBe("A1");
+
+    // With several copies and no owner, the copy all its files are in is the one it was done in.
+    const copies = ["one", "two"].map((label) => ({ path: `${norm(tmp)}/${label}`, label }));
+    await store.saveRegistry({
+      version: 1,
+      boards: [{ id: "nefx", name: "NEFX", createdAt: 0, roots: copies }],
+    });
+    const finish = async (files: string[]) => {
+      await store.saveTask("nefx", { ...(await task("retries")), status: "active", files });
+      await editTask(store, "nefx", "retries", { op: "update", status: "done" }, actor, git);
+      return (await task("retries")).doneEvidence;
+    };
+    const inTwo = `${norm(tmp)}/two/a.ts`;
+    expect((await finish([inTwo]))?.repos[0]?.repo).toBe(`${norm(tmp)}/two`);
+    expect(await finish([inTwo, `${norm(tmp)}/one/a.ts`])).toMatchObject({
+      repos: [],
+      files: [inTwo, `${norm(tmp)}/one/a.ts`],
+    });
   });
 
   it("maps documents, links tasks from either side, and files and settles decisions", async () => {

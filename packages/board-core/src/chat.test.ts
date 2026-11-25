@@ -508,6 +508,10 @@ describe("BoardChat", () => {
     await other.turnStart("Fix the flaky test");
     await other.turnStart("It is in the storefront");
     expect(other.context).not.toContain("Possibly related");
+
+    const removeAlias = { op: "removeAlias", alias: "storefront" } as const;
+    await editTask(store, "nefx", "marketplace", removeAlias, { by: "t3-app" });
+    expect((await chat.findTasks({ query: "storefront" })).text).toBe("No matching tasks.");
   });
 
   it("records evidence when a task is done and checks it cheapest first", async () => {
@@ -551,6 +555,16 @@ describe("BoardChat", () => {
     expect(await finish()).toContain("re-run `npm test` before building on it");
     since = "unreachable";
     expect(await finish()).toContain("done elsewhere, not merged here");
+    // What a reader found stands in for a check, until the files change; a bad finding stays.
+    const review = async (ok: boolean, note: string) =>
+      (await chat.updateTask({ taskId: "task", review: { ok, note } })).text;
+    expect(await review(true, "")).toContain("A review needs ok");
+    since = "same";
+    expect(await review(true, "Matches the API spec.")).toContain("reviewed at abc1234");
+    since = "changed";
+    expect(await review(true, "Matches the API spec.")).toContain("re-run `npm test`");
+    expect(await review(false, "Retries are lost.")).toContain("reassess its code in full");
+    expect(await finish()).not.toContain("Retries are lost.");
   });
 
   it("runs a Goal: tasks in a row with light records, reconciling work done outside it", async () => {

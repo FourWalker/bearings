@@ -58,6 +58,7 @@ export type TaskEdit =
       readonly note: string;
     }
   | { readonly op: "removeDoc"; readonly docId: string }
+  | { readonly op: "removeAlias"; readonly alias: string }
   | {
       readonly op: "addLink";
       readonly to: string;
@@ -629,6 +630,16 @@ export async function checkSoftRelease(
   return { ok: problems.length === 0, problems, pickup, node, owner: node.owner };
 }
 
+/** The workspace copy an unowned task was done in: the only one, or the one all its files are in. */
+function copyOf(task: Task, roots: ReadonlyArray<Root>): string | undefined {
+  if (roots.length === 1) return roots[0]?.path;
+  const files = task.files ?? [];
+  if (files.length === 0) return undefined;
+  return roots
+    .filter((root) => files.every((file) => isInside(file, root.path)))
+    .toSorted((a, b) => b.path.length - a.path.length)[0]?.path;
+}
+
 /** Applies one change a person made to a task in an app. `git` reads repo state for a soft release. */
 export async function editTask(
   store: BoardStore,
@@ -654,13 +665,12 @@ export async function editTask(
       if (!wasDone && task.status === "done" && git) {
         const node = await ownerNodeOf(store, boardId, task);
         const board = (await store.loadRegistry()).boards.find((b) => b.id === boardId);
-        // Without an owner, only a one-workspace board says which copy holds the work.
-        const root =
-          node.owner?.root ?? (board?.roots.length === 1 ? board.roots[0]?.path : undefined);
-        if (board && root)
+        const root = node.owner?.root ?? copyOf(task, board?.roots ?? []);
+        // With no copy to name, the files and check still count; its commit is left unknown.
+        if (board)
           task.doneEvidence = doneEvidence(
             task,
-            await reposAt(store, boardId, board, node, root, git),
+            root ? await reposAt(store, boardId, board, node, root, git) : [],
             now,
           );
       }
@@ -752,6 +762,12 @@ export async function editTask(
       task.docs = (task.docs ?? []).filter((d) => d.id !== edit.docId);
       await store.saveTask(boardId, task);
       return { message: "Document removed." };
+    case "removeAlias":
+      if (!task.aliases?.includes(edit.alias))
+        throw new BoardEditError("No such other name on this task.");
+      task.aliases = task.aliases.filter((alias) => alias !== edit.alias);
+      await store.saveTask(boardId, task);
+      return { message: "Other name removed." };
     case "addLink":
     case "removeLink":
       await setTaskLink(
