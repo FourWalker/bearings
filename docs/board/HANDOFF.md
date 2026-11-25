@@ -192,7 +192,7 @@ the detail; update the board task after it.
   swap. The app must be closed first: its exe locks the folder.
   Older installs sit there as
   `win-unpacked.backup-20261125-210142` (8b8baaec9b), `-181035` (ffd3944), `-121607` (e47a57c), `-103704` (19695a4), `-003448` (1b8d6a0), `-20261124-203554` (02f758c), `-143000`
-  (3e74c49), `-090747` (22ad144) and `-082118` (fd7f86b). `Outputs/Board-rebuild-d3e1aed94b`, `-c5028dba08` and `-98d0dec660` were
+  (3e74c49), `-090747` (22ad144) and `-082118` (fd7f86b). `Outputs/Board-rebuild-f6fc50bb21` (2026-11-26: decision types, Goal controls, compact layout), `-d3e1aed94b`, `-c5028dba08` and `-98d0dec660` were
   built and never installed. Not launched by me.
 
 **Verified live this run.** Tack's avatar and look menu on the Dev Board. The Goals screen on the
