@@ -710,14 +710,27 @@ export function chatsForView(
   index: BoardIndex,
   task: BoardTask,
   rollUp: boolean,
-): ReadonlyArray<{ readonly chat: BoardChat; readonly task: BoardTask }> {
+): ReadonlyArray<{
+  readonly chat: BoardChat;
+  readonly task: BoardTask;
+  /** Set on a chat linked elsewhere that ticked a step here; those follow the linked chats. */
+  readonly worked?: { readonly step: string; readonly at: number };
+}> {
   const owners = rollUp ? subtreeOf(index, task) : [task];
-  return owners
+  const linked = owners
     .flatMap((owner) => owner.chats.map((chat) => ({ chat, task: owner })))
     .toSorted(
       (a, b) =>
         LIVE_ORDER[a.chat.live] - LIVE_ORDER[b.chat.live] || b.chat.updatedAt - a.chat.updatedAt,
     );
+  const seen = new Set(linked.map(({ chat }) => chat.sessionId));
+  const worked = owners
+    .flatMap((owner) =>
+      owner.worked.map(({ chat, step, at }) => ({ chat, task: owner, worked: { step, at } })),
+    )
+    .toSorted((a, b) => b.worked.at - a.worked.at)
+    .filter(({ chat }) => !seen.has(chat.sessionId) && seen.add(chat.sessionId));
+  return [...linked, ...worked];
 }
 
 export interface BoardGoalLane {

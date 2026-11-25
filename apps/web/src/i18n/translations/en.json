@@ -13036,5 +13036,7 @@
   "3621afefcc46cedf": "Keep all",
   "87ba9c72ebc5b1f7": "Starred items",
   "adf3e15298731f85": "Daily star review",
-  "90dbdabca156cc2f": "The first time a board opens each day, list its starred items so you can unstar some."
+  "90dbdabca156cc2f": "The first time a board opens each day, list its starred items so you can unstar some.",
+  "8bbc6f5e88f6baae": "Worked on it · ticked {step}",
+  "98515f1201b25dcc": "+{count} more"
 }

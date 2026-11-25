@@ -205,7 +205,17 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
       return yield* new BoardReadError({ reason: "not-found", detail: "No such board." });
     }
     const tasks = yield* Effect.forEach(raw.tasks, (task) =>
-      resolve(task.chats).pipe(Effect.map((chats) => ({ ...task, chats }))),
+      Effect.all([resolve(task.chats), resolve(task.worked.map((entry) => entry.chat))]).pipe(
+        Effect.map(([chats, workers]) => ({
+          ...task,
+          chats,
+          // `resolve` drops a chat whose thread is gone, so match by chat, not by position.
+          worked: task.worked.flatMap((entry) => {
+            const chat = workers.find((row) => row.sessionId === entry.chat.sessionId);
+            return chat === undefined ? [] : [{ ...entry, chat }];
+          }),
+        })),
+      ),
     );
     // Only open chats: a T3 thread is open whenever this server holds it, whatever its heartbeat.
     const unlinked = (yield* resolve(raw.unlinked)).filter(

@@ -101,6 +101,12 @@ export interface BoardViewTask {
   readonly next: PlanStep | null;
   readonly steps: { readonly done: number; readonly total: number };
   readonly chats: ReadonlyArray<BoardViewChat>;
+  /** Chats linked elsewhere that ticked a step of this task's plan, the latest tick first. */
+  readonly worked: ReadonlyArray<{
+    readonly chat: BoardViewChat;
+    readonly step: string;
+    readonly at: number;
+  }>;
   readonly items: ReadonlyArray<Pick<Item, "id" | "kind" | "text" | "done">>;
   readonly decisions: ReadonlyArray<BoardViewDecision>;
   readonly links: ReadonlyArray<Pick<TaskLink, "to" | "type" | "note">>;
@@ -241,6 +247,7 @@ export async function readBoardView(
     .filter((s) => !s.supersededBy && (s.taskId || s.lastPrompt || s.title))
     .toSorted((a, b) => b.updatedAt - a.updatedAt);
   const chats = sessions.map((s) => chatOf(s, now));
+  const chatBySession = new Map(chats.map((chat) => [chat.sessionId, chat]));
   const all = await store.listTasks(boardId);
   const byId = new Map(all.map((t) => [t.id, t]));
   // As BoardChat.ownerHolder: a task belongs to its module's owner, else the nearest owned parent.
@@ -327,6 +334,14 @@ export async function readBoardView(
         next: nextStep(plan),
         steps: planProgress(plan),
         chats: chats.filter((c) => c.taskId === t.id),
+        worked: t.sessions
+          .flatMap((ref) => {
+            const chat = chatBySession.get(ref.sessionId);
+            return ref.ticked && chat && chat.taskId !== t.id
+              ? [{ chat, step: ref.ticked.step, at: ref.ticked.at }]
+              : [];
+          })
+          .toSorted((a, b) => b.at - a.at),
         items: t.items.map((i) => ({ id: i.id, kind: i.kind, text: i.text, done: i.done })),
         decisions: (t.decisions ?? []).map((d) => ({
           id: d.id,

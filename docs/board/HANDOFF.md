@@ -116,6 +116,18 @@ the detail; update the board task after it.
   Design: `concepts/tree-deck-concept.html`. Not seen: the Clay Post theme with shut
   cards, the star in an open task's header, the Settings switch. Not built: mobile, the other views'
   bar, sorting the columns. Starring bumps `updatedAt`, so the column moves left on its own.
+- **Worked-on chats and the thread's board tasks** (seen running on the Dev Board copy): a chat
+  keeps one linked task (in hand); a plan step it ticks on any task lists it there too, without
+  moving the link (`markWorked` in `edit.ts`, `ticked` on the task's `sessions` ref; a person's tick
+  in the app maps nothing). The task's Threads list shows those chats after the linked ones
+  (`worked` on the board view, `chatsForView`); status and "needs you" still count a chat on its
+  linked task only. `BoardReactor.mirrorToThread` writes the task in hand and up to five worked-on
+  tasks as the thread's issue links; the link's URL carries level and in-hand
+  (`t3board://b/t?level=2&hand=1`, `boardTaskUrl`), so no contract field was added. The sidebar's
+  thread hover card lists up to three (`boardThreadLinks.logic.ts`). Removing a worked-on issue in
+  T3 takes the chat off that task. The hover card is a paper card in Plotter and Clay Post
+  (`[data-slot="tooltip-popup"].dropdown-glass`). Not seen: Plotter night, mobile, the Threads
+  list label with a real tick.
 - **Checks, reviews, CLI writes** (`19c9c7a08a`, `27bce128f6`, `4553bf3ba4`): `boardChecks.ts` reads
   check results from Claude commands too (no exit code there; `echo "rc $?"` is read from the
   output); replayed over the owner's stored commands, not yet seen live. `board_update review`

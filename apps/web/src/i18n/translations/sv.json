@@ -13034,5 +13034,7 @@
   "3621afefcc46cedf": "Behåll alla",
   "87ba9c72ebc5b1f7": "Stjärnmärkta objekt",
   "adf3e15298731f85": "Daglig stjärngranskning",
-  "90dbdabca156cc2f": "Första gången en tavla öppnas varje dag listas dess stjärnmärkta objekt så att du kan ta bort några stjärnor."
+  "90dbdabca156cc2f": "Första gången en tavla öppnas varje dag listas dess stjärnmärkta objekt så att du kan ta bort några stjärnor.",
+  "8bbc6f5e88f6baae": "Arbetade på den · bockade av {step}",
+  "98515f1201b25dcc": "+{count} till"
 }

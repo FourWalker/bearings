@@ -57,6 +57,7 @@ const task = (id: string, patch: Partial<BoardTask> = {}): BoardTask => ({
   next: null,
   steps: { done: 0, total: 0 },
   chats: [],
+  worked: [],
   items: [],
   decisions: [],
   links: [],
@@ -549,5 +550,30 @@ describe("task views", () => {
       ["idle", "module"],
     ]);
     expect(chatsForView(index, feature, false)).toEqual([]);
+
+    // A chat linked elsewhere that ticked a step is listed once, after the linked ones.
+    const ticker = chat("ticker", { taskId: "other" });
+    const withWorked = indexBoard([
+      task("feature", { worked: [{ chat: ticker, step: "A2", at: 5 }] }),
+      task("module", {
+        level: 2,
+        parentId: "feature",
+        chats: [chat("idle")],
+        worked: [
+          { chat: ticker, step: "M1", at: 9 },
+          { chat: chat("idle"), step: "M2", at: 7 },
+        ],
+      }),
+    ]);
+    expect(
+      chatsForView(withWorked, withWorked.byId.get("feature")!, true).map((entry) => [
+        entry.chat.sessionId,
+        entry.task.id,
+        entry.worked?.step ?? null,
+      ]),
+    ).toEqual([
+      ["idle", "module", null],
+      ["ticker", "module", "M1"],
+    ]);
   });
 });

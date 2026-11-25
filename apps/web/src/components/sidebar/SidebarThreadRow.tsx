@@ -1,6 +1,7 @@
 import { useAtomMount } from "@effect/atom-react";
 import { asLaunchingThread } from "@t3tools/client-runtime/state/thread-inbox";
 import { ThreadHoverCard, ThreadHoverCardPopup } from "../ThreadHoverCard";
+import { boardLinesOf } from "../board/boardThreadLinks.logic";
 import { ThreadTerminalStatusButton } from "../ThreadStatusIndicators";
 import { discardComposerDraft } from "../../lib/discardComposerDraft";
 import { contextMenuSourceOf } from "../../contextMenuSource";
@@ -52,6 +53,7 @@ import {
   PinIcon,
   PinOffIcon,
   ShieldQuestionIcon,
+  SquareKanbanIcon,
   SquarePenIcon,
   TerminalIcon,
   Undo2Icon,
@@ -291,6 +293,7 @@ function SidebarThreadTooltip({
   const supportsMultiplePullRequests = useSupportsMultiplePullRequests(thread.environmentId);
   const gt = useGT();
   const m = useMessages();
+  const board = boardLinesOf(thread.issues);
   return (
     <ThreadHoverCardPopup side="right" align="start" sideOffset={4}>
       <ThreadHoverCard
@@ -373,6 +376,29 @@ function SidebarThreadTooltip({
             <div className="min-w-0 truncate text-foreground/75">
               {terminalProcessLabel(terminalProcessCount, m)}
             </div>
+          </div>
+        ) : null}
+        {board.lines.length > 0 ? (
+          <div data-thread-board-tasks className="grid gap-1 border-t border-border/60 pt-1.5">
+            {board.lines.map((line) => (
+              <div key={line.key} className="flex min-w-0 items-center gap-2">
+                <SquareKanbanIcon className="size-3 shrink-0 stroke-muted-foreground" />
+                {line.level !== null ? (
+                  <span className="shrink-0">
+                    {line.level === 1
+                      ? gt("Feature")
+                      : line.level === 2
+                        ? gt("Module")
+                        : gt("Task")}
+                  </span>
+                ) : null}
+                <div className="min-w-0 flex-1 truncate text-foreground/75">{line.title}</div>
+                {line.inHand ? (
+                  <span className="shrink-0 font-medium text-foreground">{gt("in hand")}</span>
+                ) : null}
+              </div>
+            ))}
+            {board.more > 0 ? <div>{gt("+{count} more", { count: board.more })}</div> : null}
           </div>
         ) : null}
         {thread.runtime?.lastError ? (

@@ -95,6 +95,8 @@ export const BoardTask = Schema.Struct({
   next: Schema.NullOr(Schema.Struct({ id: Schema.String, text: Schema.String })),
   steps: Schema.Struct({ done: NonNegativeInt, total: NonNegativeInt }),
   chats: Schema.Array(BoardChat),
+  /** Chats linked elsewhere that ticked a step of this task's plan, the latest tick first. */
+  worked: Schema.Array(Schema.Struct({ chat: BoardChat, step: Schema.String, at: Schema.Number })),
   items: Schema.Array(BoardItem),
   decisions: Schema.Array(BoardDecision),
   links: Schema.Array(BoardTaskLink),

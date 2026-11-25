@@ -124,6 +124,7 @@ export function BoardTaskView(props: BoardTaskViewProps) {
   // answer or is working is shown when the task opens; after that the person chooses.
   const [tackSize, setTackSize] = useTaskTackSize();
   const tackChats = chatsForView(index, task, master)
+    .filter((entry) => entry.worked === undefined)
     .map(({ chat }) => chat)
     .filter((chat) => chat.threadId !== null);
   const [tackThread, setTackThread] = useState<ThreadId | null>(
@@ -140,7 +141,12 @@ export function BoardTaskView(props: BoardTaskViewProps) {
   const tabs: ReadonlyArray<readonly [Tab, string]> = [
     ...(master
       ? [["overview", gt("Overview")] as const]
-      : [["threads", gt("Threads ({count})", { count: task.chats.length })] as const]),
+      : [
+          [
+            "threads",
+            gt("Threads ({count})", { count: chatsForView(index, task, false).length }),
+          ] as const,
+        ]),
     ["plan", gt("Plan & Docs")],
     ["handoff", gt("Handoff")],
     ...(!master && (task.level < 3 || kids.length > 0)
@@ -716,7 +722,7 @@ function ThreadsTab(
           </Muted>
         </Card>
       ) : (
-        chats.map(({ chat, task: owner }) => {
+        chats.map(({ chat, task: owner, worked }) => {
           const more = extra.get(chat.sessionId);
           const wants = index.attention.get(chat.sessionId);
           return (
@@ -734,6 +740,11 @@ function ThreadsTab(
                     </button>
                   ) : null}
                 </span>
+                {worked !== undefined ? (
+                  <Badge variant="outline">
+                    {gt("Worked on it · ticked {step}", { step: worked.step })}
+                  </Badge>
+                ) : null}
                 <Badge
                   variant={
                     wants?.kind === "needs"

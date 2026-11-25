@@ -146,6 +146,51 @@ describe("BoardChat", () => {
     expect(sess.source).toEqual({ kind: "t3-thread", threadId: "t1", provider: "codex" });
   });
 
+  it("lists a chat on a task whose step it ticks, and leaves its link where it is", async () => {
+    const store = await seedBoard();
+    const chat = await openChat(store, "t1", ws);
+    await chat.turnStart("Build transfers");
+    await chat.createTask({ title: "Transfers", topLevel: true });
+    await chat.createTask({ title: "Retries", parentId: "transfers" });
+    await chat.createTask({ title: "Backoff", parentId: "transfers" });
+    await chat.savePlan({ taskId: "retries", markdown: "- [ ] A1 Loop\n- [ ] A2 Test" });
+    await chat.savePlan({ taskId: "backoff", markdown: "- [ ] B1 Jitter" });
+    await chat.linkTask({ taskId: "retries" });
+    const refs = async (id: string) =>
+      ((await store.loadTask("nefx", id)) as Task).sessions.map((ref) => [
+        ref.sessionId,
+        ref.ticked?.step ?? null,
+      ]);
+    // Saving a plan with nothing ticked is not work on the task.
+    expect(await refs("backoff")).toEqual([]);
+
+    // A tick on another task lists the chat there; it stays linked to its own.
+    await chat.savePlan({ taskId: "backoff", markdown: "- [x] B1 Jitter" });
+    expect(await refs("backoff")).toEqual([["t1", "B1"]]);
+    expect(chat.sess?.taskId).toBe("retries");
+    expect((await chat.workedOn()).map((task) => task.id)).toEqual(["backoff"]);
+
+    // A tick on its own task keeps it listed there after it links elsewhere.
+    await chat.writeHandoff({ step: "A1", markdown: "Loop fixed." });
+    await chat.linkTask({ taskId: "backoff" });
+    expect(await refs("retries")).toEqual([["t1", "A1"]]);
+    expect((await chat.workedOn()).map((task) => task.id)).toEqual(["retries"]);
+
+    const view = await readBoardView(store, "nefx", 1_700_000_100_000);
+    const shown = (id: string) => view?.tasks.find((task) => task.id === id);
+    expect(shown("retries")?.worked.map((entry) => [entry.chat.sessionId, entry.step])).toEqual([
+      ["t1", "A1"],
+    ]);
+    expect(shown("retries")?.chats).toEqual([]);
+    expect(shown("backoff")?.worked).toEqual([]);
+
+    // The person takes it off the task it only worked on; the linked task keeps it.
+    await chat.dropWorked("retries");
+    await chat.dropWorked("backoff");
+    expect(await refs("retries")).toEqual([]);
+    expect(await refs("backoff")).toEqual([["t1", null]]);
+  });
+
   it("links a chat on no task to the item it creates, and to a task it records work on", async () => {
     const store = await seedBoard();
     const chat = await openChat(store, "t1", ws);

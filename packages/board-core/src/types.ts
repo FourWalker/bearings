@@ -99,6 +99,8 @@ export interface TaskSessionRef {
   sessionId: string;
   linkedAt: number;
   workspaceLabel: string;
+  /** The chat ticked a plan step here: it stays listed on the task after it links elsewhere. */
+  ticked?: { step: string; at: number } | undefined;
 }
 
 export interface CheckResult {

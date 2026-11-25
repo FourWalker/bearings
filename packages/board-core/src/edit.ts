@@ -9,6 +9,7 @@
 import { type BoardGit, systemClock } from "./io.ts";
 import {
   markStepDelegated,
+  planPhases,
   planProgress,
   setDelegatedDone,
   setStepDone,
@@ -156,6 +157,51 @@ export function stampProgress(task: Task, plan: string, now: number): void {
   else delete task.doneAt;
 }
 
+const tickedIn = (plan: string) =>
+  planPhases(plan).flatMap((phase) => phase.steps.filter((step) => step.done).map((s) => s.id));
+
+/**
+ * Lists a chat on a task whose plan steps it ticked between `before` and `after`. This is "worked
+ * on", not the chat's link: its task in hand, context and ownership stay where they are.
+ */
+export function markWorked(
+  task: Task,
+  session: Pick<Session, "sessionId" | "workspaceLabel">,
+  before: string,
+  after: string,
+  now: number,
+): void {
+  const had = new Set(tickedIn(before));
+  const step = tickedIn(after)
+    .filter((id) => !had.has(id))
+    .at(-1);
+  if (step === undefined) return;
+  const ref = task.sessions.find((r) => r.sessionId === session.sessionId);
+  if (ref) ref.ticked = { step, at: now };
+  else
+    task.sessions.push({
+      sessionId: session.sessionId,
+      linkedAt: now,
+      workspaceLabel: session.workspaceLabel,
+      ticked: { step, at: now },
+    });
+}
+
+/** Takes a chat off a task it only worked on; a chat linked to the task stays listed. */
+export async function dropWorked(
+  store: BoardStore,
+  boardId: string,
+  taskId: string,
+  session: Pick<Session, "sessionId" | "taskId">,
+): Promise<void> {
+  const task = await store.loadTask(boardId, taskId);
+  const ref = task?.sessions.find((r) => r.sessionId === session.sessionId);
+  if (!task || !ref?.ticked) return;
+  if (session.taskId === taskId) delete ref.ticked;
+  else task.sessions = task.sessions.filter((r) => r !== ref);
+  await store.saveTask(boardId, task);
+}
+
 async function requireTask(store: BoardStore, boardId: string, id: string): Promise<Task> {
   const task = await store.loadTask(boardId, id);
   if (!task) throw new BoardEditError(`No task "${id}".`);
@@ -171,6 +217,8 @@ export async function syncDelegatedSteps(
   store: BoardStore,
   boardId: string,
   task: Task,
+  /** The chat that finished the subtask: it is listed on the parent whose step that ticked. */
+  by?: Pick<Session, "sessionId" | "workspaceLabel"> | null,
 ): Promise<string[]> {
   if (!task.parentId) return [];
   const path = store.planPath(boardId, task.parentId);
@@ -180,6 +228,7 @@ export async function syncDelegatedSteps(
   await store.io.write(path, updated);
   const parent = await store.loadTask(boardId, task.parentId);
   if (parent) {
+    if (by) markWorked(parent, by, plan, updated, store.clock.now());
     stampProgress(parent, updated, store.clock.now());
     await store.saveTask(boardId, parent);
   }
@@ -439,7 +488,8 @@ export async function setSessionTask(
   await store.writeSession(boardId, linked);
   if (session.taskId && session.taskId !== task?.id) {
     const previous = await store.loadTask(boardId, session.taskId);
-    if (previous?.sessions.some((ref) => ref.sessionId === session.sessionId)) {
+    // A chat that ticked a step there stays listed as having worked on it.
+    if (previous?.sessions.some((ref) => ref.sessionId === session.sessionId && !ref.ticked)) {
       previous.sessions = previous.sessions.filter((ref) => ref.sessionId !== session.sessionId);
       await store.saveTask(boardId, previous);
     }

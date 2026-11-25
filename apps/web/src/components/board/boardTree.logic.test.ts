@@ -28,6 +28,7 @@ const task = (id: string, patch: Partial<BoardTask> = {}): BoardTask => ({
   next: null,
   steps: { done: 0, total: 0 },
   chats: [],
+  worked: [],
   items: [],
   decisions: [],
   links: [],

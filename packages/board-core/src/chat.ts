@@ -17,6 +17,8 @@ import {
   setSessionTask,
   setTaskLink,
   settleDecision,
+  dropWorked,
+  markWorked,
   stampProgress,
   syncDelegatedSteps,
 } from "./edit.ts";
@@ -199,6 +201,23 @@ export class BoardChat {
   }
   private saveTask(t: Task) {
     return this.store.saveTask(this.boardId, t);
+  }
+  /** Lists this chat on `t` when it ticked a step of its plan; the caller saves the task. */
+  private worked(t: Task, before: string, after: string) {
+    if (this.sess && !this.sess.assistant) markWorked(t, this.sess, before, after, this.now());
+  }
+  /** The tasks this chat ticked a step on and is not linked to, the latest tick first. */
+  async workedOn(): Promise<Task[]> {
+    const s = this.sess;
+    if (!s || !this.board) return [];
+    const at = (t: Task) => t.sessions.find((r) => r.sessionId === s.sessionId)?.ticked?.at ?? 0;
+    return (await this.listTasks())
+      .filter((t) => t.id !== s.taskId && at(t) > 0)
+      .toSorted((a, b) => at(b) - at(a));
+  }
+  /** The person took the chat off a task it only worked on. */
+  async dropWorked(taskId: string): Promise<void> {
+    if (this.sess && this.board) await dropWorked(this.store, this.board.id, taskId, this.sess);
   }
   private listTasks() {
     return this.board ? this.store.listTasks(this.board.id) : Promise.resolve([] as Task[]);
@@ -1413,6 +1432,7 @@ ${this.related}`
       const finished = await this.updateTask({ taskId: id, status: "done", lastAction: note });
       const saved = await this.store.loadTask(this.boardId, id);
       if (saved) {
+        this.worked(saved, plan, ticked);
         saved.doneNote = note;
         await this.store.saveTask(this.boardId, saved);
       }
@@ -1529,6 +1549,7 @@ ${this.related}`
       const stepped = next === plan ? null : await this.store.loadTask(this.boardId, id);
       if (stepped) {
         await this.store.io.write(this.store.planPath(this.boardId, id), next);
+        this.worked(stepped, plan, next);
         stampProgress(stepped, next, this.now());
         await this.saveTask(stepped);
       }
@@ -1853,7 +1874,12 @@ ${this.related}`
     } else if (wasDone && t.status !== "done") delete t.doneEvidence;
     const delegated =
       wasDone !== (t.status === "done")
-        ? await syncDelegatedSteps(this.store, this.boardId, t)
+        ? await syncDelegatedSteps(
+            this.store,
+            this.boardId,
+            t,
+            this.sess?.assistant ? null : this.sess,
+          )
         : [];
     if (Array.isArray(a.services)) t.services = [...new Set(a.services.map(String))];
     if (a.mainService !== undefined) t.mainService = a.mainService ? str(a.mainService) : null;
@@ -1909,6 +1935,7 @@ ${this.related}`
     if (typeof t === "string") return reply(t);
     const md = str(a.markdown);
     if (!md.trim()) return reply("markdown is empty: nothing saved.");
+    this.worked(t, await this.readPlan(t.id), md);
     await this.store.io.write(this.store.planPath(this.boardId, t.id), md);
     stampProgress(t, md, this.now());
     await this.saveTask(t);
@@ -1948,7 +1975,9 @@ ${this.related}`
     const repos = living ? await this.writeLiving(t, living, t3Checkpoint, t3RunId) : [];
     let plan = await this.readPlan(t.id);
     if (plan && a.markStepDone !== false) {
+      const before = plan;
       plan = tickStep(plan, step);
+      this.worked(t, before, plan);
       await this.store.io.write(this.store.planPath(this.boardId, t.id), plan);
     }
     t.lastAction = this.lastAction(
