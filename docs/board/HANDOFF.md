@@ -1,6 +1,6 @@
 # Handoff: Project Board next features
 
-State (2026-11-25). One living file: rewrite in place, never append.
+State (2026-11-26). One living file: rewrite in place, never append.
 
 **Objective.** Finish the features in [NEXT-FEATURES.md](NEXT-FEATURES.md) so the owner has a usable
 release for NEFX work. Read that brief and [PROGRESS.md](PROGRESS.md) first.
@@ -163,6 +163,30 @@ the detail; update the board task after it.
 - **Goals screen chat** (`fd7f86b`): instructions box at start; "Discuss first" opens the thread
   without starting the Goal and shows a chat panel with Start now; a Chat toggle on every Goal card
   (`GoalChat`, messages followed only while open); each finished task's full result.
+- **Decision types** (`2a1645cc2f`, `1fc5352608`; seen on the Dev Board): a decision's `type` is
+  blocker, mandatory (untyped ones; a recommendation reads optional), optional or feature
+  (`decisionType` in `store.ts`). Open blocker and mandatory decisions refuse an agent's done
+  (`heldFromDone` in `chat.ts`; a person's edit in the app is not held). Skip is a drop whose
+  verdict says "Skipped by the person"; Reopen undoes it. A Goal's model never settles a blocker,
+  and `nextGoalTask` leaves its tasks out. Web: type select and Skip on the decision card, badges
+  count blocker and mandatory, the Pin bar says Blocked only for a blocker and shows the rest as a
+  count. Tool list grew 374 bytes (`agentContextBudget.json`).
+- **Goals the person controls** (same commits; seen with a seeded Goal, no real thread): Pause and
+  End go through `BoardService.stopGoal` (edit op `stopGoal`), which closes the Goal file and
+  interrupts its threads. `ended` is final: resume is refused, its tasks are free for a new Goal,
+  it lists under Finished. An answer on a Goal card is recorded as the person's verdict in the
+  register. Auto mode's rules now say what can't be undone is never the model's to settle.
+- **Tack access** (`1fc5352608`): Settings, Tack, "What Tack may do": Board Tack asks, Task Tack
+  has full access by default (`t3.board.assistant.access`), read at send time so existing threads
+  follow. Ask mode in a task always asks.
+- **Board-scoped sidebar** (`1fc5352608`): opening a board sets the sidebar's own project scope to
+  the board's projects (`BoardSidebarScope.tsx`, `boardSidebar.logic.ts`); a header button keeps
+  "every thread" per board (`t3.board.sidebar.all`).
+- **Phone and upright tablet** (`e3cd614749`, seen at 375, 800 and 1280px in five themes, not on a
+  device): under 1024px `board-phone.css` folds the chrome into scrolling rows, snaps the columns
+  one feature at a time, and turns the side panel into a sheet opened from `BoardPhoneBar`. Tack is
+  the Panel host there; in an open task it is a row. Preview with screens and the native app
+  proposal: `.t3/previews/mobile-layout-preview.html` (untracked).
 - Windows build: the owner's install `Outputs/T3-Project-Board-Frozen-Windows-x64` holds
   `161ba9d207` (Tree deck, order, filters, stars) since 2026-11-25 21:01, swapped in on the owner's say-so; ask before the next
   swap. The app must be closed first: its exe locks the folder.
@@ -181,10 +205,9 @@ wasteful moves are measured in [TOKEN-BENCHMARK.md](TOKEN-BENCHMARK.md) (script:
 
 **Not built.**
 - Goals screen: no model picker (the Goal thread uses the project's default model; start from the
-  CLI to choose one, see Commands). An answer typed on a Goal card is a message to the thread; to
-  record a person's verdict, decide the filed decision in the task's Decisions tab. Pause and
-  resume are messages to the thread. Launched from the UI on the Dev Board (Discuss first, an
-  answer, Start now, finished); pause, resume and an Ask-mode answer are untried.
+  CLI to choose one, see Commands). Resume is a message to the thread. Launched from the UI on the
+  Dev Board (Discuss first, an answer, Start now, finished); resume and an Ask-mode answer on a
+  real Goal are untried.
 - Tack: web only; no settings-page entry (look menu only); no unprompted visits (a task newly
   blocked, a Goal finished: the concept's events) and no auto-open when Tack waits for an
   approval while its bubble is shut (the bell rings at home). Tack in a task
@@ -198,8 +221,7 @@ wasteful moves are measured in [TOKEN-BENCHMARK.md](TOKEN-BENCHMARK.md) (script:
   a note) leaves Tack at home; the concept's pointing hand and pen-drawn bubble are not drawn;
   `board_show` from any agent, not only Tack, sends Tack to the note in walk mode (the intent
   carries no thread id); no instant matcher for "open X", no model picker, no allowlist.
-- Voice beyond the composer microphone. Mobile does not act on `board_show`, has no Goals view and
-  no avatar. Other names cannot be listed or removed in the web board.
+- Voice beyond the composer microphone. The native mobile app has no board at all. Other names cannot be listed or removed in the web board.
 
 **Not verified.** Model-behaviour evals: the repo has no `.env` with API keys, and `evals/` has no
 board cases, so none ran. The Claude mod's copy of board-core is not synced
@@ -218,6 +240,14 @@ Windows; new keys were taken from `vp run i18n:generate` output and added to all
   effects: sleep after four idle loops on the closed pill, hold still after a minute of sleep.
 - No authored tags: other names only, saved after a missed search and the person's yes.
 - Assistant writes need the person's yes in that turn; it starts supervised.
+- Decision skip reuses the dropped status, and Pause and End reuse the `editBoard` RPC: no new
+  status, RPC or permission to carry through server, web and mobile.
+- No `board_goal` end action, CLI end or palette entry: ending is final and the person's, and a
+  model action would add tool text to every thread.
+- The sidebar filter is the sidebar's existing project scope, driven by the board; no hidden-thread
+  count (it would subscribe the board page to every thread update).
+- One compact layout under 1024px for phones and an upright tablet, CSS first; a tablet on its side
+  keeps the desktop board. Native board: design only, recommended not to build yet.
 - Tack lives on the board, not as an "Ask Tack" button (owner, 2026-11-24): Roamer and Panel host
   both built and selectable, Floating kept as the way back. Concepts in `docs/board/concepts/`.
 - Plotter's options stay user settings, as the owner asked: speed, old ink, motion, hops, wobble.
@@ -238,40 +268,12 @@ run. A parent step that names a task is ticked only when the thread ticks it; th
 marker still auto-syncs. The NEFX board was corrected by one-off scripts (steps, feature last
 action, five decisions filed); task files as they were before are in `.t3/nefx-tasks-backup-20261124`.
 
-**Next step.** Pin bar (owner, 2026-11-25): pin one task or module; a bar under the board's
-header on every board view shows plan ticks, a peek at the agent's activity and when its chat
-needs approval, an answer, a decision, is blocked or stopped. Read from thread events and board
-files only, never reported by the model. Look follows the theme, not Tack's skin. Concept
-`concepts/pin-bar-concept.html`: liked by the owner. The step in hand has a standing slot (a
-pinned task: its step; a pinned module: the task being done, unless a chat works the module
-itself, whose step then wins). A "Catch my eye" option (Off, By theme, By Tack) moves the bar
-when the pinned item needs the person: `concepts/pin-attention-concept.html` (art embedded by
-`build-tack-reference.mjs`). By Tack means Sub Tacks (owner, 2026-11-25): Tack never leaves its
-spot; it releases a small Sub Tack (release animation per skin, none for the return) that stands
-on top of the bar above the state chip and makes the fuss. Settled with the owner: Claude (and
-the other pixel skins) pops a scale-2 sprite out of Tack's head, which patrols the bar and
-stomps the chip under a "!" sign; Plotter's Sub Tack is the Bird (`CANDIDATES.bird` strokes in
-the concept page), released subtly: the Plotter changes to its quill-and-note drawing (`write` clip) and sketches
-the bird inside that note, in place of the script lines, stroke by stroke; the bird then grows
-and glides to the bar (no separate canvas, and no pen dot or dotted trail for Sub Tacks: those
-are Tack's own crossing); its fuss is a hop and wing beat while the pen rules under the
-bar, rings and rays the stamp; the bird is drawn and flies facing left and turns right on
-landing. **Built and seen running** on the Dev Board (`9cee587`, `e47a57c`): the bar on the
-tree and Goals views, pin from a task header, the Plotter release (quill, bird to the bar, pen
-marks) and the Claude one (pop, patrol, "!"), and by theme in Plotter. Checked with the dev-only
-switch `localStorage["t3.board.pin.demo"] = "approval"` (any state name), not with a real chat
-that needs the person. Files:
-`boardPin.logic.ts` (+ test), `BoardPinBar.tsx` (bar, peek, `BoardPinToggle` in the task header,
-`useBoardPin` in local storage `t3.board.pin`, catch setting `t3.board.pin.catch`, `PinSubTack`),
-`apps/web/src/board-pin.css`, release signal in `TackAvatar`/`TackPlotter`/`BoardTack`
-(`releaseTack`, `TACK_RELEASED`, `PLOTTER_SUB_BIRD`, `data-tack-self`). Typecheck, lint and board
-tests pass; the bar's 28 strings are in all ten catalogs. Left: the swell (non-Plotter themes)
-and the peek panel were not looked at live; 66 strings of earlier board features (notices, Tack
-in a task) are still missing from the catalogs (`vp run i18n:generate` lists them); no pin
-entry in a note's menu or Tack's look menu; the emoji skin has no Sub Tack; web and desktop
-only. An older dev server (pid 40504, port 13773, web 5733) was already running on this `.t3`
-and was used for the check; it predates the server fix `d5a44e3`, so that fix is still unseen live. Then: on a real Goal, exercise pause, resume and an Ask-mode answer from the Goals screen,
-and watch whether the thread uses `step` and `open` unprompted; add an eval case if it does not.
+**Next step.** On the owner's Legion Y700 (Android Chrome): try the compact board (swipe, the
+sheet, the keyboard over Tack's box) and fix what the device shows. Then, with a real provider: a
+Goal paused, resumed and ended from the Goals screen while its thread runs; Task Tack in Run with
+full access; a chat that stays working through background work. Still open: an eval for the changed
+model-facing text (no API keys here), the 66 older board strings missing from the catalogs, the
+Pin bar's swell and peek never looked at live.
 
 **Commands and traps (Windows).**
 - `~/.t3/userdata` is the owner's real T3 data. Always pass `--home-dir` / `--base-dir <clone>\.t3`.
