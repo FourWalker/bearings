@@ -41,10 +41,15 @@ export const BoardItem = Schema.Struct({
 export type BoardItem = typeof BoardItem.Type;
 
 /** A decision as the board screen lists it; its full text is read with the task. */
+/** What an open decision holds up; one without a stored type reads as mandatory. */
+export const BoardDecisionType = Schema.Literals(["blocker", "mandatory", "optional", "feature"]);
+export type BoardDecisionType = typeof BoardDecisionType.Type;
+
 export const BoardDecision = Schema.Struct({
   id: Schema.String,
   title: Schema.String,
   status: Schema.Literals(["open", "decided", "dropped"]),
+  type: BoardDecisionType,
   level: Schema.Literals([1, 2, 3]),
   raisedFrom: Schema.NullOr(Schema.Struct({ id: Schema.String, title: Schema.String })),
   /** The recommendation's R#, when the decision is one. */
@@ -130,7 +135,8 @@ export type BoardTask = typeof BoardTask.Type;
 export const BoardGoal = Schema.Struct({
   id: Schema.String,
   title: Schema.String,
-  status: Schema.Literals(["running", "paused", "done"]),
+  /** ended: closed for good by the person with tasks left. */
+  status: Schema.Literals(["running", "paused", "done", "ended"]),
   mode: Schema.Literals(["auto", "ask"]),
   pausedReason: Schema.NullOr(Schema.String),
   /** The session running it now. */
@@ -143,6 +149,9 @@ export const BoardGoal = Schema.Struct({
       /** "" while it waits for the person. */
       settled: Schema.String,
       by: Schema.Literals(["model", "person"]),
+      /** The same decision in the board's register, where a verdict is recorded. */
+      decisionId: Schema.NullOr(Schema.String),
+      blocker: Schema.Boolean,
     }),
   ),
   /** The Goal's order of work: a group starts once the groups it depends on are finished. */
@@ -272,6 +281,7 @@ export const BoardTaskDetail = Schema.Struct({
       options: Schema.String,
       verdict: Schema.String,
       status: Schema.Literals(["open", "decided", "dropped"]),
+      type: BoardDecisionType,
       level: Level,
       refs: Schema.Array(Schema.String),
       at: Schema.Number,
@@ -389,6 +399,7 @@ export const BoardTaskEdit = Schema.Union([
     options: Schema.String,
     refs: Schema.Array(Schema.String),
     level: Schema.Literals([1, 2, 3]),
+    type: Schema.optional(BoardDecisionType),
     recommendation: Schema.optional(
       Schema.Struct({
         area: Schema.String,
@@ -400,7 +411,7 @@ export const BoardTaskEdit = Schema.Union([
   Schema.Struct({
     op: Schema.Literal("setDecision"),
     decisionId: Schema.String,
-    action: Schema.Literals(["decide", "drop", "reopen"]),
+    action: Schema.Literals(["decide", "drop", "skip", "reopen"]),
     verdict: Schema.optional(Schema.String),
   }),
   Schema.Struct({
@@ -410,6 +421,7 @@ export const BoardTaskEdit = Schema.Union([
     description: Schema.optional(Schema.String),
     options: Schema.optional(Schema.String),
     refs: Schema.optional(Schema.Array(Schema.String)),
+    type: Schema.optional(BoardDecisionType),
   }),
   Schema.Struct({
     op: Schema.Literal("implemented"),
@@ -457,6 +469,12 @@ export const BoardSettingsEdit = Schema.Union([
   }),
   Schema.Struct({ op: Schema.Literal("saveRules"), rules: Schema.String }),
   Schema.Struct({ op: Schema.Literal("setBoardMode"), on: Schema.Boolean }),
+  /** Stops a Goal without its thread's help: paused can resume, ended is final. */
+  Schema.Struct({
+    op: Schema.Literal("stopGoal"),
+    goalId: Schema.String,
+    to: Schema.Literals(["paused", "ended"]),
+  }),
   Schema.Struct({
     op: Schema.Literal("saveRegisters"),
     registers: Schema.Array(

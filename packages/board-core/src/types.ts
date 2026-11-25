@@ -20,8 +20,17 @@ export interface Implemented {
   at?: number | undefined;
 }
 
+/**
+ * What an open decision holds up. blocker: work stops until the person decides. mandatory: settle
+ * or skip it before the task is done. optional: nothing. feature: product direction, filed at
+ * Level 1, never holds a task. A decision without a type reads as mandatory (a recommendation as
+ * optional).
+ */
+export type DecisionType = "blocker" | "mandatory" | "optional" | "feature";
+
 export interface Decision {
   id: string;
+  type?: DecisionType | undefined;
   title: string;
   description: string;
   level: Level;

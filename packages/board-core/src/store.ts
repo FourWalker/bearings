@@ -6,11 +6,24 @@
  */
 import { type BoardClock, type BoardIO, systemClock } from "./io.ts";
 import { isInside, norm, safeFileName } from "./text.ts";
-import type { Board, Level, Registry, Root, Session, Task } from "./types.ts";
+import type {
+  Board,
+  Decision,
+  DecisionType,
+  Level,
+  Registry,
+  Root,
+  Session,
+  Task,
+} from "./types.ts";
 
 export const LEVEL_NAME = { 1: "master task", 2: "module", 3: "task" } as const;
 export const levelOf = (t: Pick<Task, "level">): Level =>
   t.level === 2 || t.level === 3 ? t.level : 1;
+
+export const DECISION_TYPES = ["blocker", "mandatory", "optional", "feature"] as const;
+export const decisionType = (decision: Pick<Decision, "type" | "rec">): DecisionType =>
+  decision.type ?? (decision.rec ? "optional" : "mandatory");
 
 const pathSegment = (id: string): string => {
   if (!id || id === "." || id === ".." || safeFileName(id) !== id)

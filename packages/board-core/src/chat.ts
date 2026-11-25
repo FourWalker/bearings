@@ -12,6 +12,7 @@ import {
   addDecision,
   createTask,
   findDecision,
+  holdingDecisions,
   moveTask,
   promoteTask,
   setSessionTask,
@@ -29,6 +30,7 @@ import {
   type GoalGroup,
   goalDrift,
   goalLedger,
+  goalOpen,
   listGoals,
   loadGoal,
   nextGoalTask,
@@ -57,7 +59,14 @@ import {
   t3Rules,
   toolRules,
 } from "./protocol.ts";
-import { BoardStore, LEVEL_NAME, findBoard, levelOf } from "./store.ts";
+import {
+  BoardStore,
+  DECISION_TYPES,
+  LEVEL_NAME,
+  decisionType,
+  findBoard,
+  levelOf,
+} from "./store.ts";
 import { BOARD_TOOL_NAMES } from "./tools.ts";
 import { findOnBoard, namedTask, queryWords } from "./search.ts";
 import { type DoneCheck, doneEvidence, evidenceLine, verifyDone } from "./verify.ts";
@@ -732,13 +741,13 @@ export class BoardChat {
     for (const d of t.decisions ?? [])
       if (d.status === "open")
         decs.push(
-          `- ${d.id} [L${d.level}, open] ${d.title}${d.raisedFrom ? ` (raised in ${d.raisedFrom.title})` : ""}`,
+          `- ${d.id} [L${d.level}, open${decisionType(d) === "blocker" ? " blocker" : ""}] ${d.title}${d.raisedFrom ? ` (raised in ${d.raisedFrom.title})` : ""}`,
         );
     for (const a of anc)
       for (const d of a.decisions ?? [])
         if (d.status === "open")
           decs.push(
-            `- ${d.id} [L${d.level} on "${a.title}", open] ${d.title}${d.raisedFrom?.id === t.id ? " (raised here)" : ""}`,
+            `- ${d.id} [L${d.level} on "${a.title}", open${decisionType(d) === "blocker" ? " blocker" : ""}] ${d.title}${d.raisedFrom?.id === t.id ? " (raised here)" : ""}`,
           );
     if (decs.length)
       lines.push(
@@ -1167,14 +1176,12 @@ ${this.related}`
         return reply(
           "Not started: the scope has no open tasks. Pass scope as task, module or feature ids (board_find lists them).",
         );
-      const taken = (await listGoals(this.store, this.boardId))
-        .filter((other) => other.status !== "done")
-        .flatMap((other) =>
-          other.groups
-            .flatMap((group) => group.taskIds)
-            .filter((id) => tasks.some((task) => task.id === id))
-            .map((id) => `${id} (Goal ${other.id})`),
-        );
+      const taken = (await listGoals(this.store, this.boardId)).filter(goalOpen).flatMap((other) =>
+        other.groups
+          .flatMap((group) => group.taskIds)
+          .filter((id) => tasks.some((task) => task.id === id))
+          .map((id) => `${id} (Goal ${other.id})`),
+      );
       if (taken.length > 0)
         return reply(
           `Not started: a task belongs to one active Goal at a time. Already in a Goal: ${taken.join(", ")}. Resume that Goal, or leave those tasks out.`,
@@ -1212,7 +1219,7 @@ ${this.related}`
       const id = str(a.goalId || s.goalId);
       const goal = id ? await loadGoal(this.store, this.boardId, id) : null;
       if (!goal) {
-        const open = (await listGoals(this.store, this.boardId)).filter((g) => g.status !== "done");
+        const open = (await listGoals(this.store, this.boardId)).filter(goalOpen);
         return reply(
           `No Goal "${id}". ${open.length ? `Goals on this board: ${open.map((g) => `${g.id} (${g.title}, ${g.status})`).join(", ")}.` : "This board has no open Goals."}`,
         );
@@ -1231,6 +1238,10 @@ ${this.related}`
           `${goalLedger(goal, all)}${changes.length ? `\n\nChanged outside the Goal:\n${changes.join("\n")}` : ""}`,
         );
       if (goal.status === "done") return reply(`Goal ${goal.id} is finished.`);
+      if (goal.status === "ended")
+        return reply(
+          `Goal ${goal.id} was ended by the person and can't be resumed. Its open tasks are back on the board: start a new Goal over them if asked.`,
+        );
       if (goal.executor && goal.executor !== s.sessionId) {
         const other = await this.store.readSession(this.boardId, goal.executor);
         if (other?.status === "working")
@@ -1420,6 +1431,9 @@ ${this.related}`
       if (!id || !inGoal(id)) return reply(`${id || "That task"} is not in this Goal.`);
       if (s.taskId !== id)
         return reply(`Take ${id} first with board_goal {action: "task", taskId: "${id}"}.`);
+      const inHand = byId.get(id);
+      const held = inHand ? this.heldFromDone(inHand, all) : null;
+      if (held) return reply(`${held} Leave it open and take the next task. ${nextLine(all)}`);
       const plan = await this.readPlan(id);
       // A step named in `open` stays unticked: a question left for the person is not finished work.
       const leaveOpen = new Set(Array.isArray(a.open) ? a.open.map(String) : []);
@@ -1476,7 +1490,9 @@ ${this.related}`
     }
 
     if (action === "decide") {
-      const settled = str(a.settled).trim();
+      const type = a.type === "blocker" || a.type === "optional" ? a.type : undefined;
+      // A blocker is the person's to decide, in Auto mode too.
+      const settled = type === "blocker" ? "" : str(a.settled).trim();
       if (!str(a.title).trim()) return reply("Give the decision a title.");
       if (settled && goal.mode !== "auto")
         return reply(
@@ -1501,7 +1517,11 @@ ${this.related}`
           this.store,
           this.boardId,
           raisedOn,
-          { title: decision.title, description: `Raised in Goal ${goal.id} as ${decision.id}.` },
+          {
+            title: decision.title,
+            description: `Raised in Goal ${goal.id} as ${decision.id}.`,
+            type,
+          },
           this.actor(),
         );
         if (settled) {
@@ -1521,7 +1541,9 @@ ${this.related}`
       return reply(
         settled
           ? `Recorded ${decision.id} as settled by the model. The person reviews it later; carry on.`
-          : `Recorded ${decision.id} as an open question for the person. Carry on with the tasks it doesn't block.`,
+          : type === "blocker"
+            ? `Recorded ${decision.id} as a blocker for the person. ${decision.taskIds.length > 0 ? `${decision.taskIds.join(", ")} wait on it. ` : ""}Carry on with the other tasks; pause when none is left.`
+            : `Recorded ${decision.id} as an open question for the person. Carry on with the tasks it doesn't block.`,
       );
     }
 
@@ -1822,6 +1844,26 @@ ${this.related}`
     };
   }
 
+  /** Why `t` can't be marked done yet, or null: open blocker and mandatory decisions hold it. */
+  private heldFromDone(t: Task, all: ReadonlyArray<Task>): string | null {
+    const holding = holdingDecisions(t, all);
+    if (holding.length === 0) return null;
+    return `Not done: "${t.title}" has open decisions to settle first: ${holding
+      .slice(0, 5)
+      .map((d) => `${d.id} "${clip(d.title, 80)}" (${decisionType(d)})`)
+      .join(
+        "; ",
+      )}. A blocker needs the person's verdict; a mandatory one can also be skipped when the person says so (board_decision {action: "skip", id}).`;
+  }
+
+  /** The person stopped this thread's Goal from the app: let go of what the thread held for it. */
+  async leaveGoal(goal: Goal): Promise<void> {
+    if (this.sess?.goalId !== goal.id) return;
+    if (goal.executor === this.sess.sessionId) await this.releaseGoalHolds(goal);
+    await this.save({ goalId: undefined, goalGroup: undefined });
+    await this.rebuildContext();
+  }
+
   private actor(): EditActor {
     return { by: this.sess?.sessionId ?? this.host };
   }
@@ -1866,6 +1908,10 @@ ${this.related}`
     if (a.description) t.description = str(a.description);
     if (a.title) t.title = str(a.title);
     const wasDone = t.status === "done";
+    if (a.status === "done" && !wasDone) {
+      const held = this.heldFromDone(t, await this.listTasks());
+      if (held) return reply(held);
+    }
     if (a.status === "active" || a.status === "paused" || a.status === "done") t.status = a.status;
     let evidence = "";
     if (!wasDone && t.status === "done") {
@@ -2168,6 +2214,7 @@ ${this.related}`
             options: str(a.options),
             refs: Array.isArray(a.refs) ? a.refs.map(String) : [],
             level: Number(a.level ?? levelOf(cur)),
+            type: DECISION_TYPES.find((type) => type === a.type),
             recommendation: a.recommendation
               ? {
                   r: a.r ? str(a.r) : undefined,
@@ -2203,6 +2250,8 @@ ${this.related}`
     if (a.description) d.description = str(a.description);
     if (a.options) d.options = str(a.options);
     if (Array.isArray(a.refs)) d.refs = a.refs.map(String);
+    const type = DECISION_TYPES.find((known) => known === a.type);
+    if (type) d.type = type;
     if (a.action === "implemented") {
       if (!d.rec) return reply("Only recommendations have a How implemented record.");
       const opt = (k: string) => (a[k] === undefined ? undefined : str(a[k]));
@@ -2215,7 +2264,14 @@ ${this.related}`
         at: this.now(),
       };
     }
-    if (a.action === "decide" || a.action === "drop" || a.action === "reopen")
+    if (a.action === "skip" && decisionType(d) === "blocker")
+      return reply("A blocker can't be skipped: it needs the person's verdict.");
+    if (
+      a.action === "decide" ||
+      a.action === "drop" ||
+      a.action === "skip" ||
+      a.action === "reopen"
+    )
       settleDecision(this.store, d, a.action, str(a.verdict));
     await this.saveTask(owner);
     await this.rebuildContext();

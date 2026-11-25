@@ -12,12 +12,13 @@ import {
   planProgress,
   type PlanStep,
 } from "./plan.ts";
-import { listGoals } from "./goal.ts";
+import { goalOpen, listGoals } from "./goal.ts";
 import { evidenceLine } from "./verify.ts";
-import type { BoardStore } from "./store.ts";
+import { type BoardStore, decisionType } from "./store.ts";
 import { norm } from "./text.ts";
 import type {
   Decision,
+  DecisionType,
   CheckResult,
   Item,
   Level,
@@ -60,6 +61,7 @@ export interface BoardViewDecision {
   readonly id: string;
   readonly title: string;
   readonly status: Decision["status"];
+  readonly type: DecisionType;
   readonly level: Level;
   readonly raisedFrom: { readonly id: string; readonly title: string } | null;
   /** The recommendation's R#, when the decision is one. */
@@ -131,7 +133,7 @@ export interface BoardViewTask {
 export interface BoardViewGoal {
   readonly id: string;
   readonly title: string;
-  readonly status: "running" | "paused" | "done";
+  readonly status: "running" | "paused" | "done" | "ended";
   readonly mode: "auto" | "ask";
   readonly pausedReason: string | null;
   /** The session running it now. */
@@ -143,6 +145,9 @@ export interface BoardViewGoal {
     /** "" while it waits for the person. */
     readonly settled: string;
     readonly by: "model" | "person";
+    /** The same decision in the board's register, where a verdict is recorded. */
+    readonly decisionId: string | null;
+    readonly blocker: boolean;
   }>;
   /** The Goal's order of work: a group starts once the groups it depends on are finished. */
   readonly groups: ReadonlyArray<{
@@ -269,11 +274,11 @@ export async function readBoardView(
   );
   for (const goal of await listGoals(store, boardId)) {
     const taskIds = goal.groups.flatMap((group) => group.taskIds);
-    if (goal.status !== "done")
+    if (goal.status === "running" || goal.status === "paused")
       for (const taskId of taskIds)
         goals.set(taskId, { id: goal.id, title: goal.title, status: goal.status });
     const ran = new Set([...goal.executors, ...goal.groups.flatMap((group) => group.worker ?? [])]);
-    (goal.status === "done" ? finishedGoals : openGoals).push({
+    (goalOpen(goal) ? openGoals : finishedGoals).push({
       id: goal.id,
       title: goal.title,
       status: goal.status,
@@ -290,6 +295,8 @@ export async function readBoardView(
           title: decision.title,
           settled: answered ? filed.verdict : decision.settled,
           by: answered ? ("person" as const) : decision.by,
+          decisionId: filed ? filed.id : null,
+          blocker: filed !== undefined && decisionType(filed) === "blocker",
         };
       }),
       groups: goal.groups.map((group) => ({
@@ -347,6 +354,7 @@ export async function readBoardView(
           id: d.id,
           title: d.title,
           status: d.status,
+          type: decisionType(d),
           level: d.level || (t.level === 2 || t.level === 3 ? t.level : 1),
           raisedFrom: d.raisedFrom ?? null,
           r: d.rec?.r ?? null,
@@ -431,6 +439,7 @@ export interface BoardTaskDetail {
       Decision,
       "id" | "title" | "description" | "options" | "verdict" | "status" | "level" | "refs" | "at"
     > & {
+      readonly type: DecisionType;
       readonly group: "own" | "up" | "inherited";
       readonly r: string | null;
       readonly area: string;
@@ -533,6 +542,7 @@ export async function readTaskDetail(
       options: d.options,
       verdict: d.verdict,
       status: d.status,
+      type: decisionType(d),
       level: d.level,
       refs: d.refs ?? [],
       at: d.at,

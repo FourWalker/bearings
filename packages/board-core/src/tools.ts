@@ -86,11 +86,17 @@ export const SCHEMA = {
     properties: {
       action: {
         type: "string",
-        enum: ["add", "decide", "update", "drop", "reopen", "implemented"],
+        enum: ["add", "decide", "update", "drop", "skip", "reopen", "implemented"],
       },
       id: {
         type: "string",
-        description: "Decision id (D-…) or R# for decide/update/drop/reopen/implemented.",
+        description: "Decision id (D-…) or R# for every action but add.",
+      },
+      type: {
+        type: "string",
+        enum: ["blocker", "mandatory", "optional", "feature"],
+        description:
+          "blocker: work stops until the person decides. mandatory (default): settle or skip before done. optional: holds nothing. feature: product direction, Level 1.",
       },
       title: { type: "string", description: "add: the question to decide." },
       description: {
@@ -252,6 +258,11 @@ export const SCHEMA = {
       },
       taskId: { type: "string" },
       taskIds: { type: "array", items: { type: "string" } },
+      type: {
+        type: "string",
+        enum: ["blocker", "optional"],
+        description: "decide: blocker when `taskIds` can't go on without the person.",
+      },
       note: {
         type: "string",
         description:

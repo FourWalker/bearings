@@ -15,12 +15,13 @@ import {
   setStepDone,
   stepDone,
 } from "./plan.ts";
-import { type BoardStore, levelOf } from "./store.ts";
+import { type BoardStore, decisionType, levelOf } from "./store.ts";
 import { doneEvidence } from "./verify.ts";
 import { base, isInside, norm, sameRoot, slug, stamp } from "./text.ts";
 import type {
   Board,
   Decision,
+  DecisionType,
   ItemKind,
   Level,
   LinkType,
@@ -88,6 +89,7 @@ export type TaskEdit =
       readonly refs: ReadonlyArray<string>;
       /** The level it affects: filed on this task or the parent at that level. */
       readonly level: Level;
+      readonly type?: DecisionType | undefined;
       readonly recommendation?:
         | {
             readonly area: string;
@@ -99,7 +101,7 @@ export type TaskEdit =
   | {
       readonly op: "setDecision";
       readonly decisionId: string;
-      readonly action: "decide" | "drop" | "reopen";
+      readonly action: "decide" | "drop" | "skip" | "reopen";
       readonly verdict?: string | undefined;
     }
   | {
@@ -109,6 +111,7 @@ export type TaskEdit =
       readonly description?: string | undefined;
       readonly options?: string | undefined;
       readonly refs?: ReadonlyArray<string> | undefined;
+      readonly type?: DecisionType | undefined;
       readonly area?: string | undefined;
       readonly lldCheck?: string | undefined;
       readonly register?: string | null | undefined;
@@ -387,6 +390,7 @@ async function fileDecision(
     readonly options?: string | undefined;
     readonly refs?: ReadonlyArray<string> | undefined;
     readonly level?: number | undefined;
+    readonly type?: DecisionType | undefined;
     readonly recommendation?:
       | {
           readonly r?: string | undefined;
@@ -402,7 +406,7 @@ async function fileDecision(
   if (!title) throw new BoardEditError("title is required.");
   const current = await requireTask(store, boardId, task.id);
   const chain = [current, ...(await store.ancestorsOf(boardId, current))];
-  const want = input.level ?? levelOf(task);
+  const want = input.type === "feature" ? 1 : (input.level ?? levelOf(task));
   const owner = chain.find((x) => levelOf(x) <= want) ?? chain.at(-1) ?? task;
   const decision: Decision = {
     id: newId(store, "D-", true, 1_000_000),
@@ -416,6 +420,7 @@ async function fileDecision(
     status: "open",
     at: store.clock.now(),
     by: actor.by,
+    ...(input.type ? { type: input.type } : {}),
   };
   if (input.recommendation) {
     decision.rec = {
@@ -445,17 +450,42 @@ export async function findDecision(
   return owner && decision ? { decision, owner } : null;
 }
 
-/** Records the person's verdict, drops a decision, or reopens it. The caller saves `owner`. */
+/** Whether an open decision of this type keeps its task from done. */
+export const holdsDone = (decision: Pick<Decision, "type" | "rec" | "status">): boolean =>
+  decision.status === "open" &&
+  (decisionType(decision) === "blocker" || decisionType(decision) === "mandatory");
+
+/** The open decisions that keep `task` from done: its own, and those it raised higher up. */
+export function holdingDecisions(task: Task, all: ReadonlyArray<Task>): Decision[] {
+  return [
+    ...(task.decisions ?? []).filter(holdsDone),
+    ...all
+      .filter((other) => other.id !== task.id)
+      .flatMap((other) => other.decisions ?? [])
+      .filter((decision) => decision.raisedFrom?.id === task.id && holdsDone(decision)),
+  ];
+}
+
+/**
+ * Records the person's verdict, drops, skips or reopens a decision. The caller saves `owner`.
+ * A skip is a drop that says who skipped: reopening undoes it.
+ */
 export function settleDecision(
   store: BoardStore,
   decision: Decision,
-  action: "decide" | "drop" | "reopen",
+  action: "decide" | "drop" | "skip" | "reopen",
   verdict: string,
+  by = "the person",
 ): void {
   if (action === "decide") {
     decision.status = "decided";
     decision.verdict = verdict;
     decision.decidedAt = store.clock.now();
+  } else if (action === "skip") {
+    if (decisionType(decision) === "blocker")
+      throw new BoardEditError("A blocker can't be skipped: decide it, or change its type.");
+    decision.status = "dropped";
+    decision.verdict = `Skipped by ${by}${verdict ? `: ${verdict}` : ""}`;
   } else if (action === "drop") {
     decision.status = "dropped";
     decision.verdict = verdict;
@@ -902,6 +932,7 @@ export async function editTask(
           options: edit.options,
           refs: edit.refs,
           level: edit.level,
+          type: edit.type,
           recommendation: edit.recommendation,
         },
         actor,
@@ -928,6 +959,7 @@ export async function editTask(
       if (edit.description !== undefined) d.description = edit.description;
       if (edit.options !== undefined) d.options = edit.options;
       if (edit.refs !== undefined) d.refs = [...edit.refs];
+      if (edit.type !== undefined) d.type = edit.type;
       if (d.rec) {
         if (edit.area !== undefined) d.rec.area = edit.area;
         if (edit.lldCheck !== undefined) d.rec.lldCheck = edit.lldCheck;

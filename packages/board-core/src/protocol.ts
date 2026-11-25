@@ -153,7 +153,7 @@ You finish the Goal's tasks one after another in this thread, without stopping b
 - For a finished task write no handoff, no checkpoint reply and no plan stub, and don't suggest a new thread. Write a living handoff (board_checkpoint) for a task only when you leave it unfinished or blocked.
 - Decisions that affect more than the task in hand go to the Goal with board_goal {action: "decide"}. ${
     mode === "auto"
-      ? "Auto mode: don't stop to ask. Settle it with the option you recommend and record how you settled it in `settled`; the person reviews these rows later. Never overrule a decision the person made: if one blocks you, pause."
+      ? "Auto mode: don't stop to ask. Settle it with the option you recommend and record how you settled it in `settled`; the person reviews these rows later. Never overrule a decision the person made: if one blocks you, pause. What can't be undone is never yours to settle (rewriting or force-pushing history, deleting data or branches, pushing to a shared branch, spending money): record it with `type: \"blocker\"` and carry on with the tasks it doesn't hold."
       : "Record the question without `settled`, carry on with the tasks it doesn't block, and pause when nothing else is left. Never settle it yourself."
   }
 - Work outside the Goal's tasks: if it belongs to the Goal, add it with board_goal {action: "include"}; otherwise create a task for later with board_create_task and continue.

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "@effect/vitest";
 
 import { BoardChat } from "./chat.ts";
 import { editTask } from "./edit.ts";
+import { closeGoal, loadGoal, saveGoal } from "./goal.ts";
 import { type BoardGit, noGit } from "./io.ts";
 import { nodeIO } from "./nodeIO.ts";
 import { nextStep, tickStep } from "./plan.ts";
@@ -416,6 +417,40 @@ describe("BoardChat", () => {
     });
   });
 
+  it("holds a task from done while a blocker or mandatory decision is open", async () => {
+    const store = await seedBoard();
+    const chat = await openChat(store, "t1", ws);
+    await chat.linkTask({ newTaskTitle: "Payments" });
+    await chat.createTask({ title: "Gateway", parentId: "payments" });
+    await chat.linkTask({ taskId: "gateway" });
+    await chat.fileDecision({ title: "Which provider?", level: 1 });
+    await chat.fileDecision({ title: "Dark mode?", type: "feature" });
+    await chat.fileDecision({ title: "Rename it?", type: "optional" });
+    const held = (await chat.updateTask({ status: "done" })).text;
+    expect(held).toContain('Not done: "Gateway"');
+    expect(held).toContain('"Which provider?" (mandatory)');
+    expect(held).not.toContain("Dark mode?");
+    expect(held).not.toContain("Rename it?");
+    expect((await store.loadTask("nefx", "gateway"))?.status).toBe("active");
+    const filed = async () => ((await store.loadTask("nefx", "payments")) as Task).decisions ?? [];
+    // An untyped decision reads as mandatory; a feature decision is filed on the master task.
+    expect(await filed()).toMatchObject([
+      { title: "Which provider?", raisedFrom: { id: "gateway" } },
+      { title: "Dark mode?", type: "feature", level: 1 },
+    ]);
+    const id = (await filed())[0]?.id;
+
+    await chat.fileDecision({ action: "update", id, type: "blocker" });
+    expect((await chat.fileDecision({ action: "skip", id })).text).toContain("can't be skipped");
+    await chat.fileDecision({ action: "update", id, type: "mandatory" });
+    await chat.fileDecision({ action: "skip", id, verdict: "not needed for the demo" });
+    expect((await filed())[0]).toMatchObject({
+      status: "dropped",
+      verdict: "Skipped by the person: not needed for the demo",
+    });
+    expect((await chat.updateTask({ status: "done" })).text).toContain("Board updated");
+  });
+
   it("blocks another workspace copy from an owned module until the person overrides", async () => {
     const store = await seedBoard();
     const a = await openChat(store, "t1", ws);
@@ -772,10 +807,68 @@ describe("BoardChat", () => {
     open.status = "decided";
     open.verdict = "Yes, keep it";
     await store.saveTask("nefx", rollout!);
-    expect((await readBoardView(store, "nefx", 0))?.goals[0]?.decisions).toEqual([
+    expect((await readBoardView(store, "nefx", 0))?.goals[0]?.decisions).toMatchObject([
       { id: "G1", title: "Renumber", settled: "V86 to V89", by: "model" },
       { id: "G2", title: "Keep the fixture invoice?", settled: "Yes, keep it", by: "person" },
     ]);
+
+    // A blocker is the person's in Auto mode too: its task leaves the Goal's order and can't
+    // be marked done.
+    const blocker = await exec.goalTool({
+      action: "decide",
+      title: "Force-push demo?",
+      settled: "yes",
+      type: "blocker",
+      taskIds: ["rollout"],
+    });
+    expect(blocker.text).toContain("G3 as a blocker for the person");
+    expect((await store.loadTask("nefx", "rollout"))?.decisions?.[2]).toMatchObject({
+      status: "open",
+      type: "blocker",
+    });
+    expect((await exec.goalTool({ action: "status" })).text).toContain(
+      "rollout wait on a blocker decision",
+    );
+    expect((await exec.goalTool({ action: "done" })).text).toContain('Not done: "Rollout"');
+    expect((await readBoardView(store, "nefx", 0))?.goals[0]?.decisions[2]).toMatchObject({
+      blocker: true,
+      settled: "",
+    });
+  });
+
+  it("ends a Goal for good: its tasks keep their progress and it can't be resumed", async () => {
+    const store = await seedBoard({ boardMode: true });
+    const exec = await openChat(store, "t1", ws);
+    await exec.createTask({ title: "Feature", topLevel: true });
+    await exec.createTask({ title: "Module", parentId: "feature" });
+    await store.io.write(store.planPath("nefx", "module"), "- [ ] B1 Run it\n- [ ] B2 Decide\n");
+    await exec.goalTool({ action: "start", scope: ["feature"], title: "Ship it" });
+    await exec.goalTool({ action: "task", taskId: "module" });
+    await exec.goalTool({ action: "step", step: "B1" });
+
+    const goal = await loadGoal(store, "nefx", "g-ship-it");
+    if (!goal) throw new Error("The Goal was not saved.");
+    await exec.leaveGoal(goal);
+    closeGoal(goal, "ended", "Ended by the person");
+    await saveGoal(store, "nefx", goal);
+
+    expect((await exec.goalTool({ action: "done" })).text).toContain("not running a Goal");
+    expect((await exec.goalTool({ action: "resume", goalId: "g-ship-it" })).text).toContain(
+      "can't be resumed",
+    );
+    const view = await readBoardView(store, "nefx", 0);
+    expect(view?.goals).toEqual([]);
+    expect(view?.finishedGoals[0]).toMatchObject({ id: "g-ship-it", status: "ended" });
+    expect(view?.tasks.find((task) => task.id === "module")).toMatchObject({
+      goal: null,
+      status: "active",
+    });
+    expect(await store.readText(store.planPath("nefx", "module"))).toBe(
+      "- [x] B1 Run it\n- [ ] B2 Decide\n",
+    );
+    expect(
+      (await exec.goalTool({ action: "start", scope: ["feature"], title: "Again" })).text,
+    ).toContain("Started Goal g-again");
   });
 
   it("hands a Goal's group to a child thread, which works it and reports once", async () => {
