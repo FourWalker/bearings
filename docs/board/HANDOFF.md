@@ -9,8 +9,8 @@ release for NEFX work. Read that brief and [PROGRESS.md](PROGRESS.md) first.
 (github.com/FourWalker/t3code-board) on the owner's say-so for this run. Ask again before the next
 push or any PR.
 
-**Board.** This fork has its own board since 2026-11-24: id `t3-board` ("T3 Board"), 6 features, 16
-modules, bugs under Board core › Storage and ids, the release-slots proposal as recommendation R1.
+**Board.** This fork has its own board since 2026-11-24: id `t3-board` ("Bearings"), 8 features, 37
+items, brought up to date on 2026-11-25 (Focus Mode and Bearings identity added);, bugs under Board core › Storage and ids, the release-slots proposal as recommendation R1.
 Read it with `node apps/server/src/bin.ts board find --board t3-board "<words>"`. This file stays
 the detail; update the board task after it.
 
