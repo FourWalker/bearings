@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Pin bar: one task or module kept in view (concept)</title>
+<!--
+  Concept for the Pin bar. Colours and fonts are the app's theme values (packages/shared
+  plotterTheme.ts, plotterTideTheme.ts, apps/web/src/plotter.css); the board behind the bar is a
+  sketch. The bar's look follows the theme, never Tack's skin.
+-->
+<style>
+  :root { --d-bg:#111; --d-card:#181818; --d-border:#2c2c2c; --d-fg:#e8e6e1; --d-muted:#8d8a84; --d-accent:#d97757;
+    --sans:-apple-system,BlinkMacSystemFont,"Inter Variable","Segoe UI",system-ui,sans-serif;
+    --mono:ui-monospace,"Cascadia Mono","SF Mono",Consolas,monospace;
+    --serif:"Iowan Old Style","Palatino Linotype","Source Serif 4",Georgia,serif; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--d-bg); color:var(--d-fg); font:14px/1.45 var(--sans); }
+  main { max-width:1220px; margin:0 auto; padding:28px 20px 80px; }
+  h1 { font-size:22px; margin:0 0 4px; } h2 { font-size:16px; margin:38px 0 6px; }
+  .lead, .sub { color:var(--d-muted); max-width:900px; margin:0 0 14px; } .sub b, .lead b { color:var(--d-fg); }
+  .btn { background:#242424; color:var(--d-fg); border:1px solid var(--d-border); border-radius:8px; padding:6px 10px; font:inherit; font-size:12.5px; cursor:pointer; }
+  .btn:hover { background:#2e2e2e; } .btn.on { border-color:var(--d-accent); color:#ffd9c9; }
+  .toolbar { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:8px 0; } .toolbar .lbl { color:var(--d-muted); font-size:12px; min-width:70px; }
+  .rules { display:grid; grid-template-columns:repeat(2,1fr); gap:10px 24px; font-size:13px; }
+  .rules div { background:var(--d-card); border:1px solid var(--d-border); border-radius:10px; padding:10px 12px; color:#c4c0b9; }
+  .rules b { color:var(--d-fg); }
+  table.src { border-collapse:collapse; font-size:13px; width:100%; max-width:900px; }
+  table.src td, table.src th { text-align:left; padding:6px 10px; border-bottom:1px solid var(--d-border); vertical-align:top; }
+  table.src th { color:var(--d-muted); font-weight:500; }
+  .stage { border:1px solid var(--d-border); border-radius:12px; overflow:hidden; margin:10px 0 6px; transition:max-width .2s; }
+  .stage.narrow { max-width:560px; }
+  .gallery { display:grid; gap:8px; }
+
+  /* ---------- theme values ---------- */
+  .app { --canvas:#f3eee3; --toolbar:#ece5d6; --raised:#faf7f0; --text:#1f2a48; --muted:#4f5872; --border:#d3d1cc;
+    --accent:#c4552d; --accent-fg:#fbf8f1; --accent-surface:#eddacb; --attention:#b07a18; --attention-surface:#f3e6c4;
+    --error:#b23a2a; --success:#3f7a52; --line:rgb(31 42 72 / .16); --rule:transparent; --shadow:rgb(31 42 72 / .14);
+    --note-a:#fff1a8; --note-b:#d6f0d9; --note-c:#d9e7fb; --note-ink:#2a2721;
+    --title-font:var(--sans); --label-font:var(--sans); --title-weight:600; }
+  .app.tide.night { --canvas:#141a27; --toolbar:#11161f; --raised:#1c2333; --text:#aab6d0; --muted:#8390ac; --border:#2a3140;
+    --accent:#e98a5e; --accent-fg:#141a27; --accent-surface:#3a2a26; --attention:#d9a441; --attention-surface:#3a3120;
+    --error:#f08a7a; --success:#7fc79a; --line:rgb(170 182 208 / .16); --shadow:rgb(0 0 0 / .4);
+    --note-a:#4a4425; --note-b:#2b4432; --note-c:#2b3a52; --note-ink:#f1ede4; }
+  .app.plotter { --canvas:#efe4d0; --toolbar:#f3eadb; --raised:#f6efe2; --text:#1f2a48; --muted:#545c72; --border:#d2c6b0;
+    --accent:#c4552d; --accent-fg:#fbf6ec; --accent-surface:#efd6c4; --attention:#c4552d; --attention-surface:#efd6c4;
+    --error:#b23a2a; --success:#1f2a48; --rule:rgb(31 42 72 / .1);
+    --note-a:#f6efe2; --note-b:#f6efe2; --note-c:#f6efe2; --note-ink:#1f2a48;
+    --title-font:var(--serif); --label-font:var(--mono); --title-weight:500; }
+  .app.plotter.night { --canvas:#1c2333; --toolbar:#1a2030; --raised:#252f45; --text:#b8c2da; --muted:#8692ae; --border:#313b52;
+    --accent:#e98a5e; --accent-fg:#1c2333; --accent-surface:#3b2c2a; --attention:#e98a5e; --attention-surface:#3b2c2a;
+    --error:#f08a7a; --success:#b8c2da; --line:rgb(170 182 208 / .16); --rule:rgb(170 182 208 / .08); --shadow:rgb(0 0 0 / .4);
+    --note-a:#252f45; --note-b:#252f45; --note-c:#252f45; --note-ink:#c3cce0; }
+
+  /* ---------- the board sketch ---------- */
+  .app { background:var(--canvas); color:var(--text); font:13px/1.4 var(--sans); }
+  .mast { display:flex; align-items:center; gap:10px; padding:9px 16px; background:var(--toolbar); border-bottom:1px solid var(--border); }
+  .mast .name { font:var(--title-weight) 17px var(--title-font); } .mast .name em { font-style:normal; color:var(--accent); }
+  .mast .tabs { display:flex; gap:4px; margin-left:14px; font:12px var(--label-font); color:var(--muted); }
+  .mast .tabs span { padding:3px 8px; border-radius:6px; } .mast .tabs .cur { background:var(--raised); color:var(--text); border:1px solid var(--border); }
+  .mast .sp { flex:1; }
+  .surface { padding:22px 20px 26px; display:grid; grid-template-columns:repeat(3,1fr); gap:16px;
+    background-image:linear-gradient(var(--rule) 1px,transparent 1px),linear-gradient(90deg,var(--rule) 1px,transparent 1px); background-size:24px 24px; }
+  .note { position:relative; border-radius:6px; padding:12px 12px 10px; color:var(--note-ink); min-height:74px; box-shadow:0 8px 20px -14px var(--shadow); }
+  .note:nth-child(1){background:var(--note-a)} .note:nth-child(2){background:var(--note-b)} .note:nth-child(3){background:var(--note-c)}
+  .note b { display:block; font:var(--title-weight) 14px var(--title-font); } .note small { font:11px var(--label-font); opacity:.7; }
+  .plotter .note { border:1px solid var(--line); }
+  .plotter .note::before { content:""; position:absolute; top:-5px; left:50%; width:9px; height:9px; margin-left:-4px; border-radius:50%; background:var(--accent); }
+  .note.pinned { outline:2px solid var(--accent); outline-offset:2px; }
+  .note .pinmark { position:absolute; top:6px; right:8px; font:10px var(--label-font); color:var(--accent); letter-spacing:.04em; }
+
+  /* ---------- the Pin bar ---------- */
+  .pin { position:relative; display:grid; grid-template-columns:auto minmax(120px,1fr) minmax(170px,1.15fr) minmax(0,1.5fr) auto; align-items:center; gap:4px 14px;
+    padding:7px 12px 7px 16px; background:var(--raised); border-bottom:1px solid var(--border); container-type:inline-size; }
+  .pin::before { content:""; position:absolute; inset:0 auto 0 0; width:3px; background:var(--accent); }
+  .pin[data-tone="needs"]::before, .pin[data-tone="blocked"]::before { background:var(--attention); width:4px; }
+  .pin[data-tone="stopped"]::before { background:var(--error); width:4px; }
+  .pin[data-tone="needs"], .pin[data-tone="blocked"] { background:color-mix(in srgb, var(--attention-surface) 55%, var(--raised)); }
+  .pin .glyph { width:22px; height:22px; display:grid; place-items:center; color:var(--accent); }
+  .pin .glyph svg { width:15px; height:15px; }
+  .pin .what { min-width:0; cursor:pointer; }
+  .pin .kicker { font:10.5px var(--label-font); color:var(--muted); letter-spacing:.04em; text-transform:uppercase; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pin .title { font:var(--title-weight) 14px/1.25 var(--title-font); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pin .what:hover .title { text-decoration:underline; text-underline-offset:3px; }
+  .pin .plan { min-width:0; display:grid; gap:2px; padding-left:14px; border-left:1px solid var(--border); }
+  .pin .plan .top { display:flex; align-items:center; gap:8px; }
+  .pin .step { font:12px var(--label-font); color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pin .step i { font-style:normal; color:var(--accent); margin-right:5px; } .pin .step b { font-weight:600; margin-right:5px; }
+  .pin .step.swap { animation:swap .5s ease-out 1; }
+  @keyframes swap { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:none; } }
+  .pips { display:flex; gap:3px; }
+  .pip { width:9px; height:9px; border-radius:50%; border:1.5px solid var(--muted); opacity:.55; }
+  .pip.done { background:var(--success); border-color:var(--success); opacity:1; }
+  .pip.next { border-color:var(--accent); opacity:1; }
+  .pip.just { animation:tick .9s ease-out 1; }
+  @keyframes tick { 0% { transform:scale(.4); box-shadow:0 0 0 0 var(--accent); } 45% { transform:scale(1.55); box-shadow:0 0 0 5px transparent; } 100% { transform:scale(1); } }
+  .plotter .pip { border-radius:2px; border-width:1px; }
+  .count { font:11.5px var(--mono); color:var(--muted); white-space:nowrap; }
+  .now { min-width:0; display:flex; align-items:center; gap:9px; }
+  .chip { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; font:600 11.5px var(--label-font); padding:2px 9px; border-radius:999px;
+    background:color-mix(in srgb, var(--muted) 14%, transparent); color:var(--text); }
+  .chip i { width:7px; height:7px; border-radius:50%; background:var(--muted); }
+  .chip[data-tone="working"] i { background:var(--success); }
+  .chip[data-tone="waiting"] i { background:transparent; border:1.5px solid var(--muted); }
+  .chip[data-tone="needs"], .chip[data-tone="blocked"] { background:var(--attention); color:var(--accent-fg); } .chip[data-tone="needs"] i, .chip[data-tone="blocked"] i { background:var(--accent-fg); }
+  .chip[data-tone="stopped"] { background:var(--error); color:var(--accent-fg); } .chip[data-tone="stopped"] i { background:var(--accent-fg); }
+  .chip[data-tone="finished"] { background:var(--accent-surface); color:var(--accent); } .chip[data-tone="finished"] i { background:var(--accent); }
+  /* Plotter: the chip is a stamp, like the board's "blocked" stamp. */
+  .plotter .chip { border-radius:3px; background:transparent; border:1px solid var(--line); font-weight:500; text-transform:uppercase; letter-spacing:.05em; font-size:10.5px; padding:2px 7px; color:var(--muted); }
+  .plotter .chip[data-tone="working"] { color:var(--text); border-color:var(--text); }
+  .plotter .chip[data-tone="needs"], .plotter .chip[data-tone="blocked"], .plotter .chip[data-tone="finished"] { background:transparent; color:var(--accent); border-color:var(--accent); }
+  .plotter .chip[data-tone="needs"], .plotter .chip[data-tone="blocked"] { background:var(--accent); color:var(--accent-fg); }
+  .plotter .chip[data-tone="stopped"] { background:transparent; color:var(--error); border-color:var(--error); }
+  .plotter .chip i { border-radius:1px; }
+  .peekline { min-width:0; font:12px var(--mono); color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .peekline b { font-weight:500; color:var(--text); }
+  .peekline.flash { color:var(--accent); } .peekline.flash b { color:var(--accent); }
+  .acts { display:flex; align-items:center; gap:4px; }
+  .act { font:12px var(--label-font); color:var(--text); background:transparent; border:1px solid var(--border); border-radius:6px; padding:3px 9px; cursor:pointer; white-space:nowrap; }
+  .act.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-fg); font-weight:600; }
+  .act.icon { border-color:transparent; color:var(--muted); padding:3px 6px; }
+  .plotter .act { border-radius:3px; }
+  @container (max-width:700px) {
+    .pin { grid-template-columns:auto minmax(0,1fr) auto; }
+    .pin .plan { grid-column:2 / 4; grid-row:2; border-left:0; padding-left:0; } .pin .now { grid-column:2 / 4; grid-row:3; } .pin .acts { grid-column:3; grid-row:1; }
+  }
+  /* the peek: opens under the bar, over the board */
+  .peek { display:none; grid-template-columns:1.2fr 1fr; gap:0; background:var(--raised); border-bottom:1px solid var(--border); box-shadow:0 14px 24px -18px var(--shadow); }
+  .peek.open { display:grid; }
+  .peek section { padding:10px 16px 12px; min-width:0; } .peek section + section { border-left:1px solid var(--border); }
+  .peek h4 { margin:0 0 6px; font:10.5px var(--label-font); letter-spacing:.05em; text-transform:uppercase; color:var(--muted); font-weight:500; }
+  .peek ul { list-style:none; margin:0; padding:0; display:grid; gap:3px; }
+  .peek li { display:grid; grid-template-columns:42px 54px minmax(0,1fr); gap:8px; font:12px var(--mono); color:var(--text); }
+  .peek li span:first-child, .peek li span:nth-child(2) { color:var(--muted); } .peek li span:last-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .peek li.step { grid-template-columns:16px 30px minmax(0,1fr) auto; } .peek li.step.done span { color:var(--muted); } .peek li.step.cur span { color:var(--accent); }
+  .peek .foot { grid-column:1 / -1; border-top:1px dashed var(--border); padding:6px 16px; font:11px var(--label-font); color:var(--muted); }
+  .cap { color:var(--d-muted); font-size:12px; margin:2px 2px 12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Pin bar</h1>
+  <p class="lead">Pin one task or module and a slim bar about it stays under the board's header <b>everywhere on the board</b>: every view, the Goals screen, a master task's page, and behind an open task. It is a focus mode: the step being worked on stands in the bar and moves on as the chat ticks it, a line peeks at what the agent is doing, and the bar changes colour the moment the chat <b>needs an approval, asks a question, has an open decision, is blocked, or stops</b>.</p>
+  <p class="sub">Everything on it is read from the chat's own events and the board's files. The model is never asked to report anything for the bar, so it costs no tokens.</p>
+
+  <div class="toolbar"><span class="lbl">Theme</span>
+    <button class="btn on" data-theme="tide">Plotter Tide</button>
+    <button class="btn" data-theme="tide night">Plotter Tide · night</button>
+    <button class="btn" data-theme="plotter">Plotter</button>
+    <button class="btn" data-theme="plotter night">Plotter · night</button>
+  </div>
+  <div class="toolbar"><span class="lbl">Pinned</span>
+    <button class="btn on" data-kind="task">A task</button>
+    <button class="btn" data-kind="module">A module</button>
+    <button class="btn" data-kind="moduleown">A module, worked directly</button>
+    <span class="lbl" style="margin-left:14px;min-width:0">Width</span>
+    <button class="btn on" data-width="">Wide</button>
+    <button class="btn" data-width="narrow">Narrow window</button>
+  </div>
+  <div class="toolbar"><span class="lbl">State</span><span id="states"></span></div>
+  <div class="toolbar"><span class="lbl">Try</span>
+    <button class="btn" id="tick">The chat ticks a step</button>
+    <button class="btn" id="togglepeek">Open / close the peek</button>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="app tide" id="app">
+      <div class="mast">
+        <span class="name">NEFX / <em>Board</em></span>
+        <div class="tabs"><span class="cur">Tree</span><span>Modules</span><span>Tasks</span><span>Services</span><span>Decisions</span><span>Goals</span></div>
+        <span class="sp"></span>
+      </div>
+      <div class="pin" id="pin"></div>
+      <div class="peek" id="peek"></div>
+      <div class="surface">
+        <div class="note"><b>Transfers</b><small>feature · 3 modules</small></div>
+        <div class="note pinned"><span class="pinmark">PINNED</span><b id="notetitle">Retry loop spins</b><small id="notesub">bug · Retries</small></div>
+        <div class="note"><b>Key rotation</b><small>task · SFTP auth</small></div>
+      </div>
+    </div>
+  </div>
+  <p class="cap">The bar sits between the board's header and whatever the board is showing. The pinned note keeps an outline so you can find it on the board. Click the title to open the task; the button on the right is always the one useful next move.</p>
+
+  <h2>Every state, side by side</h2>
+  <p class="sub">In the selected theme. A quiet bar is neutral; the left edge and the chip take the attention colour only when the chat is waiting for you.</p>
+  <div class="gallery" id="gallery"></div>
+
+  <h2>What each part reads</h2>
+  <table class="src">
+    <tr><th>Part</th><th>Read from</th><th>Updates</th></tr>
+    <tr><td>Step pips, count, and the step in hand (the first unticked one)</td><td>The task's plan file. A step is ticked by the chat's own <code>board_handoff</code> or <code>board_goal step</code> call, or by you.</td><td>When that tool call lands in the chat, the bar re-reads the plan at once; otherwise with the board's normal refresh.</td></tr>
+    <tr><td>State chip</td><td>The thread's live status, as the sidebar reads it (working, approval, question, failed, waiting on background work, finished and not seen), plus the task's open decisions and "blocked by" links on the board.</td><td>Live, with the thread.</td></tr>
+    <tr><td>Peek line and peek list</td><td>The thread's latest activity rows: the command it runs, the file it edits, the board tool it calls, its last message's first line.</td><td>Live, only while a task is pinned.</td></tr>
+    <tr><td>Module pin</td><td>The same, rolled up over the module's tasks: tasks done, the task in hand, the most urgent state among its chats.</td><td>Same.</td></tr>
+  </table>
+
+  <h2>Rules</h2>
+  <div class="rules">
+    <div><b>One pin per board.</b> Pinning another task replaces it. Pin and unpin from a task's or module's header and from a note's menu; unpin with the × on the bar. Kept per board on this device.</div>
+    <div><b>Most urgent state wins.</b> Approval, question, open decision, blocked, stopped, then working, waiting, finished, idle. With several chats on the item, the chip names the most urgent and counts the rest.</div>
+    <div><b>The button is the next move.</b> Review (approval), Answer (question), Decide, Open blocker, Open chat, See result, or Continue when no chat is on it. It opens the task with Tack on that chat.</div>
+    <div><b>It stays put.</b> No sound and no banner of its own: Tack still announces. The bar is the place you glance at, and it stays coloured until the state is dealt with.</div>
+    <div><b>Theme, not skin.</b> Plotter: a paper strip, mono labels, serif title, square pips, stamp chips. Plotter Tide: the app's sans, round pips, pill chips. Other themes get the Plotter Tide layout in their own colours.</div>
+    <div><b>What the slot shows.</b> A pinned task: the plan step in hand. A pinned module: the task being done under it. But when a chat works on the module itself, the slot shows the module's own step in hand, and that wins even while another chat works one of its tasks.</div>
+    <div><b>The step in hand always shows.</b> It has its own slot beside the pips and stays until the chat ticks it; then the pip fills and the next step takes the slot. Nothing important is shown only for a moment.</div>
+    <div><b>Catching your eye is a choice.</b> When the pinned item needs you, the bar can also move: by the theme, or by Tack. See <a href="pin-attention-concept.html" style="color:var(--d-accent)">the attention concept</a>.</div>
+  </div>
+</main>
+
+<script>
+const ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 1.8l4.7 4.7-2 .6-2.4 2.4.3 3.2-1.4 1.4-3-3L2 15l3.9-3.7-3-3 1.4-1.4 3.2.3 2.4-2.4z"/></svg>';
+const STEPS = ["A1 Reproduce the spin", "A2 Cap attempts at 3", "A3 Backoff with jitter", "A4 Wire retry into client", "A5 Cover the timeout path", "A6 Update the runbook", "A7 Verify on the testbed"];
+const STATES = {
+  working:  { tone:"working",  chip:"Working · 12m",          line:"<b>running</b> vp test run src/transfer/retry.test.ts", act:"Open chat" },
+  approval: { tone:"needs",    chip:"Needs approval",         line:"<b>wants to run</b> git push origin fix/retry-loop", act:"Review", primary:true },
+  question: { tone:"needs",    chip:"Asks you",               line:"“Keep the 3-try cap fixed, or make it a setting per route?”", act:"Answer", primary:true },
+  decision: { tone:"needs",    chip:"Decision open",          line:"<b>D-12</b> Retry cap: fixed or per route", act:"Decide", primary:true },
+  blocked:  { tone:"blocked",  chip:"Blocked",                line:"<b>by</b> Key rotation (SFTP auth), still active", act:"Open blocker", primary:true },
+  waiting:  { tone:"waiting",  chip:"Waiting · background",   line:"<b>background</b> integration suite, 4m so far", act:"Open chat" },
+  stopped:  { tone:"stopped",  chip:"Stopped",                line:"<b>run failed</b> usage limit, resets 02:10", act:"Open chat", primary:true },
+  finished: { tone:"finished", chip:"Finished · not seen",    line:"Retry is capped at 3 with jitter; 14 tests pass.", act:"See result", primary:true },
+  idle:     { tone:"idle",     chip:"Idle · 2h",              line:"<b>last</b> Finished A4: client wrapper retries through the new policy", act:"Continue" },
+  none:     { tone:"idle",     chip:"No chat on it",          line:"Nothing has run on this yet.", act:"Start a chat", primary:true },
+};
+const LABEL = { working:"Working", approval:"Needs approval", question:"Asks a question", decision:"Decision open", blocked:"Blocked", waiting:"Waiting on background", stopped:"Stopped", finished:"Finished, not seen", idle:"Idle", none:"No chat" };
+let kind = "task", state = "working", done = 4, just = -1, flash = false, open = false;
+
+function bar(key, opts) {
+  const s = STATES[key], o = opts || {};
+  const d = o.done ?? done, k = o.kind ?? kind, module = k !== "task", own = k === "moduleown";
+  const total = module ? 8 : STEPS.length, dn = module ? 3 : d;
+  const pips = Array.from({ length: total }, (_, i) =>
+    '<span class="pip' + (i < dn ? " done" : i === dn ? " next" : "") + (!module && i === o.just ? " just" : "") + '"></span>').join("");
+  const kicker = module ? "Module · Transfers" : "Bug · Transfers › Retries";
+  const title = module ? "Retries" : "Retry loop spins";
+  const count = module ? "3/8 tasks" : dn + "/" + total;
+  const cur = STEPS[d];
+  const step = key === "none" ? "<i>▸</i>Starts at <b>A1</b>Reproduce the spin"
+    : own ? "<i>▸</i><b>M3</b>Split retry policy from the client"
+    : module ? "<i>▸</i>Task in hand: <b>Retry loop spins</b>"
+    : cur ? "<i>▸</i><b>" + cur.slice(0, 2) + "</b>" + cur.slice(3) : "<i>✓</i>Every step is ticked";
+  const chip = module && key === "working" ? (own ? "2 working" : "1 working · 1 idle") : s.chip;
+  let line = s.line;
+  return '<span class="glyph">' + ICON + '</span>' +
+    '<div class="what"><div class="kicker">' + kicker + '</div><div class="title">' + title + '</div></div>' +
+    '<div class="plan"><div class="top"><span class="pips">' + pips + '</span><span class="count">' + count + '</span></div><div class="step' + (o.flash ? " swap" : "") + '">' + step + '</div></div>' +
+    '<div class="now"><span class="chip" data-tone="' + s.tone + '"><i></i>' + chip + '</span><span class="peekline">' + line + '</span></div>' +
+    '<div class="acts"><button class="act' + (s.primary ? " primary" : "") + '">' + s.act + '</button><button class="act icon" title="Peek">▾</button><button class="act icon" title="Unpin">✕</button></div>';
+}
+function peek() {
+  const rows = [["00:41","ran","vp test run src/transfer/retry.test.ts  (running)"],["00:40","edited","src/transfer/retry.ts"],["00:38","edited","src/transfer/client.ts"],["00:37","board","board_handoff A4 · ticked"],["00:31","ran","vp run typecheck  (exit 0)"]];
+  const steps = STEPS.map((t, i) => '<li class="step ' + (i < done ? "done" : i === done ? "cur" : "") + '"><span>' + (i < done ? "✓" : i === done ? "▸" : "·") + '</span><span>' + t.slice(0, 2) + '</span><span>' + t.slice(3) + '</span><span>' + (i < done ? "00:" + (10 + i * 9) : "") + '</span></li>').join("");
+  return '<section><h4>What the agent is doing</h4><ul>' + rows.map(r => '<li><span>' + r[0] + '</span><span>' + r[1] + '</span><span>' + r[2] + '</span></li>').join("") + '</ul></section>' +
+    '<section><h4>Plan · ' + done + ' of ' + STEPS.length + '</h4><ul>' + steps + '</ul></section>' +
+    '<div class="foot">Read from the chat\'s events and the plan file. Nothing here is written for the bar.</div>';
+}
+function render() {
+  const pin = document.getElementById("pin");
+  pin.dataset.tone = STATES[state].tone;
+  pin.innerHTML = bar(state, { just, flash });
+  const pk = document.getElementById("peek"); pk.className = "peek" + (open ? " open" : ""); pk.innerHTML = peek();
+  document.getElementById("notetitle").textContent = kind !== "task" ? "Retries" : "Retry loop spins";
+  document.getElementById("notesub").textContent = kind !== "task" ? "module · 8 tasks" : "bug · Retries";
+  const theme = document.getElementById("app").className;
+  document.getElementById("gallery").innerHTML = Object.keys(STATES).map(k =>
+    '<div class="stage" style="margin:0"><div class="' + theme + '"><div class="pin" data-tone="' + STATES[k].tone + '">' + bar(k, { done: k === "none" ? 0 : 4 }) + '</div></div></div>').join("");
+  document.querySelectorAll("#states .btn").forEach(b => b.classList.toggle("on", b.dataset.state === state));
+}
+document.getElementById("states").innerHTML = Object.keys(STATES).map(k => '<button class="btn" data-state="' + k + '">' + LABEL[k] + '</button>').join(" ");
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  const group = (attr) => document.querySelectorAll("[data-" + attr + "]").forEach(x => x.classList.toggle("on", x === b));
+  if (b.dataset.theme !== undefined) { document.getElementById("app").className = "app " + b.dataset.theme; group("theme"); }
+  else if (b.dataset.kind) { kind = b.dataset.kind; group("kind"); }
+  else if (b.dataset.width !== undefined) { document.getElementById("stage").className = "stage " + b.dataset.width; group("width"); }
+  else if (b.dataset.state) { state = b.dataset.state; }
+  else if (b.id === "togglepeek" || b.title === "Peek") { open = !open; }
+  else if (b.id === "tick") {
+    state = "working"; kind = "task"; done = done >= STEPS.length ? 3 : done + 1; just = done - 1; flash = true; render();
+    setTimeout(() => { flash = false; just = -1; }, 1000); return;
+  } else return;
+  render();
+});
+render();
+</script>
+</body>
+</html>

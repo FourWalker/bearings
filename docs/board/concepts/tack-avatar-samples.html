@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Tack avatar samples</title>
+<style>
+  :root {
+    --bg: #121212; --panel: #1b1b1b; --pop: #1f1f1f; --border: #2e2e2e;
+    --fg: #e8e6e1; --muted: #8d8a84; --accent: #d97757; --chip: #262626;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1120px; margin: 0 auto; padding: 32px 24px 80px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 40px 0 4px; }
+  p.lead, p.sub { color: var(--muted); margin: 0 0 16px; max-width: 760px; }
+  canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+  .card .stage { display: grid; place-items: center; height: 116px; background:
+      repeating-linear-gradient(0deg, #161616 0 1px, transparent 1px 8px),
+      repeating-linear-gradient(90deg, #161616 0 1px, transparent 1px 8px), #191919;
+    border-radius: 8px; margin-bottom: 10px; }
+  .card b { display: block; font-size: 13px; }
+  .card .when { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .card .meta { color: #6f6c66; font-size: 11px; margin-top: 6px; font-family: ui-monospace, monospace; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0 16px; }
+  .btn { background: var(--chip); color: var(--fg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+  .btn:hover { background: #2f2f2f; }
+  .btn[aria-pressed="true"] { border-color: var(--accent); color: #f3c9b8; }
+
+  /* Skin picker */
+  .skins { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .skin { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 10px;
+    cursor: pointer; text-align: left; color: inherit; font: inherit; }
+  .skin[aria-checked="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .skin .stage { height: 76px; display: grid; place-items: center; }
+  .skin small { color: var(--muted); display: block; font-size: 11px; }
+  .settings { display: grid; grid-template-columns: 160px 1fr; gap: 10px 16px; align-items: center;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-top: 12px; max-width: 640px; }
+  .settings label { color: var(--muted); font-size: 13px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { background: transparent; border: 0; color: var(--fg); padding: 5px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: #34261f; color: #f3c9b8; }
+
+  /* Live prototype */
+  .proto { position: relative; height: 560px; border: 1px solid var(--border); border-radius: 12px;
+    background: #141414; overflow: hidden; }
+  .board { position: absolute; inset: 16px auto 16px 16px; display: flex; gap: 12px; }
+  .col { width: 200px; background: #1a1a1a; border: 1px solid var(--border); border-radius: 10px; padding: 8px; }
+  .col h4 { margin: 0 0 8px; font-size: 12px; color: var(--muted); font-weight: 600; }
+  .task { background: #222; border: 1px solid #303030; border-radius: 8px; padding: 6px 8px; font-size: 12px; margin-bottom: 6px; }
+  .task.new { border-color: var(--accent); animation: pop .35s steps(3); }
+  @keyframes pop { from { transform: translateY(-4px); opacity: .3 } to { transform: none; opacity: 1 } }
+  .dock { position: absolute; right: 16px; bottom: 16px; }
+  .pill { position: relative; display: flex; align-items: center; gap: 8px; border: 1px solid var(--border);
+    background: var(--pop); border-radius: 999px; padding: 8px 16px 8px 52px; cursor: pointer; color: var(--fg); font: inherit; }
+  .pill:hover { background: #262626; }
+  .pill canvas { position: absolute; left: 2px; bottom: 3px; }
+  .chat { position: relative; width: 360px; height: 420px; display: flex; flex-direction: column;
+    background: var(--pop); border: 1px solid var(--border); border-radius: 12px; }
+  .chat .perch { position: absolute; right: 18px; top: 0; transform: translateY(-100%); margin-top: 7px; cursor: pointer; }
+  .chat header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .chat header .t { flex: 1; font-weight: 600; font-size: 13px; }
+  .chat header .t span { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 6px; }
+  .chat .x { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 16px; }
+  .msgs { flex: 1; overflow-y: auto; display: flex; flex-direction: column-reverse; padding: 8px 12px; }
+  .msgs .inner { display: grid; gap: 8px; }
+  .bubble { max-width: 88%; border-radius: 10px; padding: 6px 10px; font-size: 13px; background: #2a2a2a; }
+  .bubble.me { justify-self: end; background: #3a2a22; }
+  .status { color: var(--muted); font-size: 12px; }
+  .chat form { display: flex; gap: 8px; padding: 8px; border-top: 1px solid var(--border); }
+  .chat textarea { flex: 1; resize: none; background: #161616; color: var(--fg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 9px; font: inherit; font-size: 13px; height: 34px; }
+  .chat .send { background: var(--accent); color: #1b1b1b; border: 0; border-radius: 8px; width: 34px; cursor: pointer; font-weight: 700; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chips button { background: none; border: 1px solid var(--border); color: var(--fg); border-radius: 999px; padding: 3px 9px; font-size: 12px; cursor: pointer; }
+  .statebadge { position: absolute; left: 16px; bottom: 16px; font: 12px ui-monospace, monospace; color: var(--muted);
+    background: #1a1a1a; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; }
+  .statebadge b { color: #f3c9b8; }
+
+  .sheet { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px; overflow-x: auto; }
+  .sheet .row { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+  .sheet .row span { width: 90px; flex: none; color: var(--muted); font: 12px ui-monospace, monospace; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  td code { font-size: 12px; color: #f3c9b8; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Tack avatars: design samples</h1>
+  <p class="lead">Tack becomes a small pixel character that lives on the Assistant's pill and perches on top of the
+    chat window. Each skin is one sprite sheet with the same set of states, played at 2–8 fps with no
+    in-between frames. The first skin is the Claude character, in Claude terracotta. Samples only, nothing is built yet.</p>
+
+  <div class="toolbar">
+    <span style="color:var(--muted);font-size:13px">Preview skin:</span>
+    <div class="seg" id="sheetSkin"></div>
+    <span style="width:16px"></span>
+    <button class="btn" id="motionBtn" aria-pressed="false">Simulate reduced motion</button>
+  </div>
+
+  <h2>1 · States</h2>
+  <p class="sub">What Tack does, and what in the app triggers each state.</p>
+  <div class="grid" id="states"></div>
+
+  <h2>2 · Live mock (click, type and send)</h2>
+  <p class="sub">Leave the pill alone for 6 seconds and Tack falls asleep. Click it to wake Tack and open the chat.
+    Typing makes Tack read along, and sending makes it think. Ask it to <i>"add a task for login bug"</i>
+    to see it write a note and pin it to the board.</p>
+  <div class="proto" id="proto">
+    <div class="board">
+      <div class="col"><h4>Backlog</h4><div id="backlog">
+        <div class="task">Refund flow edge cases</div><div class="task">Seller fee table</div></div></div>
+      <div class="col"><h4>In progress</h4><div class="task">Board Assistant avatars</div></div>
+    </div>
+    <div class="dock" id="dock"></div>
+    <div class="statebadge">state: <b id="stateName">idle</b></div>
+  </div>
+  <div class="toolbar">
+    <button class="btn" data-sim="waiting">Simulate: needs approval</button>
+    <button class="btn" data-sim="error">Simulate: turn failed</button>
+    <button class="btn" data-sim="done">Simulate: answer arrived</button>
+  </div>
+
+  <h2>3 · Customization</h2>
+  <p class="sub">A suggested settings section, at <i>Settings › Board › Assistant</i>. Every skin uses the same state names, so
+    adding a skin only means adding a sprite sheet and a small manifest.</p>
+  <div class="skins" id="skins" role="radiogroup" aria-label="Tack avatar"></div>
+  <div class="settings">
+    <label>Animation</label>
+    <div class="seg" id="animSeg"><button aria-pressed="true">Full</button><button>Calm</button><button>Still</button></div>
+    <label>Size</label>
+    <div class="seg" id="sizeSeg"><button>Small</button><button aria-pressed="true">Medium</button><button>Large</button></div>
+    <label>Sleep after</label>
+    <div class="seg"><button>30 s</button><button aria-pressed="true">2 min</button><button>Never</button></div>
+  </div>
+  <p class="sub" style="margin-top:8px"><b>Calm</b> keeps only the one-shot reactions (wake, note, done) and holds a
+    still frame otherwise. <b>Still</b> shows a fixed pose per state. The OS's reduced-motion setting picks <b>Still</b> automatically.</p>
+
+  <h2>4 · Sprite sheets</h2>
+  <p class="sub">Every frame as it would be exported: a 26×20 pixel cell per frame, one row per state. In the app,
+    a sheet is played with CSS <code>steps()</code>, so no JavaScript timer runs and nothing repaints while Tack sleeps.</p>
+  <div class="sheet" id="sheet"></div>
+
+  <h2>5 · State map</h2>
+  <table>
+    <tr><th>State</th><th>Trigger in BoardAssistant</th><th>Plays</th></tr>
+    <tr><td>sleep</td><td><code>view === "closed"</code>, not busy, and no hover or messages for the "Sleep after" time</td><td>loop, 2 fps; freezes after 1 min</td></tr>
+    <tr><td>idle</td><td>awake with nothing happening</td><td>blinks and glances, 4 fps</td></tr>
+    <tr><td>wake</td><td>pill clicked or the view becomes <code>"open"</code> / <code>"expanded"</code></td><td>once, 8 fps → idle</td></tr>
+    <tr><td>listen</td><td><code>draft</code> changed in the last 800 ms</td><td>loop while typing</td></tr>
+    <tr><td>think</td><td><code>busy</code> (sending, or <code>isAssistantBusy</code>), no tool running</td><td>loop, 6 fps</td></tr>
+    <tr><td>write</td><td>a <code>board_create_task</code> tool call is running in Tack's thread</td><td>loop; pins the note when the call succeeds</td></tr>
+    <tr><td>alert</td><td><code>waiting</code> (an approval or user input is pending)</td><td>loop, 4 fps</td></tr>
+    <tr><td>done</td><td>the turn settles with a reply</td><td>once, 8 fps → idle</td></tr>
+    <tr><td>oops</td><td>the turn fails, or <code>send</code> shows a failure toast</td><td>loop for 3 s → idle</td></tr>
+  </table>
+</main>
+
+<script>
+// ---------- Pixel engine -------------------------------------------------
+const W = 26, H = 20;
+const SKINS = {
+  clawd:  { name: "Claude",       note: "Terracotta · default", kind: "clawd", O: "#D97757", K: "#1B1A18" },
+  ivory:  { name: "Claude Ivory", note: "for light themes",     kind: "clawd", O: "#E9DFCB", K: "#2A2722" },
+  mint:   { name: "Claude Mint",  note: "recolor",              kind: "clawd", O: "#6CC3A4", K: "#10201A" },
+  night:  { name: "Claude Night", note: "recolor",              kind: "clawd", O: "#9095E0", K: "#0F1020" },
+  pin:    { name: "Pushpin",      note: "the current 📌, animated", kind: "pin", O: "#E5484D", D: "#A8323A", N: "#A3A3A3", K: "#1B1A18" },
+};
+const FX = { P: "#F4EEDC", L: "#8E8670", Y: "#F2C14E", G: "#3A3A3A", Z: "#B8B2A4", A: "#F5A524",
+             R: "#E5484D", B: "#7CC4F2", Wh: "#FFFFFF" };
+
+function glyph(g, rows, x, y, c) {
+  rows.forEach((r, j) => [...r].forEach((ch, i) => { if (ch === "1") g.px(x + i, y + j, c); }));
+}
+const Z_SMALL = ["111", "..1", "1..", "111"];
+const Z_BIG = ["11111", "...1.", "..1..", ".1...", "11111"];
+const SPARK = [
+  ["..1..", "..1..", "11111", "..1..", "..1.."],
+  ["1...1", ".1.1.", "..1..", ".1.1.", "1...1"],
+  ["1.1.1", ".111.", "11111", ".111.", "1.1.1"],
+];
+const TWINKLE = [".1.", "111", ".1."];
+
+// The Claude character: a wide body, two tall eyes, side arms, four legs.
+function clawd(g, o = {}) {
+  const C = g.skin;
+  const ox = o.x || 0, oy = o.y || 0, sq = o.squash ? 1 : 0;
+  const ground = 17 + oy, bx = 8 + ox, bot = ground - 2, top = ground - 7 + sq;
+  const legs = o.legs || "stand";
+  [[bx, 0], [bx + 2, 1], [bx + 7, 0], [bx + 9, 1]].forEach(([lx, grp]) => {
+    let h = 2;
+    if (legs === "tuck") h = 1;
+    if (legs === "stepA" && grp === 0) h = 1;
+    if (legs === "stepB" && grp === 1) h = 1;
+    for (let i = 0; i < h; i++) g.px(lx, bot + 1 + i, C.O);
+  });
+  for (let y = top; y <= bot; y++) for (let x = bx; x < bx + 10; x++) g.px(x, y, C.O);
+  const ar = top + 3;
+  const arm = (mode, side) => {
+    const s = side < 0 ? bx - 1 : bx + 10, d = side;
+    if (mode === "out") { g.px(s, ar, C.O); g.px(s + d, ar, C.O); }
+    if (mode === "down") g.px(s, ar + 1, C.O);
+    if (mode === "up") { g.px(s, ar - 1, C.O); g.px(s + d, ar - 2, C.O); g.px(s + d, ar - 3, C.O); }
+    if (mode === "wave") { g.px(s, ar - 1, C.O); g.px(s + d, ar - 2, C.O); g.px(s + 2 * d, ar - 2, C.O); }
+    if (mode === "hold") { g.px(s, ar + 1, C.O); g.px(s + d, ar + 1, C.O); }
+  };
+  arm(o.armL || "out", -1);
+  arm(o.armR || "out", 1);
+  const ey = top + 1;
+  [[bx + 2, -1], [bx + 7, 1]].forEach(([ex, side]) => eye(g, o.eyes || "open", ex, ey, side, top, C.K));
+  return { bx, top, bot, ground, ar };
+}
+function eye(g, mode, ex, ey, side, top, K) {
+  const p = (x, y) => g.px(x, y, K);
+  switch (mode) {
+    case "open": p(ex, ey); p(ex, ey + 1); break;
+    case "blink": p(ex, ey + 1); break;
+    case "closed": p(ex, ey + 1); p(ex - side, ey + 1); break;
+    case "down": p(ex, ey + 1); p(ex, ey + 2); break;
+    case "downL": p(ex - 1, ey + 1); p(ex - 1, ey + 2); break;
+    case "downR": p(ex + 1, ey + 1); p(ex + 1, ey + 2); break;
+    case "up": p(ex, top); p(ex, top + 1); break;
+    case "upL": p(ex - 1, top); p(ex - 1, top + 1); break;
+    case "left": p(ex - 1, ey); p(ex - 1, ey + 1); break;
+    case "right": p(ex + 1, ey); p(ex + 1, ey + 1); break;
+    case "happy": p(ex - 1, ey + 1); p(ex, ey); p(ex + 1, ey + 1); break;
+    case "wide": p(ex, ey); p(ex, ey + 1); p(ex - side, ey); p(ex - side, ey + 1); break;
+    case "x": p(ex - 1, ey); p(ex + 1, ey); p(ex, ey + 1); p(ex - 1, ey + 2); p(ex + 1, ey + 2); break;
+  }
+}
+
+// An original second skin: the 📌 Tack used today, given a face.
+function pin(g, o = {}) {
+  const C = g.skin, oy = (o.y || 0) + (o.squash ? 1 : 0), ox = o.x || 0;
+  const rows = [[10, 15], [9, 16], [9, 16], [9, 16], [10, 15]];
+  rows.forEach(([a, b], j) => { for (let x = a; x <= b; x++) g.px(x + ox, 4 + j + oy, C.O); });
+  for (let x = 11; x <= 14; x++) { g.px(x + ox, 9 + oy, C.D); g.px(x + ox, 10 + oy, C.D); }
+  for (let y = 11 + oy; y <= 17; y++) { g.px(12 + ox, y, C.N); g.px(13 + ox, y, C.N); }
+  g.px(10 + ox, 5 + oy, "#F28A8D");
+  const top = 4 + oy;
+  [[11, -1], [14, 1]].forEach(([ex, s]) => eye(g, o.eyes || "open", ex + ox, 5 + oy, s, top, C.K));
+  return { bx: 8 + ox, top, bot: 10 + oy, ground: 17 };
+}
+const body = (g, o) => (g.skin.kind === "pin" ? pin(g, o) : clawd(g, o));
+
+// Asleep in bed: the pillow squishes as Tack breathes out, the blanket rises and falls with it.
+const BED = { pillow: "#F1EAD8", pillowShade: "#CFC4AA", sheet: "#F4EEDC", red: "#C8363D", redDark: "#A42B32", redEdge: "#8C2329" };
+function tucked(g, sq) {
+  const squish = sq === 1;
+  const [x0, x1, y0, y1] = squish ? [3, 14, 9, 14] : [4, 13, 8, 14];
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const corner = (y === y0 || y === y1) && (x === x0 || x === x1);
+    if (!corner) g.px(x, y, y === y1 || x === x0 ? BED.pillowShade : BED.pillow);
+  }
+  g.px(x0 + 2, y0 + 2, BED.pillowShade);
+  g.px(x0 + 2, y0 + 3, BED.pillowShade);
+  const b = body(g, { x: 1, eyes: "closed", squash: sq, armL: "down", armR: "down", legs: "tuck" });
+  const bt = b.top + 4;
+  for (let y = bt; y <= 18; y++) for (let x = b.bx - 2; x <= b.bx + 11; x++) {
+    if (y === bt && (x === b.bx - 2 || x === b.bx + 11)) continue;
+    let c = (x + y) % 4 === 0 ? BED.redDark : BED.red;
+    if (y === bt) c = BED.sheet;
+    if (y === 18) c = BED.redEdge;
+    g.px(x, y, c);
+  }
+  return b;
+}
+
+// ---------- Animations ---------------------------------------------------
+const seq = (pattern) => pattern.flatMap(([n, f]) => Array(n).fill(f));
+const ANIMS = {
+  sleep: { fps: 2, loop: true, label: "Sleep", when: "Pill closed and idle", frames: [
+    (g) => { tucked(g, 1); glyph(g, Z_SMALL, 20, 8, FX.Z); },
+    (g) => { tucked(g, 0); glyph(g, Z_SMALL, 21, 6, FX.Z); },
+    (g) => { tucked(g, 1); glyph(g, Z_SMALL, 22, 4, FX.Z); },
+    (g) => { tucked(g, 0); glyph(g, Z_BIG, 21, 1, FX.Z); },
+  ]},
+  idle: { fps: 4, loop: true, label: "Idle", when: "Awake, nothing happening", frames: seq([
+    [10, (g) => body(g, {})], [1, (g) => body(g, { eyes: "blink" })], [6, (g) => body(g, {})],
+    [3, (g) => body(g, { eyes: "left" })], [1, (g) => body(g, {})], [3, (g) => body(g, { eyes: "right" })],
+    [4, (g) => body(g, {})], [1, (g) => body(g, { eyes: "blink" })], [3, (g) => body(g, {})],
+  ])},
+  wake: { fps: 8, loop: false, then: "idle", label: "Wake + wave", when: "Clicked or chat opened", frames: [
+    (g) => body(g, { eyes: "closed", armL: "down", armR: "down" }),
+    (g) => body(g, { eyes: "closed", armL: "down", armR: "down" }),
+    (g) => body(g, { eyes: "wide" }),
+    (g) => body(g, { eyes: "wide", squash: 1, armL: "down", armR: "down" }),
+    (g) => body(g, { eyes: "wide", y: -2, armL: "up", armR: "up", legs: "tuck" }),
+    (g) => body(g, { eyes: "happy", y: -3, armL: "up", armR: "up", legs: "tuck" }),
+    (g) => body(g, { eyes: "happy", y: -1, armL: "up", armR: "up" }),
+    (g) => body(g, { eyes: "happy", squash: 1 }),
+    (g) => body(g, { eyes: "open" }),
+    ...seq([[2, (g) => body(g, { eyes: "happy", armR: "up" })], [2, (g) => body(g, { eyes: "happy", armR: "wave" })]]),
+    ...seq([[2, (g) => body(g, { eyes: "happy", armR: "up" })], [2, (g) => body(g, { eyes: "happy", armR: "wave" })]]),
+    (g) => body(g, { eyes: "open" }),
+  ]},
+  listen: { fps: 8, loop: true, label: "Listen", when: "You're typing in the chat box", frames: [0, 1, 2, 3, 4, 5, 6, 7].map((i) => (g) => {
+    const b = body(g, { eyes: ["downL", "downL", "down", "down", "downR", "downR", "down", "down"][i],
+      squash: i % 4 === 3, legs: i % 2 ? "stepA" : "stepB", armL: i % 4 < 2 ? "out" : "down", armR: i % 4 < 2 ? "down" : "out" });
+    for (let d = 0; d <= Math.floor(i / 2) % 4 && d < 3; d++) g.px(b.bx + 12 + d * 2, b.top - 2, FX.Z);
+  })},
+  think: { fps: 6, loop: true, label: "Think", when: "Sending or the turn is running", frames: [0, 1, 2, 3, 4, 5].map((i) => (g) => {
+    const b = body(g, { eyes: i < 3 ? "up" : "upL", legs: i % 2 ? "stepA" : "stand", squash: i === 5 });
+    glyph(g, SPARK[[0, 1, 0, 1, 2, 1][i]], b.bx + 2, b.top - 7, g.skin.kind === "pin" ? "#D97757" : g.skin.O);
+  })},
+  write: { fps: 6, loop: true, label: "Write a note", when: "Tack runs board_create_task", frames: Array.from({ length: 20 }, (_, i) => (g) => {
+    if (g.skin.kind === "pin") { body(g, { eyes: i > 13 ? "happy" : "down", y: i % 2 ? 0 : -1 }); return; }
+    const happy = i >= 14;
+    const b = body(g, { x: -3, eyes: happy ? "happy" : "downR", armR: "hold", armL: happy && i % 2 ? "up" : "out", squash: i === 14 });
+    const px = b.bx + 12, py = b.top - 1;
+    for (let y = py; y < py + 7; y++) for (let x = px; x < px + 6; x++) g.px(x, y, FX.P);
+    const lines = [py + 2, py + 4, py + 6 - 1];
+    const drawn = Math.min(i, 12);
+    lines.forEach((ly, k) => {
+      const n = Math.max(0, Math.min(4, drawn - k * 4));
+      for (let x = 0; x < n; x++) g.px(px + 1 + x, ly, FX.L);
+    });
+    if (i < 12) {
+      const tx = px + 1 + (i % 4), ty = lines[Math.floor(i / 4)] + (i % 2 ? 0 : -1);
+      g.px(tx, ty, FX.G); g.px(tx + 1, ty - 1, FX.Y); g.px(tx + 2, ty - 2, FX.Y); g.px(tx + 3, ty - 3, FX.Y);
+    }
+    if (i >= 12) {
+      const pinY = py + [-6, -3, 0, 0, 0, 0, 0, 0][i - 12];
+      for (let x = px + 1; x <= px + 3; x++) { g.px(x, pinY - 2, FX.R); g.px(x, pinY - 1, FX.R); }
+      g.px(px + 1, pinY - 2, "#F28A8D"); g.px(px + 2, pinY, FX.G);
+    }
+    if (i >= 15 && i % 2) glyph(g, TWINKLE, px + 5, py - 4, FX.Y);
+  })},
+  alert: { fps: 4, loop: true, label: "Needs you", when: "An approval is waiting", frames: [0, 1, 2, 3].map((i) => (g) => {
+    const b = body(g, { eyes: "wide", armL: i % 2 ? "up" : "wave", legs: i % 2 ? "stepA" : "stand" });
+    const y = b.top - 7 + (i % 2);
+    for (let k = 0; k < 3; k++) { g.px(b.bx + 4, y + k, FX.A); g.px(b.bx + 5, y + k, FX.A); }
+    g.px(b.bx + 4, y + 4, FX.A); g.px(b.bx + 5, y + 4, FX.A);
+  })},
+  done: { fps: 8, loop: false, then: "idle", label: "Done", when: "A reply arrived", frames: [
+    (g) => body(g, { eyes: "open", squash: 1 }),
+    (g) => body(g, { eyes: "happy", y: -2, armL: "up", armR: "up", legs: "tuck" }),
+    (g) => { const b = body(g, { eyes: "happy", y: -3, armL: "up", armR: "up", legs: "tuck" }); glyph(g, TWINKLE, b.bx - 4, b.top - 2, FX.Y); glyph(g, TWINKLE, b.bx + 12, b.top - 3, FX.Wh); },
+    (g) => { const b = body(g, { eyes: "happy", y: -1, armL: "up", armR: "up" }); glyph(g, TWINKLE, b.bx - 4, b.top - 4, FX.Wh); glyph(g, TWINKLE, b.bx + 12, b.top - 1, FX.Y); },
+    (g) => body(g, { eyes: "happy", squash: 1 }),
+    (g) => body(g, { eyes: "happy" }),
+    (g) => body(g, { eyes: "happy" }),
+    (g) => body(g, { eyes: "open" }),
+  ]},
+  oops: { fps: 3, loop: true, label: "Oops", when: "The turn failed", frames: [0, 1, 2, 3].map((i) => (g) => {
+    const b = body(g, { eyes: i === 3 ? "blink" : "x", squash: 1, armL: "down", armR: "down" });
+    const sx = b.bx + 10, sy = b.top - 1 + i;
+    g.px(sx, sy, FX.B); g.px(sx, sy + 1, FX.B); g.px(sx + 1, sy + 1, FX.B);
+  })},
+};
+
+// ---------- Sprite player ------------------------------------------------
+let reducedMotion = false;
+const players = new Set();
+class Sprite {
+  constructor(canvas, skin, anim, scale) {
+    this.cv = canvas; this.ctx = canvas.getContext("2d"); this.scale = scale;
+    canvas.width = W * scale; canvas.height = H * scale;
+    this.skin = skin; this.timer = 0; players.add(this);
+    this.play(anim);
+  }
+  setSkin(skin) { this.skin = skin; this.draw(); }
+  play(name, onEnd) {
+    clearTimeout(this.timer);
+    this.anim = name; this.i = 0; this.onEnd = onEnd;
+    this.tick();
+  }
+  tick() {
+    const a = ANIMS[this.anim];
+    this.draw();
+    if (reducedMotion) { if (!a.loop) this.finish(a); return; }
+    this.timer = setTimeout(() => {
+      this.i++;
+      if (this.i >= a.frames.length) {
+        if (!a.loop) return this.finish(a);
+        this.i = 0;
+      }
+      this.tick();
+    }, 1000 / a.fps);
+  }
+  finish(a) { const cb = this.onEnd; this.onEnd = null; if (cb) cb(); else if (a.then) this.play(a.then); }
+  draw() {
+    const a = ANIMS[this.anim];
+    const frame = reducedMotion ? a.frames[a.loop ? 0 : a.frames.length - 1] : a.frames[this.i];
+    drawFrame(this.ctx, frame, SKINS[this.skin], this.scale, 0);
+  }
+}
+function drawFrame(ctx, frame, skin, s, offsetX) {
+  if (offsetX === 0) ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  const g = { skin, px: (x, y, c) => { if (x >= 0 && x < W && y >= 0 && y < H) { ctx.fillStyle = c; ctx.fillRect(offsetX + x * s, y * s, s, s); } } };
+  frame(g);
+}
+
+// ---------- Page wiring --------------------------------------------------
+let sheetSkin = "clawd";
+const stateSprites = [];
+const statesEl = document.getElementById("states");
+for (const [name, a] of Object.entries(ANIMS)) {
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `<div class="stage"><canvas></canvas></div><b>${a.label}</b><div class="when">${a.when}</div>
+    <div class="meta">${name} · ${a.frames.length}f · ${a.fps} fps · ${a.loop ? "loop" : "once"}</div>`;
+  statesEl.append(card);
+  const sp = new Sprite(card.querySelector("canvas"), sheetSkin, name, 4);
+  if (!a.loop) sp.finish = function () { setTimeout(() => this.play(name), 900); };
+  card.querySelector(".stage").addEventListener("click", () => sp.play(name));
+  stateSprites.push(sp);
+}
+
+const segEl = document.getElementById("sheetSkin");
+for (const [key, s] of Object.entries(SKINS)) {
+  const b = document.createElement("button");
+  b.textContent = s.name; b.setAttribute("aria-pressed", String(key === sheetSkin));
+  b.onclick = () => { sheetSkin = key; [...segEl.children].forEach((c) => c.setAttribute("aria-pressed", String(c === b)));
+    stateSprites.forEach((sp) => sp.setSkin(key)); renderSheet(); };
+  segEl.append(b);
+}
+document.getElementById("motionBtn").onclick = (e) => {
+  reducedMotion = !reducedMotion; e.target.setAttribute("aria-pressed", String(reducedMotion));
+  players.forEach((p) => p.play(p.anim));
+};
+
+function renderSheet() {
+  const el = document.getElementById("sheet"); el.innerHTML = "";
+  const s = 2;
+  for (const [name, a] of Object.entries(ANIMS)) {
+    const row = document.createElement("div"); row.className = "row";
+    const label = document.createElement("span"); label.textContent = name;
+    const cv = document.createElement("canvas");
+    cv.width = a.frames.length * W * s; cv.height = H * s;
+    const ctx = cv.getContext("2d");
+    ctx.fillStyle = "#161616"; ctx.fillRect(0, 0, cv.width, cv.height);
+    a.frames.forEach((f, k) => {
+      ctx.fillStyle = k % 2 ? "#1c1c1c" : "#191919"; ctx.fillRect(k * W * s, 0, W * s, H * s);
+      drawFrame(ctx, f, SKINS[sheetSkin], s, k * W * s);
+    });
+    row.append(label, cv); el.append(row);
+  }
+}
+renderSheet();
+
+// Skin picker
+let chosenSkin = "clawd";
+const skinsEl = document.getElementById("skins");
+const pickerSprites = [];
+for (const [key, s] of Object.entries(SKINS)) {
+  const b = document.createElement("button");
+  b.className = "skin"; b.setAttribute("role", "radio"); b.setAttribute("aria-checked", String(key === chosenSkin));
+  b.innerHTML = `<div class="stage"><canvas></canvas></div>${s.name}<small>${s.note}</small>`;
+  skinsEl.append(b);
+  const sp = new Sprite(b.querySelector("canvas"), key, "idle", 3);
+  pickerSprites.push(sp);
+  b.onclick = () => {
+    chosenSkin = key;
+    [...skinsEl.children].forEach((c) => c.setAttribute("aria-checked", String(c === b)));
+    sp.play("wake");
+    tack.setSkin(key);
+  };
+}
+{
+  const b = document.createElement("button");
+  b.className = "skin"; b.setAttribute("role", "radio"); b.setAttribute("aria-checked", "false");
+  b.innerHTML = `<div class="stage" style="font-size:28px">📌</div>Emoji<small>no animation (today's look)</small>`;
+  skinsEl.append(b);
+}
+document.querySelectorAll(".seg").forEach((seg) => seg.id !== "sheetSkin" && seg.querySelectorAll("button").forEach((b) =>
+  b.addEventListener("click", () => seg.querySelectorAll("button").forEach((c) => c.setAttribute("aria-pressed", String(c === b))))));
+
+// ---------- Live prototype ----------------------------------------------
+const dock = document.getElementById("dock");
+const stateName = document.getElementById("stateName");
+const tackCanvas = document.createElement("canvas");
+const tack = new Sprite(tackCanvas, chosenSkin, "idle", 2);
+let view = "closed", sleepTimer = 0, typingTimer = 0, busy = false;
+
+function setState(name, onEnd) { tack.play(name, onEnd); stateName.textContent = name; }
+const origPlay = tack.play.bind(tack);
+tack.play = (n, cb) => { stateName.textContent = n; origPlay(n, cb); };
+
+function armSleep() {
+  clearTimeout(sleepTimer);
+  if (view === "closed" && !busy) sleepTimer = setTimeout(() => setState("sleep"), 6000);
+}
+function renderClosed() {
+  view = "closed";
+  dock.innerHTML = "";
+  tack.scale = 2; tackCanvas.width = W * 2; tackCanvas.height = H * 2;
+  const pill = document.createElement("button");
+  pill.className = "pill";
+  pill.innerHTML = `<span style="font-weight:600">Ask Tack</span>`;
+  pill.prepend(tackCanvas);
+  pill.onmouseenter = () => { if (tack.anim === "sleep") setState("idle"); clearTimeout(sleepTimer); };
+  pill.onmouseleave = armSleep;
+  pill.onclick = () => renderOpen(true);
+  dock.append(pill);
+  tack.draw(); armSleep();
+}
+const msgs = [];
+function renderOpen(wake) {
+  view = "open"; clearTimeout(sleepTimer);
+  dock.innerHTML = `<section class="chat">
+    <header><span class="t">Tack<span>Payments board</span></span><button class="x" title="Minimize">–</button></header>
+    <div class="msgs"><div class="inner"></div></div>
+    <form><textarea placeholder="Ask Tack about this board…" rows="1"></textarea><button class="send" type="submit">↑</button></form>
+  </section>`;
+  const chat = dock.querySelector(".chat");
+  const perch = document.createElement("div"); perch.className = "perch";
+  tack.scale = 3; tackCanvas.width = W * 3; tackCanvas.height = H * 3;
+  perch.append(tackCanvas); chat.append(perch);
+  perch.onclick = () => setState("wake");
+  chat.querySelector(".x").onclick = () => { renderClosed(); setState("idle"); };
+  const ta = chat.querySelector("textarea");
+  ta.addEventListener("input", () => {
+    if (busy) return;
+    if (tack.anim !== "listen") setState("listen");
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(() => setState("idle"), 800);
+  });
+  ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(ta.value); ta.value = ""; } });
+  chat.querySelector("form").onsubmit = (e) => { e.preventDefault(); send(ta.value); ta.value = ""; };
+  renderMsgs();
+  if (wake) setState("wake"); else tack.draw();
+  ta.focus();
+}
+function renderMsgs(status) {
+  const inner = dock.querySelector(".msgs .inner"); if (!inner) return;
+  if (msgs.length === 0) {
+    inner.innerHTML = `<div class="bubble">I'm Tack. I keep this board pinned together. Ask me what's on it.</div>
+      <div class="chips"><button>What is blocked?</button><button>Add a task for login bug</button></div>`;
+    inner.querySelectorAll(".chips button").forEach((b) => (b.onclick = () => send(b.textContent)));
+  } else {
+    inner.innerHTML = msgs.map((m) => `<div class="bubble ${m.me ? "me" : ""}">${m.text}</div>`).join("");
+  }
+  if (status) inner.insertAdjacentHTML("beforeend", `<div class="status">${status}</div>`);
+}
+function send(text) {
+  text = text.trim(); if (!text || busy) return;
+  clearTimeout(typingTimer);
+  busy = true; msgs.push({ me: true, text }); renderMsgs("Tack is checking the board…");
+  setState("think");
+  const wantsTask = /\b(add|create|new)\b.*\btask\b/i.test(text);
+  setTimeout(() => {
+    if (wantsTask) {
+      renderMsgs("Tack is adding a task…");
+      setState("write");
+      setTimeout(() => {
+        const title = (text.match(/for (.+)$/i)?.[1] || "New task").replace(/^\w/, (c) => c.toUpperCase());
+        const card = document.createElement("div"); card.className = "task new"; card.textContent = title;
+        document.getElementById("backlog").prepend(card);
+        msgs.push({ text: `Added <b>${title}</b> to Backlog.` });
+        busy = false; renderMsgs(); setState("done");
+      }, 20 / 6 * 1000);
+    } else {
+      msgs.push({ text: "Nothing is blocked right now. Two tasks sit in Backlog." });
+      busy = false; renderMsgs(); setState("done");
+    }
+  }, 2400);
+}
+document.querySelectorAll("[data-sim]").forEach((b) => (b.onclick = () => {
+  const s = b.dataset.sim;
+  if (view === "closed") renderOpen(false);
+  if (s === "waiting") { setState("alert"); renderMsgs("Tack wants to move a task. Approve?"); }
+  if (s === "error") { setState("oops"); setTimeout(() => setState("idle"), 3000); }
+  if (s === "done") setState("done");
+}));
+renderClosed();
+</script>
+</body>
+</html>

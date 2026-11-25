@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Tack in an open module or task (concept)</title>
+<style>
+  :root { --bg:#111; --app:#151515; --card:#1b1b1b; --pop:#1f1f1f; --border:#2c2c2c; --fg:#e8e6e1; --muted:#8d8a84;
+    --accent:#d97757; --ok:#5bb98c; --warn:#f5a524; --bad:#e5484d; --info:#6aa7e8; --paper:#f4eedc; --ink:#1d1b18; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.45 ui-sans-serif,system-ui,"Segoe UI",sans-serif; }
+  main { max-width:1180px; margin:0 auto; padding:28px 20px 80px; }
+  h1 { font-size:22px; margin:0 0 4px; } h2 { font-size:16px; margin:38px 0 6px; }
+  .lead, .sub { color:var(--muted); max-width:860px; margin:0 0 14px; }
+  .sub b, .lead b { color:var(--fg); }
+  .btn { background:#242424; color:var(--fg); border:1px solid var(--border); border-radius:8px; padding:6px 10px; font:inherit; font-size:12.5px; cursor:pointer; }
+  .btn:hover { background:#2e2e2e; } .btn.on { border-color:var(--accent); color:#ffd9c9; }
+  .toolbar { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:8px 0; }
+  .toolbar .lbl { color:var(--muted); font-size:12px; margin-right:4px; min-width:74px; }
+
+  /* ---------- the open module ---------- */
+  .stage { position:relative; background:#0c0c0c; border:1px solid var(--border); border-radius:12px; padding:18px; }
+  .stage::before { content:"the board, dimmed behind the open module"; position:absolute; left:14px; top:2px; font:10px ui-monospace,monospace; color:#3d3b38; }
+  .modal { height:620px; background:var(--app); border:1px solid #3a3a3a; border-radius:12px; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 18px 60px #000a; }
+  .thead { padding:12px 16px 0; border-bottom:1px solid var(--border); flex:none; }
+  .crumb { font-size:12px; color:var(--muted); display:flex; gap:6px; align-items:center; }
+  .crumb b { color:var(--fg); background:#242424; border-radius:4px; padding:0 6px; font-weight:500; }
+  .thead h3 { margin:4px 0 2px; font-size:19px; font-weight:600; }
+  .thead p { margin:0 0 8px; color:var(--muted); font-size:12.5px; }
+  .tabs { display:flex; gap:16px; font:12px ui-monospace,monospace; color:var(--muted); }
+  .tabs span { padding:6px 0; border-bottom:2px solid transparent; } .tabs span.on { color:var(--accent); border-color:var(--accent); }
+  .tbody { flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr) auto; }
+  .modal[data-size="panel"] .tbody { grid-template-columns:minmax(0,1fr) 360px; grid-template-rows:minmax(0,1fr); }
+  .modal[data-size="wide"] .tbody { grid-template-columns:250px minmax(0,1fr); grid-template-rows:minmax(0,1fr); }
+  .tcontent { overflow:auto; padding:14px 16px; display:grid; gap:12px; align-content:start; }
+  .box { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
+  .box h5 { margin:0 0 6px; font-size:10.5px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); display:flex; justify-content:space-between; }
+  .box p { margin:0; font-size:12.5px; color:#c4c0b9; }
+  .steps { list-style:none; margin:0; padding:0; display:grid; gap:3px; font-size:12.5px; }
+  .steps li { display:flex; gap:8px; align-items:center; color:#c4c0b9; }
+  .steps li i { width:13px; height:13px; border:1.5px solid #555; border-radius:3px; flex:none; display:grid; place-items:center; font-style:normal; font-size:10px; }
+  .steps li.done { color:#77736c; text-decoration:line-through; } .steps li.done i { background:#2f6b4f; border-color:#2f6b4f; color:#d9f3e5; }
+  .steps li.now { color:var(--fg); } .steps li.now i { border-color:var(--accent); box-shadow:0 0 0 3px #d9775733; }
+  .steps li.fresh { animation:tick .5s steps(3); } @keyframes tick { from { background:#2f6b4f55 } to { background:none } }
+  .meter { height:4px; background:#2a2a2a; border-radius:4px; overflow:hidden; margin-top:8px; } .meter i { display:block; height:100%; background:var(--ok); transition:width .3s steps(4); }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .modal[data-size="panel"] .two { grid-template-columns:1fr; }
+  /* in Wide the task shrinks to a rail: still there to glance at */
+  .modal[data-size="wide"] .tcontent { padding:12px; border-right:1px solid var(--border); background:#131313; }
+  .modal[data-size="wide"] .two { grid-template-columns:1fr; }
+  .modal[data-size="wide"] .hide-wide { display:none; }
+  .rail-note { display:none; font:10px ui-monospace,monospace; color:#5d5a55; }
+  .modal[data-size="wide"] .rail-note { display:block; }
+
+  /* ---------- Tack ---------- */
+  #tack { background:#191817; border-top:1px solid var(--border); display:flex; flex-direction:column; min-height:0; position:relative; }
+  .modal[data-size="panel"] #tack, .modal[data-size="wide"] #tack { border-top:0; border-left:1px solid var(--border); }
+  .t-head { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid var(--border); flex:none; }
+  .fig { width:34px; height:34px; flex:none; position:relative; }
+  .fig svg { width:34px; height:34px; display:block; }
+  .fig .mood { position:absolute; right:-5px; top:-5px; min-width:15px; height:15px; border-radius:8px; background:#2a2a2a; border:1px solid #444; font-size:9px; display:grid; place-items:center; padding:0 3px; color:#ddd; }
+  .fig[data-mood="work"] .mood { background:#1b3328; border-color:#2f6b4f; color:#bfe6d1; }
+  .fig[data-mood="bell"] .mood { background:#4a3410; border-color:var(--warn); color:#ffe2a8; }
+  .pick { display:flex; align-items:center; gap:6px; min-width:0; background:#222; border:1px solid var(--border); border-radius:8px; padding:4px 8px; color:var(--fg); font:inherit; font-size:12.5px; cursor:pointer; max-width:260px; }
+  .pick { min-width:92px; } .pick:hover { background:#2a2a2a; } .pick span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .pick small { color:var(--muted); flex:none; }
+  .dot { width:7px; height:7px; border-radius:50%; background:#666; flex:none; } .dot.work { background:var(--ok); } .dot.wait { background:var(--warn); } .dot.new { background:var(--accent); }
+  .grow { flex:1; min-width:0; }
+  .sizes { display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; flex:none; }
+  .sizes button { background:none; border:0; color:var(--muted); font:inherit; font-size:11.5px; padding:4px 8px; cursor:pointer; }
+  .sizes button.on { background:#2a2a2a; color:var(--fg); } .sizes button:hover { color:var(--fg); }
+  .sizes button.nudge { color:#ffd9c9; box-shadow:inset 0 0 0 1.5px var(--accent); }
+  .ghostbtn { background:none; border:1px solid var(--border); border-radius:8px; color:var(--muted); font:inherit; font-size:11.5px; padding:4px 8px; cursor:pointer; flex:none; white-space:nowrap; }
+  .ghostbtn:hover { color:var(--fg); }
+  .t-picker { position:absolute; z-index:20; left:10px; top:48px; width:340px; background:var(--pop); border:1px solid #3a3a3a; border-radius:10px; box-shadow:0 12px 40px #000c; padding:6px; display:none; }
+  .t-picker.open { display:block; }
+  .t-picker h6 { margin:8px 8px 4px; font-size:10px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); font-weight:500; display:flex; justify-content:space-between; }
+  .trow { display:grid; grid-template-columns:auto 1fr auto; gap:2px 8px; align-items:center; padding:6px 8px; border-radius:7px; cursor:pointer; font-size:12.5px; }
+  .trow:hover, .trow.on { background:#2a2a2a; } .trow b { font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .trow small { color:var(--muted); font-size:11px; } .trow .last { grid-column:2 / 4; color:#99958e; font-size:11.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .trow .long { color:var(--warn); }
+  .t-scroll { flex:1; min-height:0; overflow:auto; padding:10px; display:flex; flex-direction:column; gap:8px; }
+  .recap { background:#201c19; border:1px solid #3d302a; border-radius:9px; padding:8px 10px; font-size:12px; color:#cfc9bf; }
+  .recap h6 { margin:0 0 4px; font-size:10px; letter-spacing:.07em; text-transform:uppercase; color:#b98a76; font-weight:600; }
+  .recap dl { margin:0; display:grid; grid-template-columns:auto 1fr; gap:2px 8px; } .recap dt { color:var(--muted); } .recap dd { margin:0; }
+  .earlier { align-self:center; background:none; border:1px dashed #444; color:var(--muted); border-radius:999px; font:inherit; font-size:11.5px; padding:3px 12px; cursor:pointer; }
+  .earlier:hover { color:var(--fg); }
+  .m { max-width:88%; padding:7px 10px; border-radius:10px; background:#232323; font-size:12.5px; white-space:pre-wrap; }
+  .m.me { align-self:flex-end; background:#3a2a22; } .m.old { opacity:.75; }
+  .m.ask { border:1px solid var(--warn); background:#2a2212; max-width:100%; }
+  .m.ask .row, .chips { display:flex; flex-wrap:wrap; gap:6px; } .m.ask .row { margin-top:6px; }
+  .modal[data-size="wide"] .m { max-width:72%; font-size:13px; } .modal[data-size="wide"] .t-scroll { padding:14px 22px; }
+  .status { font:11.5px ui-monospace,monospace; color:#9fd5b9; display:flex; gap:8px; align-items:center; }
+  .status::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--ok); }
+  .notice { background:#1f1d14; border:1px solid #4a4220; border-radius:9px; padding:7px 10px; font-size:12px; color:#d8d0a8; display:flex; flex-wrap:wrap; gap:6px 8px; align-items:center; }
+  .chip { background:#242424; color:var(--fg); border:1px solid #3a3a3a; border-radius:999px; padding:3px 10px; font:inherit; font-size:12px; cursor:pointer; white-space:nowrap; }
+  .chip:hover { background:#2e2e2e; } .chip.go { background:var(--accent); border-color:var(--accent); color:#1a1a1a; font-weight:600; } .chip.stop { border-color:var(--bad); color:#ffb3b5; }
+  .t-foot { flex:none; border-top:1px solid var(--border); padding:8px 10px; display:grid; gap:7px; }
+  .compose { display:flex; gap:6px; align-items:center; }
+  .mode { display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; flex:none; }
+  .mode button { background:none; border:0; color:var(--muted); font:inherit; font-size:11.5px; padding:5px 8px; cursor:pointer; }
+  .mode button.on { background:#2a2a2a; color:var(--fg); } .mode button.on[data-mode="run"] { background:#3a2a22; color:#ffd9c9; }
+  .compose input { flex:1; min-width:0; background:#101010; border:1px solid var(--border); border-radius:8px; color:var(--fg); font:inherit; font-size:12.5px; padding:6px 9px; outline:none; }
+  .compose input:focus { border-color:var(--accent); }
+  .send { background:var(--accent); border:0; border-radius:8px; width:30px; height:30px; color:#1a1a1a; font-weight:700; cursor:pointer; flex:none; }
+  .where { font-size:11px; color:#6f6c66; }
+
+  /* Line: one row at the foot of the module */
+  .modal[data-size="line"] #tack { flex-direction:row; align-items:center; gap:8px; padding:8px 12px; }
+  .modal[data-size="line"] .t-head { border:0; padding:0; flex:none; }
+  .modal[data-size="line"] .t-head .grow, .modal[data-size="line"] .t-head .ghostbtn { display:none; }
+  .modal[data-size="line"] .t-head .sizes { order:9; }
+  .modal[data-size="line"] .t-foot { border:0; padding:0; flex:1; min-width:0; display:flex; align-items:center; gap:8px; }
+  .modal[data-size="line"] .t-foot .compose { flex:1; min-width:0; order:2; }
+  .modal[data-size="line"] .t-foot .chips { order:1; flex-wrap:nowrap; }
+  .modal[data-size="line"] .t-foot .where { display:none; }
+  .modal[data-size="line"] .sizes-line { order:3; }
+  .modal[data-size="line"] .t-scroll { position:absolute; left:12px; right:12px; bottom:calc(100% + 8px); max-height:190px; background:var(--pop); border:1px solid #3a3a3a; border-radius:10px; box-shadow:0 12px 40px #000c; flex:none; }
+  .modal[data-size="line"] .t-scroll:empty, .modal[data-size="line"] .t-scroll.shut { display:none; }
+  .modal[data-size="line"] .t-scroll .recap, .modal[data-size="line"] .t-scroll .earlier, .modal[data-size="line"] .t-scroll .m.old { display:none; }
+  .modal[data-size="line"] .t-picker { top:auto; bottom:52px; }
+  .peekx { display:none; position:absolute; right:6px; top:4px; background:none; border:0; color:var(--muted); cursor:pointer; font-size:13px; }
+  .modal[data-size="line"] .peekx { display:block; }
+
+  /* ---------- notes under the mock ---------- */
+  .cards { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  .cardx { background:#181818; border:1px solid var(--border); border-radius:12px; padding:12px; font-size:12.5px; color:#c9c5be; }
+  .cardx.rec { border-color:var(--accent); } .cardx h3 { margin:8px 0 2px; font-size:14px; color:var(--fg); } .cardx .tagline { color:var(--muted); }
+  .cardx ul { margin:8px 0 0; padding-left:17px; } .cardx li { margin:2px 0; }
+  .mini { position:relative; height:104px; background:#141414; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  .mini i { position:absolute; display:block; border-radius:3px; }
+  .mini .task { background:#1f1f1f; border:1px solid #2c2c2c; } .mini .tk { background:#3a2a22; border:1px solid var(--accent); }
+  .rules { display:grid; grid-template-columns:repeat(2,1fr); gap:10px 24px; font-size:13px; }
+  .rules div { background:#181818; border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
+  .rules b { display:block; margin-bottom:2px; } .rules span { color:#bdb9b2; }
+  table { width:100%; border-collapse:collapse; font-size:12.5px; } th, td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { color:var(--muted); font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:.06em; } td:first-child { color:var(--fg); white-space:nowrap; } td { color:#c4c0b9; }
+  .rec-tag { display:inline-block; font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:#1a1a1a; background:var(--accent); border-radius:4px; padding:0 5px; margin-left:6px; vertical-align:1px; }
+  ol.build { margin:0; padding-left:20px; font-size:13px; color:#c9c5be; max-width:900px; } ol.build li { margin:6px 0; } ol.build b { color:var(--fg); }
+  code { font:12px ui-monospace,monospace; background:#1f1f1f; border:1px solid #2c2c2c; border-radius:4px; padding:0 4px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Tack in an open module or task</h1>
+  <p class="lead">Today, telling an agent "continue with the task" means pressing <b>Continue in new thread</b>, which leaves the
+    board and opens the whole chat screen for one sentence. In this concept Tack sits inside the open module or task and
+    <b>is</b> that button: a box that is there the moment the task opens, takes a quick question or a "continue", and grows
+    only when the conversation needs room. Every chat is still a real thread on the task. Concept only, nothing here is built.</p>
+
+  <h2>1 · An open module with Tack in it (interactive)</h2>
+  <p class="sub"><b>Try:</b> the scene buttons act out the situations you described. You can also type in Tack's box, press the
+    chips, switch sizes, and open the thread list from the "New chat" button next to Tack.</p>
+  <div class="toolbar">
+    <span class="lbl">Scenes</span>
+    <button class="btn" data-scene="quick">Ask a quick question</button>
+    <button class="btn" data-scene="continue">Just say "continue"</button>
+    <button class="btn" data-scene="clarify">A clarification gets detailed</button>
+    <button class="btn" data-scene="long">Open a long earlier thread</button>
+    <button class="btn" data-scene="approve">Tack needs your answer</button>
+    <button class="btn" data-scene="reset">Module just opened</button>
+  </div>
+  <div class="toolbar">
+    <span class="lbl">Tack's size</span>
+    <button class="btn" data-size-btn="line">Line</button>
+    <button class="btn" data-size-btn="panel">Panel</button>
+    <button class="btn" data-size-btn="wide">Wide</button>
+    <span style="color:var(--muted);font-size:12px;margin-left:8px" id="sizeNote"></span>
+  </div>
+
+  <div class="stage">
+    <div class="modal" id="modal" data-size="line">
+      <div class="thead">
+        <div class="crumb">Calc library › <b>Module</b></div>
+        <h3>Math helpers</h3>
+        <p>Module: small arithmetic helpers, each with a node:test test.</p>
+        <div class="tabs"><span>Threads (3)</span><span>Plan &amp; Docs</span><span class="on">Handoff</span><span>Tasks (8)</span><span>Decisions (1)</span></div>
+      </div>
+      <div class="tbody">
+        <div class="tcontent">
+          <div class="rail-note">the task, still in view while the chat is wide</div>
+          <div class="two">
+            <div class="box">
+              <h5><span>Plan steps</span><span id="stepCount">3 of 7</span></h5>
+              <ul class="steps" id="steps"></ul>
+              <div class="meter"><i id="meter" style="width:43%"></i></div>
+            </div>
+            <div class="box hide-wide">
+              <h5><span>Handoff</span><span>updated 2h ago</span></h5>
+              <p id="handoff">sum(), max() and min() are in <code>src/math.ts</code> with tests. Next is mode(): return every value tied for most frequent. Open question: what range() returns for an empty list.</p>
+            </div>
+          </div>
+          <div class="box hide-wide">
+            <h5><span>Last action</span><span>Add mode() to math helpers · codex</span></h5>
+            <p>Wrote the plan for mode() and stopped for the day. No files changed since.</p>
+          </div>
+        </div>
+
+        <aside id="tack">
+          <div class="t-head">
+            <div class="fig" id="fig" data-mood="idle">
+              <svg viewBox="0 0 34 34" fill="none" stroke="#e8e6e1" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 13c0-5 3.5-8 8-8s8 3 8 8"/><path d="M7 13h20"/><circle cx="17" cy="18" r="6"/>
+                <path d="M14.5 17.5v.5M19.5 17.5v.5M15 21c1.2 1 2.800 1 4 0"/><path d="M11 24c-2 2-3 4-3 6M23 24c2 2 3 4 3 6"/>
+              </svg>
+              <span class="mood" id="mood">z</span>
+            </div>
+            <button class="pick" id="pick"><i class="dot new" id="pickDot"></i><span id="pickTitle">New chat</span><small>▾</small></button>
+            <span class="grow"></span>
+            <button class="ghostbtn" id="full" title="Open as full thread">Full ↗</button>
+            <span class="sizes" id="sizes">
+              <button data-size-btn="line">Line</button><button data-size-btn="panel">Panel</button><button data-size-btn="wide">Wide</button>
+            </span>
+          </div>
+          <div class="t-picker" id="picker"></div>
+          <div class="t-scroll" id="scroll"></div>
+          <div class="t-foot">
+            <div class="chips" id="chips"></div>
+            <div class="compose">
+              <span class="mode" id="mode"><button data-mode="ask" class="on">Ask</button><button data-mode="run">Run</button></span>
+              <input id="input" placeholder="Ask about this module, or tell Tack to continue…" />
+              <button class="send" id="send">↑</button>
+            </div>
+            <div class="where" id="where"></div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+  <p class="sub" style="margin-top:10px" id="caption"></p>
+
+  <h2>2 · One chat, three sizes, and the full thread one click away</h2>
+  <p class="sub">The size is yours to set and Tack never resizes itself. When a reply is long it only marks the next size up, as in
+    the "clarification" scene. Each board remembers the size you last used in a task.</p>
+  <div class="cards">
+    <div class="cardx rec">
+      <div class="mini"><i class="task" style="left:8px;top:8px;right:8px;bottom:26px"></i><i class="tk" style="left:8px;right:8px;bottom:8px;height:12px"></i></div>
+      <h3>Line <span class="rec-tag">default</span></h3><div class="tagline">One row at the foot of the task.</div>
+      <ul><li>For "continue", "status?", a one-line question.</li><li>The answer shows in a small card above the row, then folds to a one-line status.</li><li>While a thread works, the row is its live status with Stop.</li></ul>
+    </div>
+    <div class="cardx">
+      <div class="mini"><i class="task" style="left:8px;top:8px;right:38%;bottom:8px"></i><i class="tk" style="right:8px;top:8px;width:calc(38% - 14px);bottom:8px"></i></div>
+      <h3>Panel</h3><div class="tagline">A column beside the task.</div>
+      <ul><li>For a back-and-forth while you read the plan or the handoff.</li><li>Shows the recap and the latest exchange, earlier messages on request.</li><li>Opens by itself only when a thread on this task waits for your answer.</li></ul>
+    </div>
+    <div class="cardx">
+      <div class="mini"><i class="task" style="left:8px;top:8px;width:22%;bottom:8px"></i><i class="tk" style="right:8px;top:8px;left:calc(22% + 14px);bottom:8px"></i></div>
+      <h3>Wide</h3><div class="tagline">The chat takes the room; the task becomes a rail.</div>
+      <ul><li>For detailed clarifications, long replies, code and tables.</li><li>Plan steps stay visible at the side and tick as work lands.</li><li>You are still in the task: Esc steps back to Panel.</li></ul>
+    </div>
+    <div class="cardx">
+      <div class="mini"><i class="tk" style="left:8px;top:8px;right:8px;bottom:8px"></i></div>
+      <h3>Full thread</h3><div class="tagline">The chat screen you have today.</div>
+      <ul><li>Same thread, nothing converted or copied.</li><li>For diffs, terminals, file review, model and mode settings.</li><li>Always one click away: "Full ↗" in Tack's header, and the Threads tab.</li></ul>
+    </div>
+  </div>
+
+  <h2>3 · What a message does</h2>
+  <p class="sub">One rule: <b>a chat with Tack in a task is a thread on that task</b>. There is nothing to convert later; "turning into a
+    real thread" only means the same thread starts doing work, or you open it full size.</p>
+  <table>
+    <tr><th>You do</th><th>What happens</th></tr>
+    <tr><td>Open a module or task</td><td>Tack is there with an empty "New chat". No thread exists yet and nothing is sent or loaded. If a thread on this task is working or waiting for you, Tack shows that thread instead.</td></tr>
+    <tr><td>Send in "New chat"</td><td>A thread is created on this task, in the task's workspace, and put on the task before its first turn, so that turn already carries the plan and the handoff. This is what "Continue in new thread" does today, without leaving the task.</td></tr>
+    <tr><td>Send with a thread loaded</td><td>Your message is that thread's next turn.</td></tr>
+    <tr><td><b>Ask</b></td><td>Tack answers and changes nothing without your approval. A chat that only ever asked is a <b>quick chat</b>.</td></tr>
+    <tr><td><b>Run</b>, or the Continue chip</td><td>The agent works on the task. "Continue" sends "Continue this task from its handoff" in one click. A quick chat becomes a work thread the first time you Run in it.</td></tr>
+    <tr><td>The agent asks you something</td><td>Tack rings. The question or approval shows in place, in any size, with its answers as buttons.</td></tr>
+    <tr><td>More than one workspace fits</td><td>The Continue chip opens the same short menu the button has today (workspace, "once", "take over"). With one workspace there is no menu.</td></tr>
+  </table>
+
+  <h2>4 · Earlier chats, and what to do when one is long</h2>
+  <div class="rules">
+    <div><b>The thread list is Tack's own</b><span>Press the name next to Tack. "New chat" on top, then threads that are working or waiting, then work threads by date, then quick chats folded into one line so they do not crowd the list. Each row shows state, age, size and the last thing you asked.</span></div>
+    <div><b>Picking a thread loads it into Tack, in the size you are in</b><span>The Threads tab keeps its cards; "Open thread" there becomes "Open here" with "Full" beside it.</span></div>
+    <div><b>A long thread opens on a recap, not on message 1</b><span>First a short card: what it was asked last, what it answered, what it did last, and where the plan stands. Under it only the latest exchange. This data is already on the board for every thread.</span></div>
+    <div><b>Earlier messages come in pages</b><span>"Show earlier" loads the previous 20. Tack follows the one thread that is loaded, and only while the task is open, so a 140-message thread costs nothing until you ask for it.</span></div>
+    <div><b>Long thread, new work: offer a fresh start</b><span>Continuing a very long thread makes every turn carry all of it. When a loaded thread is long, the Continue chip offers "Start fresh from the handoff" beside "Continue here". The handoff exists for exactly this.</span></div>
+    <div><b>Too much to read in a column</b><span>Wide gives it the room, and "Full ↗" gives it the whole screen. Tack marks the next size up when a reply runs long; it does not jump there.</span></div>
+  </div>
+
+  <h2>5 · Where this shows up</h2>
+  <table>
+    <tr><th>Place</th><th>What Tack is there</th></tr>
+    <tr><td>Module or task (the dialog)</td><td>As in the mock above. Replaces "Tack waits behind the dialog", which is how it works now.</td></tr>
+    <tr><td>Feature task (the page)</td><td>The same Tack in the same three sizes, in place of the floating "Ask Tack" pill. Its thread list groups threads by module.</td></tr>
+    <tr><td>The board</td><td>Unchanged: Tack lives on the board and answers about the whole board from its own thread. Later: when Tack stands on a note, its bubble gets a Continue chip, so "continue" needs no open task at all.</td></tr>
+    <tr><td>Narrow window</td><td>Line stays a row. Panel becomes a sheet over the lower half. Wide covers the task with a back arrow.</td></tr>
+    <tr><td>Threads tab</td><td>"Continue in new thread" stays as "Continue in full chat" for when you want the big screen from the start.</td></tr>
+  </table>
+
+  <h2>6 · Decisions for you</h2>
+  <table>
+    <tr><th>Question</th><th>Recommended</th><th>The other way</th></tr>
+    <tr><td>Quick questions</td><td>Each new chat is its own thread, listed folded under "Quick chats". Clean history per question, and it can turn into work.</td><td>One standing "questions" thread per task. Fewer threads, but it grows without end and every question carries all the earlier ones.</td></tr>
+    <tr><td>Size when a task opens</td><td>Line, or the size you last used. Panel only when a thread waits for your answer.</td><td>Always Panel. Tack is more present but takes a third of every task you open.</td></tr>
+    <tr><td>Board questions inside a task</td><td>Not here. In a task Tack speaks through the task's threads; board questions stay on the board.</td><td>Add Tack's board chat as one more entry in the thread list.</td></tr>
+    <tr><td>Ask or Run by default</td><td>Ask for typed messages, Run for the Continue chip. Nothing starts working because of a stray Enter.</td><td>Run by default, as a new thread behaves today.</td></tr>
+  </table>
+
+  <h2>7 · Build order</h2>
+  <ol class="build">
+    <li><b>Line and Panel in the module/task dialog.</b> New chat, send, the Continue chip, live status and Stop, approvals in place, "Full ↗" to the chat screen. Reuses Tack's message list and box, and the same thread creation the Continue button uses.</li>
+    <li><b>The thread list and long threads.</b> Tack's list, loading a thread, the recap card, earlier messages in pages, the fresh-start offer.</li>
+    <li><b>Wide, and the Feature page.</b> The task rail, remembered size, the page's Tack in place of the floating pill.</li>
+    <li><b>Later.</b> Continue from a note's bubble on the board; narrow-window sheet; mobile.</li>
+  </ol>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const modal = $("modal"), scroll = $("scroll"), input = $("input");
+  const STEPS = ["Add sum()", "Add max()", "Add min()", "Add mode()", "Add range()", "Add mean()", "Add median()"];
+  const QUICK = "Quick chat";
+  const fresh = () => ({
+    size: "line", mode: "ask", thread: null, working: null, done: 3, nudge: false, peek: true, picker: false, quickOpen: false,
+    threads: {
+      t1: { title: "Add mode() to math helpers", kind: "work", state: "idle", age: "2h", count: 142, earlier: 140, loaded: [],
+        recap: { asked: "Plan mode() and stop before writing code.", answered: "Plan written: tally counts, return all values tied for the top count, sorted. Tests listed.", did: "Updated the handoff; no files changed.", plan: "3 of 7 steps done, mode() is next." },
+        msgs: [{ me: true, text: "Plan mode() and stop before writing code." }, { text: "Plan is in the handoff: tally counts in a Map, return every value tied for the highest count, sorted ascending. Three tests: single mode, a tie, empty list. I have not written code yet." }] },
+      t2: { title: "Median edge cases", kind: "work", state: "ended", age: "1d", count: 38, earlier: 36, loaded: [],
+        recap: { asked: "Should median() of an even list average the middle two?", answered: "Yes, and return NaN for an empty list. Recorded as a decision.", did: "Filed the decision on the module.", plan: "Not started; step 7." },
+        msgs: [{ me: true, text: "Should median() of an even list average the middle two?" }, { text: "Yes: average the two middle values, and return NaN for an empty list. I filed that as a decision on this module." }] },
+      t3: { title: "Why is range() marked open?", kind: "quick", state: "ended", age: "3d", count: 2, earlier: 0, loaded: [], recap: null,
+        msgs: [{ me: true, text: "Why is range() marked open?" }, { text: "It waits on one decision: what range() returns for an empty list. See the Decisions tab." }] },
+    },
+    draft: [],
+  });
+  let s = fresh(), timers = [];
+  const later = (ms, fn) => timers.push(setTimeout(() => { fn(); render(); }, ms));
+  const clear = () => { timers.forEach(clearTimeout); timers = []; };
+  const current = () => (s.thread === null ? null : s.threads[s.thread]);
+  const msgs = () => (current() === null ? s.draft : current().msgs);
+  const esc = (t) => t.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+
+  function render() {
+    modal.dataset.size = s.size;
+    document.querySelectorAll("[data-size-btn]").forEach((b) => {
+      b.classList.toggle("on", b.dataset.sizeBtn === s.size);
+      b.classList.toggle("nudge", s.nudge && b.closest("#sizes") !== null &&
+        ((s.size === "line" && b.dataset.sizeBtn === "panel") || (s.size === "panel" && b.dataset.sizeBtn === "wide")));
+    });
+    $("sizeNote").textContent = { line: "One row. The answer card above it folds away.", panel: "A column beside the task.", wide: "The chat takes the room; the task is a rail on the left." }[s.size];
+    $("steps").innerHTML = STEPS.map((t, i) => `<li class="${i < s.done ? "done" : i === s.done ? "now" : ""}${i === s.done - 1 && s.justTicked ? " fresh" : ""}"><i>${i < s.done ? "✓" : ""}</i>${t}</li>`).join("");
+    $("stepCount").textContent = `${s.done} of 7`; $("meter").style.width = `${Math.round((s.done / 7) * 100)}%`;
+    const t = current();
+    const waiting = msgs().some((m) => m.ask && !m.answered);
+    const mood = waiting ? "bell" : s.working ? "work" : msgs().length ? "idle" : "sleep";
+    $("fig").dataset.mood = mood; $("mood").textContent = { bell: "!", work: "⚙", idle: "·", sleep: "z" }[mood];
+    $("pickTitle").textContent = t === null ? (s.draft.length ? QUICK : "New chat") : t.title;
+    $("pickDot").className = "dot " + (waiting ? "wait" : s.working ? "work" : t === null ? "new" : "");
+    $("full").style.visibility = t === null && !s.draft.length ? "hidden" : "visible";
+    document.querySelectorAll("#mode button").forEach((b) => b.classList.toggle("on", b.dataset.mode === s.mode));
+    input.placeholder = s.working ? "Tell Tack something while it works…" : s.mode === "run" ? "Tell Tack what to do on this module…" : "Ask about this module, or tell Tack to continue…";
+    $("where").textContent = t === null
+      ? (s.draft.length ? "A thread on Math helpers, in board-ws." : "Sending starts a new thread on Math helpers, in board-ws. Nothing exists until you send.")
+      : `Goes to "${t.title}" (${t.count} messages).`;
+
+    // messages
+    let html = "";
+    if (t !== null && t.recap !== null) {
+      html += `<div class="recap"><h6>Where this thread stands</h6><dl><dt>Asked last</dt><dd>${esc(t.recap.asked)}</dd><dt>Answered</dt><dd>${esc(t.recap.answered)}</dd><dt>Did last</dt><dd>${esc(t.recap.did)}</dd><dt>Plan</dt><dd>${esc(t.recap.plan)}</dd></dl></div>`;
+      if (t.earlier > 0) html += `<button class="earlier" data-act="earlier">Show earlier (${t.earlier})</button>`;
+      html += t.loaded.map((m) => `<div class="m old${m.me ? " me" : ""}">${esc(m.text)}</div>`).join("");
+    }
+    const list = msgs();
+    html += list.map((m, i) => {
+      if (m.ask) return `<div class="m ask"><b>Tack needs your answer</b><br>${esc(m.text)}<div class="row">${m.answered ? `<span style="color:var(--ok)">${esc(m.answered)}</span>` : `<button class="chip go" data-act="approve">Approve</button><button class="chip" data-act="deny">Deny</button><button class="chip" data-act="always">Always allow tests</button>`}</div></div>`;
+      const hidden = s.size === "line" && i < list.length - 1 ? " old" : "";
+      return `<div class="m${m.me ? " me" : ""}${hidden}">${esc(m.text)}</div>`;
+    }).join("");
+    if (s.working) html += `<div class="status">${esc(s.working)}</div>`;
+    if (t !== null && t.count > 100 && !s.working && !waiting) html += `<div class="notice">Long thread (${t.count} messages): each new turn carries all of it. <button class="chip" data-act="fresh">Start fresh from the handoff</button></div>`;
+    if (s.nudge) html += `<div class="notice">This reply is long for a ${s.size === "line" ? "single row" : "column"}. <button class="chip" data-act="grow">${s.size === "line" ? "Open Panel" : "Go Wide"}</button></div>`;
+    if (s.size === "line" && html) html = `<button class="peekx" data-act="shut" title="Fold">×</button>` + html;
+    scroll.innerHTML = html;
+    scroll.classList.toggle("shut", s.size === "line" && !s.peek);
+    scroll.scrollTop = scroll.scrollHeight;
+
+    // chips
+    const chips = [];
+    if (s.working) chips.push(`<button class="chip stop" data-act="stop">Stop</button>`);
+    else if (waiting) chips.push(`<button class="chip go" data-act="approve">Approve</button>`, `<button class="chip" data-act="deny">Deny</button>`);
+    else {
+      chips.push(`<button class="chip go" data-act="continue">Continue ▸</button>`);
+      if (s.size !== "line" || msgs().length === 0) chips.push(`<button class="chip" data-say="What's next on this module?">What's next?</button>`, `<button class="chip" data-say="Where does this module stand?">Status</button>`);
+      if (s.size === "line" && msgs().length > 0 && !s.peek) chips.push(`<button class="chip" data-act="peek">Show reply</button>`);
+    }
+    $("chips").innerHTML = chips.join("");
+
+    // picker
+    const rows = Object.entries(s.threads);
+    const row = ([id, th]) => `<div class="trow${s.thread === id ? " on" : ""}" data-thread="${id}"><i class="dot${th.state === "working" ? " work" : ""}"></i><b>${esc(th.title)}</b><small class="${th.count > 100 ? "long" : ""}">${th.count} msgs · ${th.age}</small><span class="last">Asked: ${esc(th.msgs.filter((m) => m.me).at(-1)?.text ?? "")}</span></div>`;
+    const quick = rows.filter(([, th]) => th.kind === "quick");
+    $("picker").className = "t-picker" + (s.picker ? " open" : "");
+    $("picker").innerHTML = `<div class="trow${s.thread === null ? " on" : ""}" data-thread=""><i class="dot new"></i><b>New chat</b><small>nothing sent yet</small></div>
+      <h6><span>Threads on this module</span></h6>${rows.filter(([, th]) => th.kind === "work").map(row).join("")}
+      <h6 data-act="quick" style="cursor:pointer"><span>Quick chats (${quick.length})</span><span>${s.quickOpen ? "hide" : "show"}</span></h6>${s.quickOpen ? quick.map(row).join("") : ""}`;
+    s.justTicked = false;
+  }
+
+  const say = (text) => msgs().push({ text });
+  function send(text, mode) {
+    text = text.trim(); if (!text) return;
+    clear(); s.picker = false; s.nudge = false; s.peek = true;
+    msgs().push({ me: true, text });
+    if (current() !== null) current().count += 1;
+    const run = mode === "run";
+    if (run) {
+      if (current() !== null) current().kind = "work";
+      s.working = "Reading the handoff…";
+      later(900, () => (s.working = "Editing src/math.ts · mode()"));
+      later(2000, () => (s.working = "Running tests · 3 of 3"));
+      later(3100, () => { s.working = null; if (s.done < 7) { s.done += 1; s.justTicked = true; } say(`Done: ${STEPS[s.done - 1].replace("Add ", "")} is in src/math.ts and its tests pass. Handoff updated; next is ${STEPS[s.done] ? STEPS[s.done].replace("Add ", "") : "nothing, the plan is complete"}.`); caption("The plan step ticked in the task while you stayed where you were. No chat screen opened."); });
+    } else {
+      s.working = "Thinking…";
+      later(900, () => { s.working = null; say(/next/i.test(text) ? "mode() is next: the plan is written and no code yet. After that range(), which waits on your decision about an empty list." : /stand|status|left/i.test(text) ? "3 of 7 steps are done (sum, max, min). mode() is planned. range() is blocked on one open decision." : "Short answer from the task's plan and handoff would appear here. Say \"continue\" or press Run to have it done."); });
+    }
+    render();
+  }
+  function act(name) {
+    const t = current();
+    if (name === "continue") return send("Continue this task from its handoff.", "run");
+    if (name === "stop") { clear(); s.working = null; say("Stopped. Nothing is half-written: the last complete step is in the handoff."); }
+    if (name === "approve" || name === "deny" || name === "always") {
+      const m = msgs().find((x) => x.ask && !x.answered); if (!m) return;
+      m.answered = { approve: "Approved.", deny: "Denied.", always: "Approved; tests may run without asking in this thread." }[name];
+      if (name !== "deny") { s.working = "Running tests · 3 of 3"; later(1500, () => { s.working = null; say("All 3 tests pass."); }); }
+    }
+    if (name === "earlier" && t) { const n = Math.min(20, t.earlier); t.earlier -= n; t.loaded.unshift({ me: true, text: `(${n} earlier messages load here, oldest at the top)` }); }
+    if (name === "fresh") { s.thread = null; s.draft = []; s.mode = "run"; caption("A fresh chat: its first turn gets the plan and the handoff, not the 142 earlier messages. The long thread stays in the list."); }
+    if (name === "grow") { s.size = s.size === "line" ? "panel" : "wide"; s.nudge = false; }
+    if (name === "shut") s.peek = false;
+    if (name === "peek") s.peek = true;
+    if (name === "quick") { s.quickOpen = !s.quickOpen; }
+    render();
+  }
+  function caption(text) { $("caption").innerHTML = text; }
+
+  const scenes = {
+    reset() { s = fresh(); caption("The module just opened. Tack is one row at the foot: no thread exists, nothing is loaded. Type, or press a chip."); },
+    quick() { s = fresh(); caption("A quick question in the Line size. The answer shows in a card above the row and can be folded with ×. The chat is kept as a quick chat in the thread list."); render(); send("What's next on this module?", "ask"); },
+    continue() { s = fresh(); caption("One click on Continue. The row turns into the live status with Stop, and the task behind it updates. This is the case that opens the whole chat screen today."); render(); send("Continue this task from its handoff.", "run"); },
+    clarify() {
+      s = fresh(); s.size = "panel";
+      s.draft = [{ me: true, text: "For mode(), what should a tie return?" }, { text: "Every tied value, sorted ascending. So mode([1,1,2,2]) is [1,2]." }, { me: true, text: "And for floats, do 0.1+0.2 and 0.3 count as the same value?" },
+        { text: "Not by default. Three options:\n\n1. Exact equality (what the plan says). Simple, but 0.1+0.2 and 0.3 are different values.\n2. Round to a given number of places before tallying. Needs a second argument.\n3. A tolerance. Most forgiving, but ties stop being transitive, so the result can depend on input order.\n\nI recommend 1 and a note in the doc comment; 2 if you expect measured data. Tests change for 2 and 3." }];
+      s.nudge = true;
+      caption("The clarification got detailed. Tack does not resize itself: it marks <b>Wide</b> and offers it under the reply. Press \"Go Wide\"; the plan steps stay in the rail on the left.");
+    },
+    long() { s = fresh(); s.size = "panel"; s.thread = "t1"; caption("An earlier thread with 142 messages, picked from Tack's list. It opens on a recap and its latest exchange. Earlier messages load in pages, and Continue offers a fresh start from the handoff."); },
+    approve() { s = fresh(); s.size = "line"; s.thread = "t1"; s.threads.t1.msgs.push({ me: true, text: "Continue this task from its handoff." }, { ask: true, text: "Run `node --test test/math.test.ts`?" }); s.threads.t1.state = "working"; caption("The agent needs an approval. Tack rings and the question shows in place, even in the Line size, with its answers as buttons."); },
+  };
+
+  document.addEventListener("click", (e) => {
+    const el = e.target.closest("[data-scene],[data-size-btn],[data-act],[data-say],[data-thread],[data-mode],#pick,#send,#full");
+    if (!el) { if (s.picker && !e.target.closest("#picker")) { s.picker = false; render(); } return; }
+    if (el.dataset.scene) { clear(); scenes[el.dataset.scene](); render(); }
+    else if (el.dataset.sizeBtn) { s.size = el.dataset.sizeBtn; s.nudge = false; s.peek = true; render(); }
+    else if (el.dataset.act) act(el.dataset.act);
+    else if (el.dataset.say) send(el.dataset.say, "ask");
+    else if (el.dataset.thread !== undefined) { clear(); s.working = null; s.thread = el.dataset.thread || null; if (s.thread === null) s.draft = []; s.picker = false; s.peek = true; s.nudge = false; if (s.size === "line" && s.thread !== null) s.size = "panel"; render(); }
+    else if (el.dataset.mode) { s.mode = el.dataset.mode; render(); }
+    else if (el.id === "pick") { s.picker = !s.picker; render(); }
+    else if (el.id === "send") { send(input.value, s.mode); input.value = ""; }
+    else if (el.id === "full") caption("\"Full ↗\" opens the chat screen you have today, on this same thread.");
+  });
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") { send(input.value, s.mode); input.value = ""; } });
+  scenes.reset(); render();
+})();
+</script>
+</body>
+</html>
