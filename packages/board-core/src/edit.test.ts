@@ -5,7 +5,14 @@ import * as NodePath from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "@effect/vitest";
 
-import { addDecision, BoardEditError, createTask, editBoard, editTask } from "./edit.ts";
+import {
+  addDecision,
+  BoardEditError,
+  createBoard,
+  createTask,
+  editBoard,
+  editTask,
+} from "./edit.ts";
 import { noGit } from "./io.ts";
 import { nodeIO } from "./nodeIO.ts";
 import { nextStep } from "./plan.ts";
@@ -336,6 +343,43 @@ describe("structure and ownership", () => {
     ).rejects.toThrow("Only recommendations");
     await edit("billing", { op: "implemented", decisionId: rec!.id, ...implemented });
     expect((await task("billing")).decisions?.[1]?.rec?.implemented).toMatchObject(implemented);
+  });
+});
+
+describe("createBoard", () => {
+  it("binds a new board to several folders and refuses ones that overlap", async () => {
+    const side = (name: string) =>
+      norm(NodePath.join(tmp, "..", `${NodePath.basename(tmp)}-${name}`));
+    const [a, b] = [side("a"), side("b")];
+    await NodeFSP.mkdir(NodePath.join(a, "inner"), { recursive: true });
+    await NodeFSP.mkdir(b, { recursive: true });
+
+    const board = await createBoard(store, {
+      name: "Side Work",
+      roots: [
+        { path: a, label: "" },
+        { path: b, label: "copy" },
+      ],
+      boardMode: true,
+    });
+    expect(board).toMatchObject({ id: "side-work", boardMode: true });
+    expect(board.roots).toEqual([
+      { path: a, label: NodePath.basename(a) },
+      { path: b, label: "copy" },
+    ]);
+    expect((await store.loadRegistry()).boards.map((x) => x.id)).toEqual(["nefx", "side-work"]);
+
+    const refused = (roots: ReadonlyArray<{ path: string; label: string }>) =>
+      expect(createBoard(store, { name: "Other", roots })).rejects;
+    await refused([]).toThrow("needs a workspace");
+    await refused([{ path: tmp, label: "" }]).toThrow("overlaps a workspace of the NEFX board");
+    const c = side("c");
+    await NodeFSP.mkdir(NodePath.join(c, "inner"), { recursive: true });
+    await refused([
+      { path: c, label: "" },
+      { path: `${c}/inner`, label: "" },
+    ]).toThrow("already a workspace");
+    for (const dir of [a, b, c]) await NodeFSP.rm(dir, { recursive: true, force: true });
   });
 });
 

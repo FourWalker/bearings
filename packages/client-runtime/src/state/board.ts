@@ -86,6 +86,15 @@ export function createBoardEnvironmentAtoms<R, E>(
       scheduler: editScheduler,
       concurrency: serialPerBoard,
     }),
+    createBoard: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:board:create-board",
+      tag: WS_METHODS.boardCreateBoard,
+    }),
+    /** The server's T3 projects as workspaces to pick, read while a workspace picker is open. */
+    workspaceCandidates: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:board:workspace-candidates",
+      tag: WS_METHODS.boardWorkspaceCandidates,
+    }),
     /** What the server asks this window to show; every one must arrive. */
     intents: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
       label: "environment-data:board:intents",

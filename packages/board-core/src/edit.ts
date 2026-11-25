@@ -971,14 +971,29 @@ async function workspaceRoot(
 
 export async function createBoard(
   store: BoardStore,
-  input: { readonly name: string; readonly path: string; readonly label: string },
+  input: {
+    readonly name: string;
+    readonly roots: ReadonlyArray<{ readonly path: string; readonly label: string }>;
+    readonly boardMode?: boolean | undefined;
+  },
 ): Promise<Board> {
   const name = input.name.trim();
   if (!name) throw new BoardEditError("The board needs a name.");
   const registry = await store.loadRegistry();
   if (registry.boards.some((board) => board.name.toLowerCase() === name.toLowerCase()))
     throw new BoardEditError(`A board named ${name} already exists.`);
-  const root = await workspaceRoot(store, registry.boards, input.path, input.label);
+  if (input.roots.length === 0) throw new BoardEditError("The board needs a workspace.");
+  const roots: Root[] = [];
+  for (const root of input.roots)
+    roots.push(
+      await workspaceRoot(
+        store,
+        [...registry.boards, { id: "", name, roots, createdAt: 0 }],
+        root.path,
+        root.label,
+        "",
+      ),
+    );
   const prefix = slug(name);
   let id = prefix;
   for (
@@ -988,7 +1003,13 @@ export async function createBoard(
     n++
   )
     id = `${prefix}-${n}`;
-  const board = { id, name, roots: [root], createdAt: store.clock.now() };
+  const board: Board = {
+    id,
+    name,
+    roots,
+    createdAt: store.clock.now(),
+    ...(input.boardMode ? { boardMode: true } : {}),
+  };
   registry.boards.push(board);
   await store.saveRegistry(registry);
   return board;

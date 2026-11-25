@@ -4,7 +4,9 @@
  * prints the task's link.
  */
 import {
+  BoardEditError,
   BoardStore,
+  createBoard,
   findBoard,
   findOnBoard,
   levelOf,
@@ -177,7 +179,51 @@ const boardLinkCommand = Command.make("link", { board: boardFlag, task: taskArgu
   ),
 );
 
+const boardCreateCommand = Command.make("create", {
+  name: Argument.String("name").pipe(Argument.withDescription("The new board's name.")),
+  path: Flag.String("path").pipe(
+    Flag.withDescription("The board's first workspace folder. Defaults to this directory."),
+    Flag.optional,
+  ),
+  label: Flag.String("label").pipe(
+    Flag.withDescription("The workspace's label. Defaults to the folder's name."),
+    Flag.optional,
+  ),
+}).pipe(
+  Command.withDescription(
+    "Create a board on a folder. Add the folder as a T3 project to start threads there.",
+  ),
+  Command.withHandler((flags) =>
+    Effect.gen(function* () {
+      const path = Option.getOrElse(flags.path, () => "") || (yield* HostProcess.WorkingDirectory);
+      const board = yield* Effect.tryPromise({
+        try: () =>
+          createBoard(new BoardStore(defaultBoardHome(), nodeIO), {
+            name: flags.name,
+            roots: [{ path, label: Option.getOrElse(flags.label, () => "") }],
+          }),
+        catch: (cause) =>
+          new BoardCliError({
+            detail:
+              cause instanceof BoardEditError
+                ? cause.message
+                : "The board folder could not be written.",
+          }),
+      });
+      yield* Console.log(
+        `Created the ${board.name} board (id ${board.id}) on ${board.roots[0]?.path}.`,
+      );
+    }).pipe(reportBoardErrors),
+  ),
+);
+
 export const boardCommand = Command.make("board").pipe(
-  Command.withDescription("Read the Project Board: list boards, find work, show a task."),
-  Command.withSubcommands([boardListCommand, boardFindCommand, boardShowCommand, boardLinkCommand]),
+  Command.withDescription("The Project Board: list or create boards, find work, show a task."),
+  Command.withSubcommands([
+    boardListCommand,
+    boardCreateCommand,
+    boardFindCommand,
+    boardShowCommand,
+    boardLinkCommand,
+  ]),
 );

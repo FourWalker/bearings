@@ -64,6 +64,7 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.boardOpenFile]: AuthSettingsWriteScope,
   [WS_METHODS.boardExportFile]: AuthSettingsWriteScope,
   [WS_METHODS.boardEditBoard]: AuthSettingsWriteScope,
+  [WS_METHODS.boardCreateBoard]: AuthSettingsWriteScope,
   [WS_METHODS.sourceControlCloneRepository]: AuthSourceControlWriteScope,
   [WS_METHODS.sourceControlPublishRepository]: AuthSourceControlWriteScope,
   [WS_METHODS.sourceControlStar]: AuthSourceControlWriteScope,

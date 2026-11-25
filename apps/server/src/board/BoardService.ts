@@ -6,7 +6,11 @@
  * @module board/BoardService
  */
 import {
+  type BoardCreateBoardInput,
+  type BoardCreateBoardResult,
   type BoardCreateTaskInput,
+  type BoardWorkspaceCandidate,
+  CommandId,
   type BoardEditBoardInput,
   type BoardSettings,
   BoardEditFailure,
@@ -22,12 +26,14 @@ import {
   type BoardView,
   type OrchestrationV2ThreadTranscript,
   type Project,
-  type ProjectId,
+  ProjectId,
   ThreadId,
 } from "@t3tools/contracts";
 import {
   BoardChat,
   BoardEditError,
+  base,
+  createBoard as createNewBoard,
   createTask as createBoardTask,
   editBoard as editBoardSettings,
   editTask as editBoardTask,
@@ -47,6 +53,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Random from "effect/Random";
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
 
 import * as BoardFile from "./BoardFile.ts";
@@ -77,6 +84,14 @@ export class BoardService extends Context.Service<
     readonly editBoard: (
       input: BoardEditBoardInput,
     ) => Effect.Effect<BoardEditResult, BoardEditFailure>;
+    /** A new board on the given folders; each folder without a T3 project gets one. */
+    readonly createBoard: (
+      input: BoardCreateBoardInput,
+    ) => Effect.Effect<BoardCreateBoardResult, BoardEditFailure>;
+    readonly workspaceCandidates: Effect.Effect<
+      ReadonlyArray<BoardWorkspaceCandidate>,
+      BoardReadError
+    >;
     readonly archivedThreads: (input: {
       readonly boardId: string;
     }) => Effect.Effect<ReadonlyArray<OrchestrationV2ThreadTranscript>, BoardReadError>;
@@ -281,9 +296,14 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
     const reg = yield* Effect.tryPromise({ try: () => store.loadRegistry(), catch: failed });
     const board = reg.boards.find((b) => b.id === input.boardId);
     if (!board) return yield* new BoardReadError({ reason: "not-found", detail: "No such board." });
+    const byRoot = yield* workspaceProjects(input.boardId);
     return {
       name: board.name,
-      roots: board.roots.map((r) => ({ path: norm(r.path), label: r.label })),
+      roots: board.roots.map((r) => ({
+        path: norm(r.path),
+        label: r.label,
+        projectId: byRoot.get(norm(r.path))?.id ?? null,
+      })),
       services: (board.services ?? []).map((s) => ({ id: s.id, name: s.name, match: s.match })),
       rules: board.rules ?? "",
       boardMode: !!board.boardMode,
@@ -291,16 +311,93 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
     } satisfies BoardSettings;
   });
 
+  const addProject = Effect.fn("BoardService.addProject")(function* (root: {
+    readonly path: string;
+    readonly label: string;
+  }) {
+    const id = `${(yield* Random.nextInt) >>> 0}-${(yield* Random.nextInt) >>> 0}`;
+    yield* projects
+      .bootstrap({
+        commandId: CommandId.make(`board-workspace-project:${id}`),
+        projectId: ProjectId.make(`board-${id}`),
+        title: root.label,
+        workspaceRoot: root.path,
+      })
+      .pipe(
+        // bootstrap reads before locking; a racing create already made the project.
+        Effect.catchTags({ ProjectConflictError: () => Effect.void }),
+        Effect.mapError(
+          (cause) =>
+            new BoardEditFailure({
+              reason: "failed",
+              detail: `${root.path} could not be added as a T3 project: ${cause.message}`,
+            }),
+        ),
+      );
+  });
+
+  const rootsWithoutProject = Effect.fn("BoardService.rootsWithoutProject")(function* (
+    boardId: string,
+  ) {
+    const reg = yield* Effect.tryPromise({ try: () => store.loadRegistry(), catch: editFailed });
+    const byRoot = yield* workspaceProjects(boardId).pipe(Effect.mapError(editFailed));
+    const board = reg.boards.find((b) => b.id === boardId);
+    return (board?.roots ?? []).filter((root) => !byRoot.has(norm(root.path)));
+  });
+
   const editBoard = Effect.fn("BoardService.editBoard")(function* (input: BoardEditBoardInput) {
+    const edit = input.edit;
+    if (edit.op === "addProject") {
+      const missing = yield* rootsWithoutProject(input.boardId);
+      const root = missing.find((candidate) => norm(candidate.path) === norm(edit.path));
+      if (root) yield* addProject(root);
+      return { message: "Added the T3 project.", createdId: null };
+    }
     const result = yield* editLock.withLock(
       "$registry",
       Effect.tryPromise({
-        try: () => editBoardSettings(store, input.boardId, input.edit),
+        try: () => editBoardSettings(store, input.boardId, edit),
         catch: editFailed,
       }),
     );
+    // The workspace is saved either way; its row offers the project again if this fails.
+    if (edit.op === "addRoot")
+      yield* rootsWithoutProject(input.boardId).pipe(
+        Effect.flatMap((missing) => Effect.forEach(missing, addProject, { discard: true })),
+        Effect.ignore,
+      );
     return { message: result.message, createdId: null };
   });
+
+  const createBoard = Effect.fn("BoardService.createBoard")(function* (
+    input: BoardCreateBoardInput,
+  ) {
+    const board = yield* editLock.withLock(
+      "$registry",
+      Effect.tryPromise({ try: () => createNewBoard(store, input), catch: editFailed }),
+    );
+    yield* rootsWithoutProject(board.id).pipe(
+      Effect.flatMap((missing) => Effect.forEach(missing, addProject, { discard: true })),
+      Effect.ignore,
+    );
+    return { boardId: board.id };
+  });
+
+  const workspaceCandidates = Effect.gen(function* () {
+    const reg = yield* Effect.tryPromise({ try: () => store.loadRegistry(), catch: failed });
+    const found = yield* allProjects.pipe(Effect.mapError(failed));
+    return found
+      .filter((project) => project.deletedAt === null)
+      .map((project) => {
+        const hit = findBoard(reg, project.workspaceRoot)?.board;
+        return {
+          projectId: project.id,
+          title: project.title || base(norm(project.workspaceRoot)),
+          path: norm(project.workspaceRoot),
+          board: hit ? { id: hit.id, name: hit.name } : null,
+        };
+      });
+  }).pipe(Effect.withSpan("BoardService.workspaceCandidates"));
 
   // Only a thread with no turn yet: a running thread's open board chat holds its own link.
   const linkThread = Effect.fn("BoardService.linkThread")(function* (input: BoardLinkThreadInput) {
@@ -435,6 +532,8 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
     createTask,
     settings,
     editBoard,
+    createBoard,
+    workspaceCandidates,
     archivedThreads,
     openFile,
     exportFile,

@@ -177,6 +177,8 @@ const RPC_AGGREGATES = {
   [WS_METHODS.boardOpenFile]: "issues",
   [WS_METHODS.boardExportFile]: "issues",
   [WS_METHODS.boardEditBoard]: "issues",
+  [WS_METHODS.boardCreateBoard]: "issues",
+  [WS_METHODS.boardWorkspaceCandidates]: "issues",
   [WS_METHODS.boardLinkThread]: "issues",
   [WS_METHODS.boardSubscribeIntents]: "issues",
   [WS_METHODS.boardAckIntent]: "issues",

@@ -29,7 +29,15 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "~/components/ui/empty";
-import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "~/components/ui/menu";
+import {
+  Menu,
+  MenuItem,
+  MenuPopup,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuSeparator,
+  MenuTrigger,
+} from "~/components/ui/menu";
 import { SidebarInset } from "~/components/ui/sidebar";
 import { Skeleton } from "~/components/ui/skeleton";
 import { toastManager } from "~/components/ui/toast";
@@ -84,6 +92,7 @@ import { boardAttentionOf, isThreadWaiting } from "./boardAttention.logic";
 import { BoardPinBar, useBoardPin } from "./BoardPinBar";
 import { useBoardPanelOpen } from "./tackSettings";
 import { BoardSettingsButton } from "./BoardSettingsDialog";
+import { BoardCreateDialog } from "./BoardCreateDialog";
 import { BoardGoals } from "./BoardGoals";
 import { BoardTaskView } from "./BoardTaskView";
 import { ChoiceSelect } from "./BoardTaskEditors";
@@ -134,6 +143,12 @@ export function BoardPage() {
         picker: next === undefined || undefined,
       },
     });
+
+  const canCreateBoard = useAtomValue(
+    boardEnvironment.createBoard.permissionAtom(environmentId ?? null),
+  );
+  const setCreating = (create: boolean) =>
+    void navigate({ search: (previous) => ({ ...previous, create: create || undefined }) });
 
   const newThread = useNewThreadHandler();
   const linkThread = useAtomCommand(boardEnvironment.linkThread, { reportFailure: false });
@@ -191,6 +206,7 @@ export function BoardPage() {
         chats={unassigned.data ?? []}
         onPick={selectBoard}
         onOpenThread={openThread}
+        onCreate={canCreateBoard ? () => setCreating(true) : null}
       />
     ) : board === null && view.error !== null ? (
       <BoardEmpty
@@ -290,12 +306,32 @@ export function BoardPage() {
                       </MenuRadioItem>
                     ))}
                   </MenuRadioGroup>
+                  {canCreateBoard ? (
+                    <>
+                      <MenuSeparator />
+                      <MenuItem onClick={() => setCreating(true)}>
+                        <PlusIcon />
+                        <T>New board</T>
+                      </MenuItem>
+                    </>
+                  ) : null}
                 </MenuPopup>
               </Menu>
             </div>
           ) : null}
         </WorkspacePageHeader>
         <div className="min-h-0 flex-1">{body}</div>
+        {environmentId !== null && canCreateBoard ? (
+          <BoardCreateDialog
+            environmentId={environmentId}
+            open={search.create === true}
+            onOpenChange={setCreating}
+            onCreated={(id) => {
+              boards.refresh();
+              void navigate({ search: { env: environmentId, board: id } });
+            }}
+          />
+        ) : null}
       </div>
     </SidebarInset>
   );
@@ -331,6 +367,7 @@ function BoardPicker(props: {
   readonly chats: ReadonlyArray<BoardChat>;
   readonly onPick: (boardId: string) => void;
   readonly onOpenThread: (chat: BoardChat) => void;
+  readonly onCreate: (() => void) | null;
 }) {
   const gt = useGT();
   return (
@@ -357,6 +394,18 @@ function BoardPicker(props: {
             </span>
           </button>
         ))}
+        {props.onCreate !== null ? (
+          <button
+            type="button"
+            className="flex items-center gap-2 rounded-lg border border-dashed p-4 text-start text-muted-foreground hover:bg-accent hover:text-foreground"
+            onClick={props.onCreate}
+          >
+            <PlusIcon className="size-4" />
+            <span className="font-medium">
+              <T>New board</T>
+            </span>
+          </button>
+        ) : null}
       </div>
       {props.chats.length > 0 ? (
         <section className="mt-6 grid gap-2">

@@ -4,6 +4,7 @@ import { T, useGT } from "gt-react";
 import { PlusIcon, SettingsIcon, XIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
+import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
@@ -94,7 +95,12 @@ function SettingsBody(props: {
     // Keyed by the saved settings, so each section's draft restarts from what was saved.
     <div key={JSON.stringify(settings)} className="grid gap-5 overflow-y-auto p-5">
       <NameSection settings={settings} save={save} />
-      <WorkspacesSection settings={settings} save={save} />
+      <WorkspacesSection
+        environmentId={props.environmentId}
+        boardId={props.boardId}
+        settings={settings}
+        save={save}
+      />
       <ServicesSection settings={settings} save={save} />
       <Section title={gt("Project rules")}>
         <RulesEditor settings={settings} save={save} />
@@ -161,10 +167,19 @@ function NameSection(props: { readonly settings: BoardSettings; readonly save: S
   );
 }
 
-function WorkspacesSection(props: { readonly settings: BoardSettings; readonly save: Save }) {
+function WorkspacesSection(props: {
+  readonly environmentId: EnvironmentId;
+  readonly boardId: string;
+  readonly settings: BoardSettings;
+  readonly save: Save;
+}) {
   const gt = useGT();
   const [path, setPath] = useState("");
   const [label, setLabel] = useState("");
+  const candidates = useEnvironmentQuery(
+    boardEnvironment.workspaceCandidates({ environmentId: props.environmentId, input: {} }),
+  );
+  const free = (candidates.data ?? []).filter((candidate) => candidate.board === null);
   return (
     <Section title={gt("Workspaces")}>
       <p className="text-muted-foreground text-xs">
@@ -174,7 +189,10 @@ function WorkspacesSection(props: { readonly settings: BoardSettings; readonly s
         </T>
       </p>
       {props.settings.roots.map((root) => (
-        <div key={root.path} className="flex items-center gap-2">
+        <div
+          key={root.path}
+          className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)_auto_auto] items-center gap-2"
+        >
           <Input
             size="sm"
             aria-label={gt("Workspace label")}
@@ -185,9 +203,25 @@ function WorkspacesSection(props: { readonly settings: BoardSettings; readonly s
                 void props.save({ op: "labelRoot", path: root.path, label: next });
             }}
           />
-          <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground text-xs">
-            {root.path}
-          </span>
+          <span className="break-all font-mono text-muted-foreground text-xs">{root.path}</span>
+          {root.projectId !== null ? (
+            <Badge variant="success" size="sm">
+              <T>T3 project</T>
+            </Badge>
+          ) : (
+            <span className="flex items-center gap-2">
+              <Badge variant="warning" size="sm">
+                <T>No project here</T>
+              </Badge>
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={() => void props.save({ op: "addProject", path: root.path })}
+              >
+                <T>Add project</T>
+              </Button>
+            </span>
+          )}
           {props.settings.roots.length > 1 ? (
             <Button
               variant="ghost-muted"
@@ -197,9 +231,41 @@ function WorkspacesSection(props: { readonly settings: BoardSettings; readonly s
             >
               <XIcon />
             </Button>
-          ) : null}
+          ) : (
+            <span />
+          )}
         </div>
       ))}
+      {props.settings.roots.some((root) => root.projectId === null) ? (
+        <p className="text-muted-foreground text-xs">
+          <T>A workspace needs a T3 project before a thread can start there from the board.</T>
+        </p>
+      ) : null}
+      {free.length > 0 ? (
+        <ul className="max-h-40 divide-y overflow-y-auto rounded-lg border">
+          {free.map((candidate) => (
+            <li key={candidate.projectId} className="flex items-center gap-2 px-3 py-1.5 text-sm">
+              <span className="shrink-0 truncate">{candidate.title}</span>
+              <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground text-xs">
+                {candidate.path}
+              </span>
+              <Button
+                variant="outline"
+                size="xs"
+                aria-label={gt("Add workspace {label}", { label: candidate.title })}
+                onClick={() =>
+                  void props
+                    .save({ op: "addRoot", path: candidate.path, label: candidate.title })
+                    .then((ok) => ok && candidates.refresh())
+                }
+              >
+                <PlusIcon />
+                <T>Add</T>
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <form
         className="flex items-center gap-2"
         onSubmit={(event) => {

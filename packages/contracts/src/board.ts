@@ -434,6 +434,8 @@ export const BoardSettingsEdit = Schema.Union([
   Schema.Struct({ op: Schema.Literal("addRoot"), path: Schema.String, label: Schema.String }),
   Schema.Struct({ op: Schema.Literal("removeRoot"), path: Schema.String }),
   Schema.Struct({ op: Schema.Literal("labelRoot"), path: Schema.String, label: Schema.String }),
+  /** Makes the workspace a T3 project on this server, so threads can start there. */
+  Schema.Struct({ op: Schema.Literal("addProject"), path: Schema.String }),
   Schema.Struct({
     op: Schema.Literal("saveServices"),
     services: Schema.Array(
@@ -468,7 +470,14 @@ export type BoardEditBoardInput = typeof BoardEditBoardInput.Type;
 /** A board's settings as ⚙ edits them: the parts the board screen leaves out. */
 export const BoardSettings = Schema.Struct({
   name: Schema.String,
-  roots: Schema.Array(Schema.Struct({ path: Schema.String, label: Schema.String })),
+  roots: Schema.Array(
+    Schema.Struct({
+      path: Schema.String,
+      label: Schema.String,
+      /** The T3 project a thread in this workspace starts in; null when the server has none. */
+      projectId: Schema.NullOr(ProjectId),
+    }),
+  ),
   services: Schema.Array(
     Schema.Struct({ id: Schema.String, name: Schema.String, match: Schema.Array(Schema.String) }),
   ),
@@ -479,6 +488,25 @@ export const BoardSettings = Schema.Struct({
   ),
 });
 export type BoardSettings = typeof BoardSettings.Type;
+
+export const BoardCreateBoardInput = Schema.Struct({
+  name: Schema.String,
+  roots: Schema.Array(Schema.Struct({ path: Schema.String, label: Schema.String })),
+  boardMode: Schema.Boolean,
+});
+export type BoardCreateBoardInput = typeof BoardCreateBoardInput.Type;
+
+export const BoardCreateBoardResult = Schema.Struct({ boardId: Schema.String });
+export type BoardCreateBoardResult = typeof BoardCreateBoardResult.Type;
+
+/** A T3 project offered as a board workspace, and the board its folder is already on. */
+export const BoardWorkspaceCandidate = Schema.Struct({
+  projectId: ProjectId,
+  title: Schema.String,
+  path: Schema.String,
+  board: Schema.NullOr(Schema.Struct({ id: Schema.String, name: Schema.String })),
+});
+export type BoardWorkspaceCandidate = typeof BoardWorkspaceCandidate.Type;
 
 export const BoardCreateTaskInput = Schema.Struct({
   boardId: Schema.String,
@@ -502,7 +530,11 @@ export class BoardEditFailure extends Schema.TaggedError<BoardEditFailure>()(
     detail: Schema.String,
   },
   { httpApiStatus: 409 },
-) {}
+) {
+  override get message(): string {
+    return this.detail;
+  }
+}
 
 /**
  * What a T3 window is asked to show. Commands navigate or pre-fill a composer; none writes board
@@ -552,7 +584,11 @@ export class BoardReadError extends Schema.TaggedError<BoardReadError>()(
     detail: Schema.String,
   },
   { httpApiStatus: 500 },
-) {}
+) {
+  override get message(): string {
+    return this.detail;
+  }
+}
 
 /** Links a new thread (a draft with no turn yet) to a task, so its first turn carries the task. */
 export const BoardLinkThreadInput = Schema.Struct({
@@ -573,4 +609,8 @@ export class BoardLinkError extends Schema.TaggedError<BoardLinkError>()(
     detail: Schema.String,
   },
   { httpApiStatus: 409 },
-) {}
+) {
+  override get message(): string {
+    return this.detail;
+  }
+}

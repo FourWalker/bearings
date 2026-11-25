@@ -102,6 +102,18 @@ the detail; update the board task after it.
 - **Outputs** (`ffd3944`): `addOutputs` in `chat.ts` lists document files a thread writes and up to three
   links of its final answer as task docs of kind "Output" (newest 20; a removed one is kept off
   by `outputsDropped`). Tests only; not watched with a real thread.
+- **New board and workspace binding** (2026-11-25, seen running on the Dev Board): a board binds to
+  folders; the T3 project is looked up from the folder and never stored (project ids are per
+  install, `boards.json` is shared). `BoardCreateDialog.tsx` (picker card, Switch board menu,
+  command palette "New board", URL `create=true`) names the board and ticks T3 projects or types
+  folders; `BoardService.createBoard` makes a T3 project for each folder without one, as does
+  `addRoot`; `workspaceCandidates` lists the server's projects with the board each is on. Board
+  settings rows show the path and "T3 project" or "No project here" with Add project (edit op
+  `addProject`, handled in the service, not board-core). Board errors now carry `message`, so a
+  refusal shows its reason, not "The environment request failed." CLI: `t3 board create <name>
+  [--path] [--label]` (no project made: it runs without a server). Not built: a folder browse
+  button, "New board from this project" in the project menu, deleting a board, mobile. Not
+  checked: the owner's install (does `C:\Claude-Works\t3code-board` have a T3 project there?).
 - **Plotter card draw** (`02f758c`, `PlotterCardDraw.tsx`): with the Plotter theme or avatar, an
   opening task or module is drawn first (pen dot on `offset-path: inset()`), then fades in.
 - **Plotter skin** (`3e74c49`): `TackPlotter.tsx`, `tackPlotter.logic.ts`, `tack-plotter.css`.

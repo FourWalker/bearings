@@ -269,3 +269,61 @@ it.effect("creates and edits tasks for the person, and says why an edit is refus
     }).pipe(Effect.provide(layer));
   }),
 );
+
+it.effect("a new board gives each folder without a T3 project one, and says why it refuses", () =>
+  Effect.gen(function* () {
+    const tmp = yield* Effect.promise(() =>
+      NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "board-service-")),
+    );
+    const [held, bare] = [norm(NodePath.join(tmp, "held")), norm(NodePath.join(tmp, "bare"))];
+    yield* Effect.promise(async () => {
+      await NodeFSP.mkdir(held);
+      await NodeFSP.mkdir(bare);
+    });
+    const store = new BoardStore(NodePath.join(tmp, "board"), nodeIO);
+    const all = [project("held", held)];
+    const projects = Layer.mock(ProjectService.ProjectService)({
+      listPage: () => Effect.succeed({ projects: [...all], nextCursor: null }),
+      bootstrap: (input) =>
+        Effect.sync(() => {
+          const made = project(input.projectId, input.workspaceRoot);
+          all.push(made);
+          return { project: made, created: true };
+        }),
+    });
+    const threads = Layer.mock(ThreadManagement.ThreadManagementService)({});
+    const layer = Layer.effect(BoardService.BoardService, BoardService.make(store, noGit)).pipe(
+      Layer.provide(Layer.merge(threads, projects)),
+    );
+    yield* Effect.gen(function* () {
+      const boards = yield* BoardService.BoardService;
+      const { boardId } = yield* boards.createBoard({
+        name: "Side Work",
+        roots: [
+          { path: held, label: "" },
+          { path: bare, label: "Bare" },
+        ],
+        boardMode: false,
+      });
+      expect(all.map((p) => p.workspaceRoot)).toEqual([held, bare]);
+      const settings = yield* boards.settings({ boardId });
+      expect(settings.roots.map((root) => root.projectId)).toEqual(all.map((p) => p.id));
+      expect((yield* boards.workspaceCandidates).map((c) => c.board?.id)).toEqual([
+        boardId,
+        boardId,
+      ]);
+
+      const refused = yield* Effect.flip(
+        boards.editBoard({ boardId, edit: { op: "addRoot", path: bare, label: "" } }),
+      );
+      expect(refused.message).toBe(
+        "That folder is already a workspace of this board, or inside one.",
+      );
+
+      all.pop();
+      expect((yield* boards.settings({ boardId })).roots[1]?.projectId).toBeNull();
+      yield* boards.editBoard({ boardId, edit: { op: "addProject", path: bare } });
+      expect(all.map((p) => p.workspaceRoot)).toEqual([held, bare]);
+    }).pipe(Effect.provide(layer));
+  }),
+);

@@ -187,6 +187,9 @@ import {
   BoardChat,
   BoardCreateTaskInput,
   BoardEditBoardInput,
+  BoardCreateBoardInput,
+  BoardCreateBoardResult,
+  BoardWorkspaceCandidate,
   BoardEditFailure,
   BoardEditResult,
   BoardSettings,
@@ -713,6 +716,8 @@ export const WS_METHODS = {
   boardOpenFile: "board.openFile",
   boardExportFile: "board.exportFile",
   boardEditBoard: "board.editBoard",
+  boardCreateBoard: "board.createBoard",
+  boardWorkspaceCandidates: "board.workspaceCandidates",
   boardLinkThread: "board.linkThread",
   boardSubscribeIntents: "board.subscribeIntents",
   boardAckIntent: "board.ackIntent",
@@ -1586,6 +1591,18 @@ const WsBoardEditBoardRpc = Rpc.make(WS_METHODS.boardEditBoard, {
   payload: BoardEditBoardInput,
   success: BoardEditResult,
   error: BoardEditRpcError,
+});
+
+const WsBoardCreateBoardRpc = Rpc.make(WS_METHODS.boardCreateBoard, {
+  payload: BoardCreateBoardInput,
+  success: BoardCreateBoardResult,
+  error: BoardEditRpcError,
+});
+
+const WsBoardWorkspaceCandidatesRpc = Rpc.make(WS_METHODS.boardWorkspaceCandidates, {
+  payload: Schema.Struct({}),
+  success: Schema.Array(BoardWorkspaceCandidate),
+  error: BoardRpcError,
 });
 
 /** Project Board fork: a new thread on a task, linked before its first turn. */
@@ -2529,6 +2546,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsBoardOpenFileRpc,
   WsBoardExportFileRpc,
   WsBoardEditBoardRpc,
+  WsBoardCreateBoardRpc,
+  WsBoardWorkspaceCandidatesRpc,
   WsBoardLinkThreadRpc,
   WsBoardSubscribeIntentsRpc,
   WsBoardAckIntentRpc,

@@ -25,6 +25,8 @@ export interface BoardSearch {
   readonly open?: string | undefined;
   readonly tab?: BoardTaskTab | undefined;
   readonly picker?: boolean | undefined;
+  /** The New board dialog is open. */
+  readonly create?: boolean | undefined;
   readonly recommendationFilter?: RecommendationFilter | undefined;
 }
 
@@ -59,6 +61,7 @@ export function boardSearchFromUrl(search: Record<string, unknown>): BoardSearch
     open: text(search.open),
     tab: tab !== undefined && TABS.includes(tab) ? (tab as BoardTaskTab) : undefined,
     picker: search.picker === true ? true : undefined,
+    create: search.create === true ? true : undefined,
     recommendationFilter:
       recommendationFilter === "open" ||
       recommendationFilter === "decided" ||
