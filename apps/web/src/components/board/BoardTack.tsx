@@ -13,6 +13,8 @@ import {
 } from "react";
 
 import { Popover, PopoverPopup } from "~/components/ui/popover";
+
+import { type TackHome, useTackHome } from "./tackSettings";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { useMediaQuery } from "~/hooks/useMediaQuery";
 import { useStableCallback } from "~/hooks/useStableCallback";
@@ -723,14 +725,28 @@ function markGreeted(board: string) {
   greetedBoards.add(board);
 }
 
-/** The Roamer's home: a round frosted nest at the foot of the panel where Tack sleeps. */
-export function TackCorner(props: { readonly active: number; readonly blocked: number }) {
+/**
+ * The Roamer's home: a round frosted nest where Tack sleeps, at the board's bottom right or at the
+ * foot of the side panel. With the panel hidden, the board's corner is home whatever was chosen.
+ */
+export function TackCorner(props: {
+  readonly active: number;
+  readonly blocked: number;
+  readonly at: TackHome;
+  readonly panelOpen?: boolean;
+}) {
   const gt = useGT();
   const board = useTackBoard();
+  const [homeAt] = useTackHome();
   const boardKey = board === null ? "" : `${board.environmentId}:${board.boardId}`;
   // Tack says hello once when a board opens; the bubble fades out by itself.
   const [greeted, setGreeted] = useState(() => greetedBoards.has(boardKey));
-  if (board === null || board.place !== "roam") return null;
+  if (board === null) return null;
+  const here =
+    props.at === "panel"
+      ? board.place === "roam" && homeAt === "panel"
+      : props.panelOpen === false || (board.place === "roam" && homeAt === "board");
+  if (!here) return null;
   const home = atHome(board);
   const { chat } = board;
   // Once the person has called Tack, the hello is over; it does not come back when Tack goes home.
@@ -738,7 +754,11 @@ export function TackCorner(props: { readonly active: number; readonly blocked: n
   return (
     <div
       data-tack-home="corner"
-      className="pointer-events-none sticky bottom-0 mt-4 flex justify-end pt-2"
+      className={
+        props.at === "board"
+          ? "pointer-events-none absolute end-4 bottom-4 z-10 flex justify-end"
+          : "pointer-events-none sticky bottom-0 mt-4 flex justify-end pt-2"
+      }
     >
       <div className="relative">
         <TackBanners className="end-0 bottom-full mb-3 flex-col-reverse" />
@@ -921,7 +941,7 @@ function TackBubble() {
         initialFocus={board.place === "roam"}
         finalFocus={false}
       >
-        <div data-tack-bubble className="grid gap-2">
+        <div data-tack-bubble className="grid min-w-0 grid-cols-1 gap-2">
           <div className="flex items-center gap-1">
             <span className="min-w-0 flex-1 truncate font-medium text-sm">
               {board.focusTitle ?? gt("Tack")}

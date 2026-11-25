@@ -50,7 +50,7 @@ export function useBoardPin(boardId: string): [string | null, (taskId: string | 
 }
 
 const CatchSchema = Schema.Literals(PIN_CATCHES);
-function usePinCatch() {
+export function usePinCatch() {
   return useLocalStorage<PinCatch, PinCatch>("t3.board.pin.catch", "theme", CatchSchema);
 }
 

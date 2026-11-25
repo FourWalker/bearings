@@ -124,7 +124,7 @@ export function useTackChat(
         if (result._tag === "Failure") fail(gt("The message could not be sent."));
         return;
       }
-      const modelSelection = boardThreadModelSelection(environmentId, projectId);
+      const modelSelection = boardThreadModelSelection(environmentId, projectId, "board");
       if (modelSelection === null) {
         fail(gt("No model is set up for this project."));
         return;

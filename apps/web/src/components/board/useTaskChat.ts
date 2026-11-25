@@ -127,7 +127,7 @@ export function useTaskChat(props: {
         fail(gt("No workspace of this board can start a thread on this task."));
         return;
       }
-      const modelSelection = boardThreadModelSelection(environmentId, into.projectId);
+      const modelSelection = boardThreadModelSelection(environmentId, into.projectId, "task");
       if (modelSelection === null) {
         fail(gt("No model is set up for this project."));
         return;

@@ -9,7 +9,13 @@ import type {
   ProjectId,
 } from "@t3tools/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { PlusIcon, SquareKanbanIcon, TriangleAlertIcon } from "lucide-react";
+import {
+  PanelRightCloseIcon,
+  PanelRightOpenIcon,
+  PlusIcon,
+  SquareKanbanIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
 import { T, useGT } from "gt-react";
 import { useState } from "react";
 
@@ -76,6 +82,7 @@ import { BoardPanel } from "./BoardPanel";
 import { BoardFileActions } from "./BoardFileActions";
 import { boardAttentionOf, isThreadWaiting } from "./boardAttention.logic";
 import { BoardPinBar, useBoardPin } from "./BoardPinBar";
+import { useBoardPanelOpen } from "./tackSettings";
 import { BoardSettingsButton } from "./BoardSettingsDialog";
 import { BoardGoals } from "./BoardGoals";
 import { BoardTaskView } from "./BoardTaskView";
@@ -424,6 +431,7 @@ function BoardScreen(props: {
   // because opening a task from the board sends it home.
   const [tackAwake, setTackAwake] = useState(false);
   const [pinnedId, setPinnedId] = useBoardPin(board.id);
+  const [panelOpen, setPanelOpen] = useBoardPanelOpen();
   // As in the board app: a master task opens as a page in place of the board; a module or task
   // opens in a modal over whatever is showing. Both are in the URL, so back and shared links work.
   const byId = (id: string | null) => (id === null ? null : (index.byId.get(id) ?? null));
@@ -635,6 +643,24 @@ function BoardScreen(props: {
             boardId={board.id}
             onChanged={props.onChanged}
           />
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost-muted"
+                  size="icon-xs"
+                  aria-pressed={panelOpen}
+                  aria-label={panelOpen ? gt("Hide the side panel") : gt("Show the side panel")}
+                  onClick={() => setPanelOpen(!panelOpen)}
+                />
+              }
+            >
+              {panelOpen ? <PanelRightCloseIcon /> : <PanelRightOpenIcon />}
+            </TooltipTrigger>
+            <TooltipPopup>
+              {panelOpen ? gt("Hide the side panel") : gt("Show the side panel")}
+            </TooltipPopup>
+          </Tooltip>
           <NewTaskButton
             environmentId={props.environmentId}
             boardId={board.id}
@@ -696,67 +722,78 @@ function BoardScreen(props: {
       </header>
       {pinBar}
       <div className="flex min-h-0 flex-1 flex-col @container/board lg:flex-row">
-        <TackDropSurface tasks={board.tasks} className="min-h-0 min-w-0 flex-1 overflow-auto p-4">
-          {props.mode === "register" ? (
-            <BoardRecommendations
-              key={board.id}
-              index={index}
-              registers={board.registers ?? []}
-              filter={props.recommendationFilter}
-              onFilterChange={(recommendationFilter) =>
-                void navigate({
-                  search: (previous) => ({ ...previous, recommendationFilter }),
-                })
-              }
-              onOpen={(task) => openTask(task, "decisions")}
-            />
-          ) : props.mode === "goals" ? (
-            <BoardGoals
-              environmentId={props.environmentId}
-              board={board}
-              index={index}
-              onChanged={props.onChanged}
-              onOpenTask={openTask}
-              onOpenThread={props.onOpenThread}
-            />
-          ) : (
-            <BoardArea
-              index={index}
-              board={board}
-              mode={props.mode}
-              filter={props.filter}
-              serviceName={serviceName}
-              actions={actions}
-            />
-          )}
-        </TackDropSurface>
-        <aside
-          data-board-panel
-          aria-label={gt("Board panel")}
-          // Stacked under the board on a narrow window, it takes at most the lower part and scrolls.
-          className="max-h-[45%] shrink-0 overflow-y-auto border-t bg-card/40 p-4 lg:max-h-none lg:w-80 lg:border-t-0 lg:border-l"
-        >
-          <TackHost
-            active={index.tasks.filter((task) => task.status !== "done").length}
-            blocked={panel.blocked.length}
-            todo={panel.todo.length}
-          />
-          <TackPanelTabs
-            stand={
-              <BoardPanel
-                panel={panel}
-                goals={goalsOf(index, board.goals)}
-                onSeenAll={() => markSeen(panel.finished.map(({ chat }) => chat))}
-                onOpenTask={actions.onOpenTask}
-                onOpenChat={props.onOpenThread}
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+          <TackDropSurface tasks={board.tasks} className="min-h-0 min-w-0 flex-1 overflow-auto p-4">
+            {props.mode === "register" ? (
+              <BoardRecommendations
+                key={board.id}
+                index={index}
+                registers={board.registers ?? []}
+                filter={props.recommendationFilter}
+                onFilterChange={(recommendationFilter) =>
+                  void navigate({
+                    search: (previous) => ({ ...previous, recommendationFilter }),
+                  })
+                }
+                onOpen={(task) => openTask(task, "decisions")}
               />
-            }
-          />
+            ) : props.mode === "goals" ? (
+              <BoardGoals
+                environmentId={props.environmentId}
+                board={board}
+                index={index}
+                onChanged={props.onChanged}
+                onOpenTask={openTask}
+                onOpenThread={props.onOpenThread}
+              />
+            ) : (
+              <BoardArea
+                index={index}
+                board={board}
+                mode={props.mode}
+                filter={props.filter}
+                serviceName={serviceName}
+                actions={actions}
+              />
+            )}
+          </TackDropSurface>
           <TackCorner
+            at="board"
+            panelOpen={panelOpen}
             active={index.tasks.filter((task) => task.status !== "done").length}
             blocked={panel.blocked.length}
           />
-        </aside>
+        </div>
+        {panelOpen ? (
+          <aside
+            data-board-panel
+            aria-label={gt("Board panel")}
+            // Stacked under the board on a narrow window, it takes at most the lower part and scrolls.
+            className="max-h-[45%] shrink-0 overflow-y-auto border-t bg-card/40 p-4 lg:max-h-none lg:w-80 lg:border-t-0 lg:border-l"
+          >
+            <TackHost
+              active={index.tasks.filter((task) => task.status !== "done").length}
+              blocked={panel.blocked.length}
+              todo={panel.todo.length}
+            />
+            <TackPanelTabs
+              stand={
+                <BoardPanel
+                  panel={panel}
+                  goals={goalsOf(index, board.goals)}
+                  onSeenAll={() => markSeen(panel.finished.map(({ chat }) => chat))}
+                  onOpenTask={actions.onOpenTask}
+                  onOpenChat={props.onOpenThread}
+                />
+              }
+            />
+            <TackCorner
+              at="panel"
+              active={index.tasks.filter((task) => task.status !== "done").length}
+              blocked={panel.blocked.length}
+            />
+          </aside>
+        ) : null}
       </div>
       {props.assistantProjectId !== null && tackPlace === "float" ? (
         <BoardAssistant
