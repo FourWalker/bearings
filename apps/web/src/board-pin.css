@@ -306,7 +306,7 @@ html[data-theme-id="plotter"]
     [data-pin-catch="tack"][data-pin-skin="plotter"]
   )[data-pin-moving]
   [data-board-pin-chip] {
-  animation: pin-stamp 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) 1.2s 1 both;
+  animation: pin-stamp 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) 1.2s 1;
 }
 
 @keyframes pin-pen {

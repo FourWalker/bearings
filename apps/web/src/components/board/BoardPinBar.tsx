@@ -19,6 +19,7 @@ import {
   PIN_CATCHES,
   type PinCatch,
   type PinPeekVerb,
+  type PinView,
   type PinWhy,
   lastBoardCallId,
   pinBurstDelayMs,
@@ -143,7 +144,10 @@ export function BoardPinBar(props: {
 }) {
   const gt = useGT();
   const { index, task } = props;
-  const view = pinViewOf(index, task, props.waiting);
+  const real = pinViewOf(index, task, props.waiting);
+  // Dev builds only: localStorage "t3.board.pin.demo" names a state to look at without staging it.
+  const demo = import.meta.env.DEV ? window.localStorage.getItem("t3.board.pin.demo") : null;
+  const view: PinView = demo !== null && demo in TONE ? { ...real, why: demo as PinWhy } : real;
   const [peek, setPeek] = useState(false);
   const [catching, setCatching] = usePinCatch();
   const [look] = useTackLook();
@@ -289,7 +293,11 @@ export function BoardPinBar(props: {
             ) : slot.kind === "task" ? (
               gt("Task in hand: {title}", { title: slot.task.title })
             ) : slot.kind === "done" ? (
-              gt("Every step is ticked")
+              progress.unit === "tasks" ? (
+                gt("Every task is done")
+              ) : (
+                gt("Every step is ticked")
+              )
             ) : (
               gt("No plan yet")
             )}

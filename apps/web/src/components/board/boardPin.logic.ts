@@ -126,16 +126,22 @@ export function pinViewOf(
     below[0];
   const kids = tree.slice(1).filter((other) => index.kidsOf(other.id).length === 0);
   const shown =
-    direct || inHand === undefined
+    direct || (inHand === undefined && (kids.length === 0 || task.steps.total > 0))
       ? own()
-      : {
-          slot: { kind: "task" as const, task: inHand },
-          progress: {
-            done: kids.filter((other) => other.status === "done").length,
-            total: kids.length,
-            unit: "tasks" as const,
-          },
-        };
+      : inHand === undefined
+        ? {
+            // Every task under it is finished and it has no plan of its own.
+            slot: { kind: "done" as const },
+            progress: { done: kids.length, total: kids.length, unit: "tasks" as const },
+          }
+        : {
+            slot: { kind: "task" as const, task: inHand },
+            progress: {
+              done: kids.filter((other) => other.status === "done").length,
+              total: kids.length,
+              unit: "tasks" as const,
+            },
+          };
   return {
     task,
     ...shown,
