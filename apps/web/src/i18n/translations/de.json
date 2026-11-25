@@ -3156,7 +3156,10 @@
     {
       "t": "span",
       "i": 2,
-      "c": [" ", "auf dem Computer, der diese Seite geöffnet hat"]
+      "c": [
+        " ",
+        "auf dem Computer, der diese Seite geöffnet hat"
+      ]
     }
   ],
   "b2d53b4d1d48fbef": [
@@ -3168,7 +3171,10 @@
     {
       "t": "span",
       "i": 2,
-      "c": [" ", "· wer es ausführt, erhält diesen Zugriff"]
+      "c": [
+        " ",
+        "· wer es ausführt, erhält diesen Zugriff"
+      ]
     }
   ],
   "c54cc9c75db9dc58": "Genehmige nur eine Anmeldung, die du gerade selbst gestartet hast.",
@@ -12856,9 +12862,7 @@
   "60374f7b65a7bf64": "Der Thread läuft mit vollem Zugriff auf dem Standardmodell des Projekts.",
   "ed141c6ccb380354": "Ziel starten · {count} Aufgaben",
   "cc7ba0924da5704e": "Kein Arbeitsbereich dieses Boards ist ein Projekt auf diesem Server.",
-  "171fa0866ea73038": "läuft · Thread untätig",
   "0c76ede21d8290b8": "abgeschlossen {when}",
-  "ad3a3e321660caf7": "Pause angefragt",
   "2ca561694eb0463f": "Pausieren",
   "c60e0449c76e7e13": "Fortsetzen angefragt",
   "4cbc7c43dd33c363": "Fortsetzen",
@@ -12869,7 +12873,6 @@
   "74d105e6c88e7a19": "wartet auf {groups}",
   "ead93e36a5f80b6b": "Kein Erledigt-Nachweis erfasst",
   "4998b4dbe06bada0": "Untergeordneter Thread: {title}",
-  "b32ddeb99329c642": "Deine Antwort wurde an den Thread des Ziels gesendet.",
   "01f1b7ea80a6d537": "Deine Antwort",
   "29ea79cb3aeabe1a": "Antworten",
   "1a05f91e360ecd98": "Bevor das Ziel startet · {title}",
@@ -12921,7 +12924,6 @@
   "051a406cdee4040a": "Board",
   "21e36643ad3daebf": "möchte",
   "a481e573b1b27d5e": "Fragt dich",
-  "9d5597632d68d307": "Entscheidung offen",
   "8bc2f4ab417be16c": "Wartet auf Hintergrundarbeit",
   "d2730825cbe056f9": "Kein Chat dazu",
   "4cd3a0ae6907eec5": "Prüfen",
@@ -13029,5 +13031,23 @@
   "adf3e15298731f85": "Tägliche Sternprüfung",
   "90dbdabca156cc2f": "Listet beim ersten Öffnen eines Boards am Tag die Elemente mit Stern auf, damit du Sterne entfernen kannst.",
   "8bbc6f5e88f6baae": "Daran gearbeitet · {step} abgehakt",
-  "98515f1201b25dcc": "+{count} weitere"
+  "98515f1201b25dcc": "+{count} weitere",
+  "7b924f365468bcd7": "Das Ziel konnte nicht geändert werden",
+  "2ece0fd3fc8254b5": "beendet {when}",
+  "8d2bf69694db8871": "Beenden",
+  "3498b25563275907": "Dieses Ziel endgültig beenden? Es kann nicht wieder geöffnet werden. Unfertige Aufgaben bleiben mit ihren Schritten und Übergaben auf dem Board.",
+  "f698102eab47bd0a": "Ziel beenden",
+  "f35bbc6189e3e8e3": "Behalten",
+  "2b8e4b16af2b3f45": "Blocker",
+  "082fa783469e15b4": "Deine Antwort ist festgehalten.",
+  "ccf000a13df7ea94": "Die Seitenleiste zeigt alle Threads",
+  "8f17a306ee474dcb": "Die Seitenleiste zeigt die Threads dieses Boards",
+  "d320d0db4612aea2": "Art der Entscheidung",
+  "025538a612b475ea": "Überspringen",
+  "60a083be384aac69": "Fragt vor jedem Schritt",
+  "7de6e2f42916803d": "Was Tack tun darf",
+  "c79d4520c453d0bb": "Zugriff von Tack auf dem Board",
+  "c053aaa6ed328584": "Tack auf einem Board antwortet und zeigt Aufgaben. Eine Aufgabe anzulegen braucht immer dein Ja, egal was hier eingestellt ist.",
+  "57875ad60f794871": "Zugriff von Tack in einer Aufgabe",
+  "62e3a5fa36da37da": "Tack in einer geöffneten Aufgabe arbeitet daran, wenn der Modus Run ist. Im Modus Ask wird immer vor jedem Schritt gefragt."
 }

@@ -3155,7 +3155,10 @@
     {
       "t": "span",
       "i": 2,
-      "c": [" ", "på datorn som öppnade den här sidan"]
+      "c": [
+        " ",
+        "på datorn som öppnade den här sidan"
+      ]
     }
   ],
   "b2d53b4d1d48fbef": [
@@ -3167,7 +3170,10 @@
     {
       "t": "span",
       "i": 2,
-      "c": [" ", "· den som kör den får den här åtkomsten"]
+      "c": [
+        " ",
+        "· den som kör den får den här åtkomsten"
+      ]
     }
   ],
   "c54cc9c75db9dc58": "Godkänn bara en inloggning som du själv precis har startat.",
@@ -12863,9 +12869,7 @@
   "60374f7b65a7bf64": "Tråden körs med full åtkomst på projektets standardmodell.",
   "ed141c6ccb380354": "Starta mål · {count} uppgifter",
   "cc7ba0924da5704e": "Ingen arbetsyta på den här tavlan är ett projekt på den här servern.",
-  "171fa0866ea73038": "pågår · tråden är inaktiv",
   "0c76ede21d8290b8": "avslutat {when}",
-  "ad3a3e321660caf7": "Paus begärd",
   "2ca561694eb0463f": "Pausa",
   "c60e0449c76e7e13": "Återupptagning begärd",
   "4cbc7c43dd33c363": "Återuppta",
@@ -12876,7 +12880,6 @@
   "74d105e6c88e7a19": "väntar på {groups}",
   "ead93e36a5f80b6b": "Inget bevis på slutförande registrerat",
   "4998b4dbe06bada0": "Underordnad tråd: {title}",
-  "b32ddeb99329c642": "Ditt svar skickades till målets tråd.",
   "01f1b7ea80a6d537": "Ditt svar",
   "29ea79cb3aeabe1a": "Svara",
   "1a05f91e360ecd98": "Innan målet startar · {title}",
@@ -12928,7 +12931,6 @@
   "051a406cdee4040a": "tavla",
   "21e36643ad3daebf": "vill",
   "a481e573b1b27d5e": "Frågar dig",
-  "9d5597632d68d307": "Beslut öppet",
   "8bc2f4ab417be16c": "Väntar på bakgrundsarbete",
   "d2730825cbe056f9": "Ingen chatt på den",
   "4cd3a0ae6907eec5": "Granska",
@@ -13036,5 +13038,23 @@
   "adf3e15298731f85": "Daglig stjärngranskning",
   "90dbdabca156cc2f": "Första gången en tavla öppnas varje dag listas dess stjärnmärkta objekt så att du kan ta bort några stjärnor.",
   "8bbc6f5e88f6baae": "Arbetade på den · bockade av {step}",
-  "98515f1201b25dcc": "+{count} till"
+  "98515f1201b25dcc": "+{count} till",
+  "7b924f365468bcd7": "Målet kunde inte ändras",
+  "2ece0fd3fc8254b5": "avslutat {when}",
+  "8d2bf69694db8871": "Avsluta",
+  "3498b25563275907": "Avsluta det här målet för gott? Det kan inte öppnas igen. Oavslutade uppgifter ligger kvar på tavlan med sina steg och överlämningar.",
+  "f698102eab47bd0a": "Avsluta målet",
+  "f35bbc6189e3e8e3": "Behåll",
+  "2b8e4b16af2b3f45": "Blockerare",
+  "082fa783469e15b4": "Ditt svar är sparat.",
+  "ccf000a13df7ea94": "Sidofältet visar alla trådar",
+  "8f17a306ee474dcb": "Sidofältet visar den här tavlans trådar",
+  "d320d0db4612aea2": "Beslutstyp",
+  "025538a612b475ea": "Hoppa över",
+  "60a083be384aac69": "Frågar före varje steg",
+  "7de6e2f42916803d": "Vad Tack får göra",
+  "c79d4520c453d0bb": "Åtkomst för Tack på tavlan",
+  "c053aaa6ed328584": "Tack på en tavla svarar och visar uppgifter. Att skapa en uppgift kräver alltid ditt ja, oavsett vad som är valt här.",
+  "57875ad60f794871": "Åtkomst för Tack i en uppgift",
+  "62e3a5fa36da37da": "Tack i en öppen uppgift arbetar med den när läget är Run. Läget Ask frågar alltid före varje steg."
 }

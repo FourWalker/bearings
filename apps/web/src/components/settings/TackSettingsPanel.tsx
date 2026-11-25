@@ -7,8 +7,10 @@ import { usePinCatch } from "~/components/board/BoardPinBar";
 import { useStarReviewOff } from "~/components/board/BoardTree";
 import { useTackPlace, useTackShowMode } from "~/components/board/BoardTack";
 import {
+  type TackAccess,
   type TackModelRole,
   useBoardPanelOpen,
+  useTackAccess,
   useTackHome,
   useTackModels,
 } from "~/components/board/tackSettings";
@@ -70,6 +72,11 @@ export function TackSettingsPanel() {
   const [reviewOff, setReviewOff] = useStarReviewOff();
   const [taskSize, setTaskSize] = useTaskTackSize();
   const [models, setModels] = useTackModels();
+  const [access, setAccess] = useTackAccess();
+  const accesses: ReadonlyArray<readonly [TackAccess, string]> = [
+    ["ask", gt("Asks before each step")],
+    ["full", gt("Full access")],
+  ];
   const { environments } = useEnvironments();
   const providersByEnvironment = useEnvironmentProviders();
   const boards = environments.filter(
@@ -165,6 +172,33 @@ export function TackSettingsPanel() {
               ["line", gt("A row at the foot")],
               ["panel", gt("A column beside it")],
             ]}
+          />,
+        )}
+      </SettingsSection>
+
+      <SettingsSection id="tack-access" title={gt("What Tack may do")}>
+        {row(
+          gt("Board Tack access"),
+          gt(
+            "Tack on a board answers and shows tasks. Creating a task always needs your yes, whatever is set here.",
+          ),
+          <Choice
+            label={gt("Board Tack access")}
+            value={access.board}
+            onChange={(board) => setAccess({ ...access, board })}
+            options={accesses}
+          />,
+        )}
+        {row(
+          gt("Task Tack access"),
+          gt(
+            "Tack in an open task works on it when the mode is Run. Ask mode always asks before each step.",
+          ),
+          <Choice
+            label={gt("Task Tack access")}
+            value={access.task}
+            onChange={(task) => setAccess({ ...access, task })}
+            options={accesses}
           />,
         )}
       </SettingsSection>

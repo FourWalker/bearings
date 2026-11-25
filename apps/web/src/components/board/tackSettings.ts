@@ -1,4 +1,9 @@
-import { type EnvironmentId, type ModelSelection, ProviderInstanceId } from "@t3tools/contracts";
+import {
+  type EnvironmentId,
+  type ModelSelection,
+  ProviderInstanceId,
+  type RuntimeMode,
+} from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 
 import { useLocalStorage } from "~/hooks/useLocalStorage";
@@ -23,6 +28,37 @@ export function useBoardPanelOpen() {
 
 /** board: Tack on the board. task: Tack inside an open task or module. */
 export type TackModelRole = "board" | "task";
+
+export const TACK_ACCESS = ["ask", "full"] as const;
+/** How far Tack's thread may act without asking: every step approved, or full access. */
+export type TackAccess = (typeof TACK_ACCESS)[number];
+const AccessSchema = Schema.Struct({
+  board: Schema.Literals(TACK_ACCESS),
+  task: Schema.Literals(TACK_ACCESS),
+});
+const ACCESS_KEY = "t3.board.assistant.access";
+// Tack on the board answers and shows; Tack in a task is there to do the task's work.
+const DEFAULT_ACCESS: typeof AccessSchema.Type = { board: "ask", task: "full" };
+const decodeAccess = Schema.decodeUnknownSync(AccessSchema);
+
+export function useTackAccess() {
+  return useLocalStorage(ACCESS_KEY, DEFAULT_ACCESS, AccessSchema);
+}
+
+export const tackRuntimeMode = (access: TackAccess): RuntimeMode =>
+  access === "full" ? "full-access" : "approval-required";
+
+/** Read at send time, so a changed setting also holds for a Tack thread that already exists. */
+export function readTackRuntimeMode(role: TackModelRole): RuntimeMode {
+  try {
+    const stored = window.localStorage.getItem(ACCESS_KEY);
+    return tackRuntimeMode(
+      (stored === null ? DEFAULT_ACCESS : decodeAccess(JSON.parse(stored)))[role],
+    );
+  } catch {
+    return tackRuntimeMode(DEFAULT_ACCESS[role]);
+  }
+}
 const Pick = Schema.Struct({ instanceId: Schema.String, model: Schema.String });
 const Picks = Schema.Struct({
   board: Schema.optional(Schema.NullOr(Pick)),

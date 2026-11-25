@@ -2,6 +2,7 @@ import type {
   BoardGoal,
   BoardIntent,
   BoardChat,
+  BoardDecision,
   BoardTask,
   BoardTaskDetail,
   BoardView,
@@ -610,15 +611,24 @@ export function boardPickupTargets(
   });
 }
 
-/** Open decisions a task's views count: its own, those raised here and filed higher up, and old
- * decision items. */
+/** Open decisions bearing on a task: its own, and those raised here and filed higher up. */
+export function openDecisionsOf(index: BoardIndex, task: BoardTask): Array<BoardDecision> {
+  return [
+    ...task.decisions.filter((d) => d.status === "open"),
+    ...ancestorsOf(index, task).flatMap((parent) =>
+      parent.decisions.filter((d) => d.status === "open" && d.raisedFrom?.id === task.id),
+    ),
+  ];
+}
+
+/** A blocker or mandatory decision holds its task from done; optional and feature ones don't. */
+export const holdsDone = (decision: Pick<BoardDecision, "type">): boolean =>
+  decision.type === "blocker" || decision.type === "mandatory";
+
+/** What a task's badge counts: the open decisions that hold it, and old decision items. */
 export function openDecisionCount(index: BoardIndex, task: BoardTask): number {
-  const raisedHere = ancestorsOf(index, task).flatMap((parent) =>
-    parent.decisions.filter((d) => d.status === "open" && d.raisedFrom?.id === task.id),
-  );
   return (
-    task.decisions.filter((d) => d.status === "open").length +
-    raisedHere.length +
+    openDecisionsOf(index, task).filter(holdsDone).length +
     task.items.filter((item) => item.kind === "decision" && !item.done).length
   );
 }
@@ -851,7 +861,7 @@ export function goalStandingOf(
   index: Pick<BoardIndex, "byId" | "attention">,
   goal: BoardGoal,
 ): BoardGoalStanding {
-  if (goal.status === "done") return { kind: "done" };
+  if (goal.status === "done" || goal.status === "ended") return { kind: "done" };
   if (goal.status === "paused")
     return {
       kind: "paused",
@@ -962,8 +972,6 @@ export function goalChatText(text: string): string {
   return at < 0 ? "" : text.slice(at + marker.length);
 }
 export const GOAL_GO_PROMPT = "Go: start the Goal now and work through it until it is finished.";
-export const goalPausePrompt = (goalId: string) =>
-  `Pause Goal ${goalId} now: call board_goal {action: "pause", reason: "paused from the board"} and stop.`;
 export const goalResumePrompt = (goalId: string) =>
   `Resume Goal ${goalId}: call board_goal {action: "resume", goalId: "${goalId}"} and carry on until it is finished.`;
 export const goalAnswerPrompt = (

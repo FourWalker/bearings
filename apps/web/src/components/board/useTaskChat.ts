@@ -1,11 +1,5 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import type {
-  BoardTask,
-  EnvironmentId,
-  ProjectId,
-  RuntimeMode,
-  ThreadId,
-} from "@t3tools/contracts";
+import type { BoardTask, EnvironmentId, ThreadId } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { useGT } from "gt-react";
 import { useState } from "react";
@@ -21,8 +15,9 @@ import { useAtomCommand } from "~/state/use-atom-command";
 import { useOrchestrationCommand } from "~/state/use-orchestration-command";
 
 import { type BoardContinueTarget, assistantBubbles, isAssistantBusy } from "./board.logic";
-import { boardThreadModelSelection, boardThreadRunMode } from "./boardThread";
+import { boardThreadModelSelection } from "./boardThread";
 import { tackMood } from "./tackAvatar.logic";
+import { readTackRuntimeMode } from "./tackSettings";
 
 export const TASK_TACK_SIZES = ["line", "panel"] as const;
 export type TaskTackSize = (typeof TASK_TACK_SIZES)[number];
@@ -76,11 +71,6 @@ export function useTaskChat(props: {
     setFailed(true);
     toastManager.add({ type: "error", title: gt("Tack could not send that"), description });
   };
-  // A thread the person already let work keeps that; one that only ever asked gets the project's.
-  const runMode = (projectId: ProjectId, current?: RuntimeMode): RuntimeMode =>
-    current !== undefined && current !== "approval-required"
-      ? current
-      : boardThreadRunMode(environmentId, projectId);
 
   const send = async (
     text: string,
@@ -112,10 +102,7 @@ export function useTaskChat(props: {
           input: {
             threadId: threadRef.threadId,
             message: turn,
-            runtimeMode:
-              as === "ask"
-                ? "approval-required"
-                : runMode(existing.projectId, existing.runtimeMode),
+            runtimeMode: as === "ask" ? "approval-required" : readTackRuntimeMode("task"),
             interactionMode: existing.interactionMode,
             createdAt,
           },
@@ -149,7 +136,7 @@ export function useTaskChat(props: {
         return;
       }
       const modes = {
-        runtimeMode: as === "ask" ? ("approval-required" as const) : runMode(into.projectId),
+        runtimeMode: as === "ask" ? ("approval-required" as const) : readTackRuntimeMode("task"),
         interactionMode: "default" as const,
       };
       const named = options.title ?? message.split("\n", 1)[0]!.slice(0, 80);

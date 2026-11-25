@@ -99,6 +99,7 @@ import { BoardPanel } from "./BoardPanel";
 import { BoardFileActions } from "./BoardFileActions";
 import { boardAttentionOf, isThreadWaiting } from "./boardAttention.logic";
 import { BoardPinBar, useBoardPin } from "./BoardPinBar";
+import { BoardSidebarScope } from "./BoardSidebarScope";
 import { useBoardPanelOpen } from "./tackSettings";
 import { BoardSettingsButton } from "./BoardSettingsDialog";
 import { BoardCreateDialog } from "./BoardCreateDialog";
@@ -733,6 +734,11 @@ function BoardScreen(props: {
             </span>
           ) : null}
           <div className="min-w-0 flex-1" />
+          <BoardSidebarScope
+            environmentId={props.environmentId}
+            boardId={board.id}
+            roots={board.workspaces.map((workspace) => workspace.root)}
+          />
           <BoardSettingsButton
             environmentId={props.environmentId}
             boardId={board.id}

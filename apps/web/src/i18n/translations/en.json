@@ -3155,7 +3155,10 @@
     {
       "t": "span",
       "i": 2,
-      "c": [" ", "on the computer that opened this page"]
+      "c": [
+        " ",
+        "on the computer that opened this page"
+      ]
     }
   ],
   "b2d53b4d1d48fbef": [
@@ -3167,7 +3170,10 @@
     {
       "t": "span",
       "i": 2,
-      "c": [" ", "· whoever runs it gets this access"]
+      "c": [
+        " ",
+        "· whoever runs it gets this access"
+      ]
     }
   ],
   "c54cc9c75db9dc58": "Only approve a sign-in you just started.",
@@ -12865,9 +12871,7 @@
   "60374f7b65a7bf64": "The thread runs with full access on the project's default model.",
   "ed141c6ccb380354": "Start Goal · {count} tasks",
   "cc7ba0924da5704e": "No workspace of this board is a project on this server.",
-  "171fa0866ea73038": "running · thread idle",
   "0c76ede21d8290b8": "finished {when}",
-  "ad3a3e321660caf7": "Pause asked",
   "2ca561694eb0463f": "Pause",
   "c60e0449c76e7e13": "Resume asked",
   "4cbc7c43dd33c363": "Resume",
@@ -12878,7 +12882,6 @@
   "74d105e6c88e7a19": "waits for {groups}",
   "ead93e36a5f80b6b": "No done evidence recorded",
   "4998b4dbe06bada0": "Child thread: {title}",
-  "b32ddeb99329c642": "Your answer was sent to the Goal's thread.",
   "01f1b7ea80a6d537": "Your answer",
   "29ea79cb3aeabe1a": "Answer",
   "1a05f91e360ecd98": "Before the Goal starts · {title}",
@@ -12930,7 +12933,6 @@
   "051a406cdee4040a": "board",
   "21e36643ad3daebf": "wants to",
   "a481e573b1b27d5e": "Asks you",
-  "9d5597632d68d307": "Decision open",
   "8bc2f4ab417be16c": "Waiting on background work",
   "d2730825cbe056f9": "No chat on it",
   "4cd3a0ae6907eec5": "Review",
@@ -13038,5 +13040,23 @@
   "adf3e15298731f85": "Daily star review",
   "90dbdabca156cc2f": "The first time a board opens each day, list its starred items so you can unstar some.",
   "8bbc6f5e88f6baae": "Worked on it · ticked {step}",
-  "98515f1201b25dcc": "+{count} more"
+  "98515f1201b25dcc": "+{count} more",
+  "7b924f365468bcd7": "The Goal could not be changed",
+  "2ece0fd3fc8254b5": "ended {when}",
+  "8d2bf69694db8871": "End",
+  "3498b25563275907": "End this Goal for good? It can't be reopened. Unfinished tasks stay on the board with their steps and handoffs.",
+  "f698102eab47bd0a": "End Goal",
+  "f35bbc6189e3e8e3": "Keep it",
+  "2b8e4b16af2b3f45": "Blocker",
+  "082fa783469e15b4": "Your answer is recorded.",
+  "ccf000a13df7ea94": "The sidebar lists every thread",
+  "8f17a306ee474dcb": "The sidebar lists this board's threads",
+  "d320d0db4612aea2": "Decision type",
+  "025538a612b475ea": "Skip",
+  "60a083be384aac69": "Asks before each step",
+  "7de6e2f42916803d": "What Tack may do",
+  "c79d4520c453d0bb": "Board Tack access",
+  "c053aaa6ed328584": "Tack on a board answers and shows tasks. Creating a task always needs your yes, whatever is set here.",
+  "57875ad60f794871": "Task Tack access",
+  "62e3a5fa36da37da": "Tack in an open task works on it when the mode is Run. Ask mode always asks before each step."
 }

@@ -3155,7 +3155,10 @@
     {
       "t": "span",
       "i": 2,
-      "c": [" ", "no computador que abriu esta página"]
+      "c": [
+        " ",
+        "no computador que abriu esta página"
+      ]
     }
   ],
   "b2d53b4d1d48fbef": [
@@ -3167,7 +3170,10 @@
     {
       "t": "span",
       "i": 2,
-      "c": [" ", "· quem executar recebe este acesso"]
+      "c": [
+        " ",
+        "· quem executar recebe este acesso"
+      ]
     }
   ],
   "c54cc9c75db9dc58": "Aprove apenas um login que você acabou de iniciar.",
@@ -12856,9 +12862,7 @@
   "60374f7b65a7bf64": "A conversa roda com acesso total no modelo padrão do projeto.",
   "ed141c6ccb380354": "Iniciar meta · {count} tarefas",
   "cc7ba0924da5704e": "Nenhum espaço de trabalho deste quadro é um projeto neste servidor.",
-  "171fa0866ea73038": "em andamento · conversa ociosa",
   "0c76ede21d8290b8": "concluída {when}",
-  "ad3a3e321660caf7": "Pausa solicitada",
   "2ca561694eb0463f": "Pausar",
   "c60e0449c76e7e13": "Retomada solicitada",
   "4cbc7c43dd33c363": "Retomar",
@@ -12869,7 +12873,6 @@
   "74d105e6c88e7a19": "aguarda {groups}",
   "ead93e36a5f80b6b": "Nenhuma evidência de conclusão registrada",
   "4998b4dbe06bada0": "Conversa filha: {title}",
-  "b32ddeb99329c642": "Sua resposta foi enviada à conversa da meta.",
   "01f1b7ea80a6d537": "Sua resposta",
   "29ea79cb3aeabe1a": "Responder",
   "1a05f91e360ecd98": "Antes de a meta começar · {title}",
@@ -12921,7 +12924,6 @@
   "051a406cdee4040a": "quadro",
   "21e36643ad3daebf": "quer",
   "a481e573b1b27d5e": "Pergunta a você",
-  "9d5597632d68d307": "Decisão em aberto",
   "8bc2f4ab417be16c": "Aguardando trabalho em segundo plano",
   "d2730825cbe056f9": "Nenhum chat nisso",
   "4cd3a0ae6907eec5": "Revisar",
@@ -13029,5 +13031,23 @@
   "adf3e15298731f85": "Revisão diária de estrelas",
   "90dbdabca156cc2f": "Na primeira vez que um quadro abre a cada dia, lista os itens com estrela para você remover algumas.",
   "8bbc6f5e88f6baae": "Trabalhou nela · marcou {step}",
-  "98515f1201b25dcc": "+{count} mais"
+  "98515f1201b25dcc": "+{count} mais",
+  "7b924f365468bcd7": "Não foi possível alterar a meta",
+  "2ece0fd3fc8254b5": "encerrada {when}",
+  "8d2bf69694db8871": "Encerrar",
+  "3498b25563275907": "Encerrar esta meta de vez? Ela não pode ser reaberta. As tarefas não concluídas ficam no quadro com suas etapas e repasses.",
+  "f698102eab47bd0a": "Encerrar meta",
+  "f35bbc6189e3e8e3": "Manter",
+  "2b8e4b16af2b3f45": "Bloqueador",
+  "082fa783469e15b4": "Sua resposta foi registrada.",
+  "ccf000a13df7ea94": "A barra lateral lista todas as conversas",
+  "8f17a306ee474dcb": "A barra lateral lista as conversas deste quadro",
+  "d320d0db4612aea2": "Tipo de decisão",
+  "025538a612b475ea": "Pular",
+  "60a083be384aac69": "Pergunta antes de cada etapa",
+  "7de6e2f42916803d": "O que o Tack pode fazer",
+  "c79d4520c453d0bb": "Acesso do Tack no quadro",
+  "c053aaa6ed328584": "O Tack no quadro responde e mostra tarefas. Criar uma tarefa sempre precisa do seu sim, seja qual for este ajuste.",
+  "57875ad60f794871": "Acesso do Tack na tarefa",
+  "62e3a5fa36da37da": "O Tack em uma tarefa aberta trabalha nela quando o modo é Run. O modo Ask sempre pergunta antes de cada etapa."
 }

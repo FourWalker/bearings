@@ -2,7 +2,7 @@ import type { ThreadStructure } from "@t3tools/client-runtime/state/shell";
 import type { BoardChat, BoardTask } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 
-import { type BoardIndex, flagsOf, openDecisionCount, subtreeOf } from "./board.logic";
+import { type BoardIndex, flagsOf, openDecisionsOf, subtreeOf } from "./board.logic";
 
 /**
  * Project Board fork: the Pin bar. One task or module per board is kept in view; everything the
@@ -57,6 +57,10 @@ export interface PinView {
   /** Other chats still on the item. */
   readonly others: number;
   readonly blocker: BoardTask | null;
+  /** The task whose open blocker decision stops the pinned item. */
+  readonly decisionOn: BoardTask | null;
+  /** Open mandatory and optional decisions under the pin: they hold nothing up right now. */
+  readonly decisions: number;
 }
 
 const alive = (chat: BoardChat) => chat.live === "working" || chat.live === "idle";
@@ -87,13 +91,22 @@ export function pinViewOf(
     flagsOf(index, task).blockedBy[0] ??
     below.flatMap((other) => flagsOf(index, other).blockedBy)[0] ??
     null;
+  const open = tree
+    .filter((other) => other.status !== "done")
+    .flatMap((other) => openDecisionsOf(index, other).map((decision) => ({ decision, on: other })));
+  const decisionOn = open.find(({ decision }) => decision.type === "blocker")?.on ?? null;
+  const decisions = new Set(
+    open
+      .filter(({ decision }) => decision.type === "mandatory" || decision.type === "optional")
+      .map(({ decision }) => decision.id),
+  ).size;
   const state = ((): { readonly why: PinWhy; readonly chat: BoardChat | null } => {
     const approval = wants("needs", "approval");
     if (approval) return { why: "approval", chat: approval };
     const question = wants("needs", "question");
     if (question) return { why: "question", chat: question };
-    if (tree.some((other) => other.status !== "done" && openDecisionCount(index, other) > 0))
-      return { why: "decision", chat: working[0] ?? recent };
+    // Only a blocker stops the item; the chat still working stays the one the bar follows.
+    if (decisionOn !== null) return { why: "decision", chat: working[0] ?? recent };
     if (blocker !== null) return { why: "blocked", chat: working[0] ?? recent };
     const stopped = wants("stopped");
     if (stopped) return { why: "stopped", chat: stopped };
@@ -148,6 +161,8 @@ export function pinViewOf(
     ...state,
     others: chats.filter((chat) => alive(chat) && chat.sessionId !== state.chat?.sessionId).length,
     blocker,
+    decisionOn,
+    decisions,
   };
 }
 

@@ -115,6 +115,23 @@ it("names the most urgent state, and one notice per thing to deal with", () => {
   ]);
   expect(asked).toMatchObject({ why: "approval", chat: { sessionId: "c1" } });
   expect(pinNoticeKey(asked)).not.toBe(pinNoticeKey(blocked));
+
+  // Only a blocker decision stops the item; the others are a count beside the working chat.
+  const decision = (id: string, type: BoardTask["decisions"][number]["type"]) =>
+    ({ id, title: id, status: "open", level: 3, raisedFrom: null, r: null, type }) as const;
+  const counted = view([], {
+    decisions: [decision("d1", "mandatory"), decision("d2", "optional"), decision("d3", "feature")],
+  });
+  expect(counted).toMatchObject({ why: "working", decisions: 2, decisionOn: null });
+  expect(pinNoticeKey(counted)).toBeNull();
+  expect(
+    view([], { decisions: [decision("d1", "mandatory"), decision("d4", "blocker")] }),
+  ).toMatchObject({
+    why: "decision",
+    chat: { sessionId: "c1" },
+    decisionOn: { id: "spins" },
+    decisions: 1,
+  });
 });
 
 it("moves again after 30 seconds, a minute, then every two minutes", () => {

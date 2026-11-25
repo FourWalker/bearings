@@ -3155,7 +3155,10 @@
     {
       "t": "span",
       "i": 2,
-      "c": [" ", "en el ordenador que abrió esta página"]
+      "c": [
+        " ",
+        "en el ordenador que abrió esta página"
+      ]
     }
   ],
   "b2d53b4d1d48fbef": [
@@ -3167,7 +3170,10 @@
     {
       "t": "span",
       "i": 2,
-      "c": [" ", "· quien lo ejecute obtiene este acceso"]
+      "c": [
+        " ",
+        "· quien lo ejecute obtiene este acceso"
+      ]
     }
   ],
   "c54cc9c75db9dc58": "Aprueba solo un inicio de sesión que acabes de iniciar.",
@@ -12851,9 +12857,7 @@
   "60374f7b65a7bf64": "El hilo se ejecuta con acceso total en el modelo predeterminado del proyecto.",
   "ed141c6ccb380354": "Iniciar objetivo · {count} tareas",
   "cc7ba0924da5704e": "Ningún espacio de trabajo de este tablero es un proyecto en este servidor.",
-  "171fa0866ea73038": "en curso · hilo inactivo",
   "0c76ede21d8290b8": "terminado {when}",
-  "ad3a3e321660caf7": "Pausa solicitada",
   "2ca561694eb0463f": "Pausar",
   "c60e0449c76e7e13": "Reanudación solicitada",
   "4cbc7c43dd33c363": "Reanudar",
@@ -12864,7 +12868,6 @@
   "74d105e6c88e7a19": "espera a {groups}",
   "ead93e36a5f80b6b": "No hay evidencia de finalización registrada",
   "4998b4dbe06bada0": "Hilo hijo: {title}",
-  "b32ddeb99329c642": "Tu respuesta se envió al hilo del objetivo.",
   "01f1b7ea80a6d537": "Tu respuesta",
   "29ea79cb3aeabe1a": "Responder",
   "1a05f91e360ecd98": "Antes de que empiece el objetivo · {title}",
@@ -12916,7 +12919,6 @@
   "051a406cdee4040a": "tablero",
   "21e36643ad3daebf": "quiere",
   "a481e573b1b27d5e": "Te pregunta",
-  "9d5597632d68d307": "Decisión abierta",
   "8bc2f4ab417be16c": "Esperando trabajo en segundo plano",
   "d2730825cbe056f9": "Sin chat",
   "4cd3a0ae6907eec5": "Revisar",
@@ -13024,5 +13026,23 @@
   "adf3e15298731f85": "Revisión diaria de estrellas",
   "90dbdabca156cc2f": "La primera vez que se abre un tablero cada día, lista sus elementos con estrella para que puedas quitar algunas.",
   "8bbc6f5e88f6baae": "Trabajó en ella · marcó {step}",
-  "98515f1201b25dcc": "+{count} más"
+  "98515f1201b25dcc": "+{count} más",
+  "7b924f365468bcd7": "No se pudo cambiar el objetivo",
+  "2ece0fd3fc8254b5": "terminado {when}",
+  "8d2bf69694db8871": "Terminar",
+  "3498b25563275907": "¿Terminar este objetivo definitivamente? No se puede reabrir. Las tareas sin terminar siguen en el tablero con sus pasos y traspasos.",
+  "f698102eab47bd0a": "Terminar objetivo",
+  "f35bbc6189e3e8e3": "Conservar",
+  "2b8e4b16af2b3f45": "Bloqueante",
+  "082fa783469e15b4": "Tu respuesta quedó registrada.",
+  "ccf000a13df7ea94": "La barra lateral muestra todos los hilos",
+  "8f17a306ee474dcb": "La barra lateral muestra los hilos de este tablero",
+  "d320d0db4612aea2": "Tipo de decisión",
+  "025538a612b475ea": "Omitir",
+  "60a083be384aac69": "Pregunta antes de cada paso",
+  "7de6e2f42916803d": "Qué puede hacer Tack",
+  "c79d4520c453d0bb": "Acceso de Tack en el tablero",
+  "c053aaa6ed328584": "Tack en un tablero responde y muestra tareas. Crear una tarea siempre necesita tu sí, sea cual sea este ajuste.",
+  "57875ad60f794871": "Acceso de Tack en una tarea",
+  "62e3a5fa36da37da": "Tack en una tarea abierta trabaja en ella cuando el modo es Run. El modo Ask siempre pregunta antes de cada paso."
 }

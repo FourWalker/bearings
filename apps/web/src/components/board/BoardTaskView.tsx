@@ -59,6 +59,7 @@ import {
   BoardEditProvider,
   ChoiceSelect,
   DecisionAdder,
+  DecisionTypeSelect,
   DecisionTextEditor,
   DocAdder,
   EditableText,
@@ -1293,6 +1294,7 @@ function DecisionCard(
             : gt("L{level} decision", { level: d.level })}
         </Badge>
         <b className="min-w-0 flex-1 text-sm">{d.title}</b>
+        <DecisionTypeSelect decisionId={d.id} type={d.type} />
         <Badge variant={d.status === "decided" ? "success" : "outline"}>
           {d.status === "open"
             ? gt("open")
@@ -1376,7 +1378,7 @@ function DecisionCard(
       ) : d.r !== null && d.status === "decided" ? (
         <ImplementedForm decisionId={d.id} />
       ) : null}
-      <VerdictControls decisionId={d.id} status={d.status} />
+      <VerdictControls decisionId={d.id} status={d.status} type={d.type} />
       <DecisionTextEditor decision={d} />
     </Card>
   );

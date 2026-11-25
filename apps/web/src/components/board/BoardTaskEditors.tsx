@@ -1,4 +1,9 @@
-import type { BoardTask, BoardTaskEdit, EnvironmentId } from "@t3tools/contracts";
+import type {
+  BoardDecisionType,
+  BoardTask,
+  BoardTaskEdit,
+  EnvironmentId,
+} from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { T, useGT } from "gt-react";
 import { PlusIcon, XIcon } from "lucide-react";
@@ -447,6 +452,36 @@ export function LinkAdder(props: {
 }
 
 /** Files a new decision at the level it affects. */
+const useDecisionTypes = (): ReadonlyArray<readonly [BoardDecisionType, string]> => {
+  const gt = useGT();
+  return [
+    ["blocker", gt("Blocker")],
+    ["mandatory", gt("Mandatory")],
+    ["optional", gt("Optional")],
+    ["feature", gt("Feature")],
+  ];
+};
+
+/** What an open decision holds up; the person changes it here. */
+export function DecisionTypeSelect(props: {
+  readonly decisionId: string;
+  readonly type: BoardDecisionType;
+}) {
+  const gt = useGT();
+  const { canEdit, edit } = useBoardEdit();
+  const types = useDecisionTypes();
+  return (
+    <ChoiceSelect
+      value={props.type}
+      label={gt("Decision type")}
+      width="sm"
+      disabled={!canEdit}
+      choices={types}
+      onChange={(type) => void edit({ op: "updateDecision", decisionId: props.decisionId, type })}
+    />
+  );
+}
+
 export function DecisionAdder(props: {
   readonly levels: ReadonlyArray<readonly [1 | 2 | 3, string]>;
   readonly registers: ReadonlyArray<{ readonly id: string; readonly topic: string }>;
@@ -463,6 +498,8 @@ export function DecisionAdder(props: {
   const [register, setRegister] = useState("");
   const [first] = props.levels;
   const [level, setLevel] = useState<string>(String(first?.[0] ?? 3));
+  const [type, setType] = useState<BoardDecisionType>("mandatory");
+  const types = useDecisionTypes();
   if (!canEdit) return null;
   return (
     <form
@@ -480,6 +517,7 @@ export function DecisionAdder(props: {
             .map((r) => r.trim())
             .filter(Boolean),
           level: Number(level) as 1 | 2 | 3,
+          type,
           ...(recommendation
             ? { recommendation: { area, lldCheck, register: register || null } }
             : {}),
@@ -573,6 +611,13 @@ export function DecisionAdder(props: {
           choices={props.levels.map(([l, label]) => [String(l), label] as const)}
           onChange={setLevel}
         />
+        <ChoiceSelect
+          value={type}
+          label={gt("Decision type")}
+          width="sm"
+          choices={types}
+          onChange={setType}
+        />
         <Button type="submit" size="xs" disabled={!title.trim()}>
           <T>Add decision</T>
         </Button>
@@ -585,6 +630,7 @@ export function DecisionAdder(props: {
 export function VerdictControls(props: {
   readonly decisionId: string;
   readonly status: "open" | "decided" | "dropped";
+  readonly type: BoardDecisionType;
 }) {
   const gt = useGT();
   const { canEdit, edit } = useBoardEdit();
@@ -629,6 +675,18 @@ export function VerdictControls(props: {
       <Button type="submit" size="xs" disabled={!verdict.trim()}>
         <T>Decide</T>
       </Button>
+      {props.type === "blocker" ? null : (
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          onClick={() =>
+            void edit({ op: "setDecision", decisionId: props.decisionId, action: "skip", verdict })
+          }
+        >
+          <T>Skip</T>
+        </Button>
+      )}
       <Button
         type="button"
         variant="outline"

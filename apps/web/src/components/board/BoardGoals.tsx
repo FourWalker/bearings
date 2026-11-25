@@ -11,6 +11,7 @@ import {
 import * as Schema from "effect/Schema";
 import { useGT } from "gt-react";
 import { ArrowUpIcon } from "lucide-react";
+import { useAtomValue } from "@effect/atom-react";
 import { useState } from "react";
 
 import ChatMarkdown from "~/components/ChatMarkdown";
@@ -22,7 +23,10 @@ import { toastManager } from "~/components/ui/toast";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { cn, newMessageId, newThreadId } from "~/lib/utils";
+import { boardEnvironment } from "~/state/board";
 import { readThreadShell, useThreadProjection, useThreadShell } from "~/state/entities";
+import { formatEnvironmentQueryError } from "~/state/query";
+import { useAtomCommand } from "~/state/use-atom-command";
 import { threadEnvironment } from "~/state/threads";
 import { useOrchestrationCommand } from "~/state/use-orchestration-command";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
@@ -38,7 +42,6 @@ import {
   goalDiscussPrompt,
   goalLanes,
   goalLaunchPreview,
-  goalPausePrompt,
   goalResumePrompt,
   goalScopeRows,
   goalStartPrompt,
@@ -100,6 +103,67 @@ export function BoardGoals(props: {
     [...board.goals, ...board.finishedGoals].some((goal) =>
       goal.chats.some((chat) => chat.threadId === draft.threadId),
     );
+
+  const canStop = useAtomValue(boardEnvironment.editBoard.permissionAtom(environmentId));
+  const editBoard = useAtomCommand(boardEnvironment.editBoard, { reportFailure: false });
+  const editTask = useAtomCommand(boardEnvironment.editTask, { reportFailure: false });
+  const saved = (
+    result:
+      | { readonly _tag: "Success" }
+      | {
+          readonly _tag: "Failure";
+          readonly cause: Parameters<typeof formatEnvironmentQueryError>[0];
+        },
+  ) => {
+    if (result._tag !== "Failure") {
+      props.onChanged();
+      return true;
+    }
+    toastManager.add({
+      type: "error",
+      title: gt("The Goal could not be changed"),
+      description: formatEnvironmentQueryError(result.cause),
+    });
+    return false;
+  };
+  /** Pause and End are the board's to do: they hold whether or not the thread goes along. */
+  const stop = async (goal: BoardGoal, to: "paused" | "ended") =>
+    saved(
+      await editBoard({
+        environmentId,
+        input: { boardId: board.id, edit: { op: "stopGoal", goalId: goal.id, to } },
+      }),
+    );
+  /** The answer is the person's verdict in the register; the thread is told as well. */
+  const answer = async (
+    goal: BoardGoal,
+    decision: BoardGoal["decisions"][number],
+    text: string,
+  ) => {
+    const taskId = goal.taskIds[0];
+    const recorded =
+      decision.decisionId !== null &&
+      taskId !== undefined &&
+      saved(
+        await editTask({
+          environmentId,
+          input: {
+            boardId: board.id,
+            taskId,
+            edit: {
+              op: "setDecision",
+              decisionId: decision.decisionId,
+              action: "decide",
+              verdict: text,
+            },
+          },
+        }),
+      );
+    // With no turn to wake (paused, or run outside this server) the verdict waits in the register.
+    if (recorded && (goal.status !== "running" || goalThreadOf(goal) === null)) return true;
+    const told = await tell(goal, goalAnswerPrompt(goal.id, decision, text));
+    return recorded || told;
+  };
 
   /** Says something to a Goal's thread, as the person would in that thread. */
   const tell = async (goal: BoardGoal, text: string) =>
@@ -227,6 +291,8 @@ export function BoardGoals(props: {
               standing={goalStandingOf(index, goal)}
               lanes={goalLanes(index, goal)}
               onTell={(text) => tell(goal, text)}
+              onStop={canStop ? (to) => stop(goal, to) : null}
+              onAnswer={(decision, text) => answer(goal, decision, text)}
               onOpenTask={props.onOpenTask}
               onOpenThread={props.onOpenThread}
             />
@@ -246,6 +312,8 @@ export function BoardGoals(props: {
               standing={goalStandingOf(index, goal)}
               lanes={goalLanes(index, goal)}
               onTell={(text) => tell(goal, text)}
+              onStop={null}
+              onAnswer={(decision, text) => answer(goal, decision, text)}
               onOpenTask={props.onOpenTask}
               onOpenThread={props.onOpenThread}
             />
@@ -530,13 +598,17 @@ function GoalCard(props: {
   readonly standing: BoardGoalStanding;
   readonly lanes: ReadonlyArray<BoardGoalLane>;
   readonly onTell: (text: string) => Promise<boolean>;
+  /** Null when the Goal is closed or the person may not change the board. */
+  readonly onStop: ((to: "paused" | "ended") => Promise<boolean>) | null;
+  readonly onAnswer: (decision: BoardGoal["decisions"][number], answer: string) => Promise<boolean>;
   readonly onOpenTask: (task: BoardTask) => void;
   readonly onOpenThread: (chat: BoardChat) => void;
 }) {
   const gt = useGT();
   const standingLabel = useGoalStandingLabel();
-  const { goal, lanes } = props;
-  const [asked, setAsked] = useState<"pause" | "resume" | null>(null);
+  const { goal, lanes, onStop } = props;
+  const [asked, setAsked] = useState<"resume" | null>(null);
+  const [ending, setEnding] = useState(false);
   // The thread's messages are followed only while its chat is open.
   const [chatOpen, setChatOpen] = useState(false);
   const thread = goalThreadOf(goal);
@@ -547,17 +619,16 @@ function GoalCard(props: {
   const settled = goal.decisions.filter((decision) => decision.settled !== "");
   const status =
     standingLabel(props.standing) ??
-    gt("finished {when}", { when: formatRelativeTimeLabel(iso(goal.updatedAt)) });
+    (goal.status === "ended"
+      ? gt("ended {when}", { when: formatRelativeTimeLabel(iso(goal.updatedAt)) })
+      : gt("finished {when}", { when: formatRelativeTimeLabel(iso(goal.updatedAt)) }));
   const wantsYou =
     props.standing.kind === "needs" ||
     props.standing.kind === "stopped" ||
     props.standing.kind === "stalled";
-  const ask = async (kind: "pause" | "resume") => {
-    setAsked(kind);
-    const sent = await props.onTell(
-      kind === "pause" ? goalPausePrompt(goal.id) : goalResumePrompt(goal.id),
-    );
-    if (!sent) setAsked(null);
+  const resume = async () => {
+    setAsked("resume");
+    if (!(await props.onTell(goalResumePrompt(goal.id)))) setAsked(null);
   };
 
   return (
@@ -588,25 +659,43 @@ function GoalCard(props: {
             {gt("Open thread")}
           </Button>
         ) : null}
-        {goal.status === "running" ? (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={asked === "pause" || thread === null}
-            onClick={() => void ask("pause")}
-          >
-            {asked === "pause" ? gt("Pause asked") : gt("Pause")}
+        {goal.status === "running" && onStop !== null ? (
+          <Button size="sm" variant="outline" onClick={() => void onStop("paused")}>
+            {gt("Pause")}
           </Button>
         ) : goal.status === "paused" ? (
           <Button
             size="sm"
             disabled={asked === "resume" || thread === null}
-            onClick={() => void ask("resume")}
+            onClick={() => void resume()}
           >
             {asked === "resume" ? gt("Resume asked") : gt("Resume")}
           </Button>
         ) : null}
+        {onStop !== null ? (
+          <Button size="sm" variant="destructive-outline" onClick={() => setEnding(true)}>
+            {gt("End")}
+          </Button>
+        ) : null}
       </header>
+      {ending && onStop !== null ? (
+        <p
+          data-board-goal-ending
+          className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/40 p-2 text-sm"
+        >
+          <span className="min-w-0 flex-1">
+            {gt(
+              "End this Goal for good? It can't be reopened. Unfinished tasks stay on the board with their steps and handoffs.",
+            )}
+          </span>
+          <Button size="sm" variant="destructive" onClick={() => void onStop("ended")}>
+            {gt("End Goal")}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setEnding(false)}>
+            {gt("Keep it")}
+          </Button>
+        </p>
+      ) : null}
       {chatOpen && threadId !== null ? (
         <GoalChat environmentId={props.environmentId} threadId={threadId} onSend={props.onTell} />
       ) : null}
@@ -614,7 +703,7 @@ function GoalCard(props: {
         <GoalQuestion
           key={decision.id}
           decision={decision}
-          onAnswer={(answer) => props.onTell(goalAnswerPrompt(goal.id, decision, answer))}
+          onAnswer={(answer) => props.onAnswer(decision, answer)}
         />
       ))}
       <div className="flex items-start gap-3 overflow-x-auto pb-1">
@@ -749,12 +838,13 @@ function GoalQuestion(props: {
     >
       <span>
         <span className="me-1 rounded bg-muted px-1 text-3xs">{props.decision.id}</span>
+        {props.decision.blocker ? (
+          <span className="me-1 font-medium text-(--board-attention) text-xs">{gt("Blocker")}</span>
+        ) : null}
         {props.decision.title}
       </span>
       {sent ? (
-        <span className="text-muted-foreground text-xs">
-          {gt("Your answer was sent to the Goal's thread.")}
-        </span>
+        <span className="text-muted-foreground text-xs">{gt("Your answer is recorded.")}</span>
       ) : (
         <span className="flex items-center gap-2">
           <span className="min-w-0 flex-1">

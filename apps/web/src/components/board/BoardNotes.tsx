@@ -16,6 +16,7 @@ import {
   chatStatusOf,
   dotOf,
   flagsOf,
+  holdsDone,
   levelKindOf,
   ownerHolderOf,
   tagsOf,
@@ -590,7 +591,7 @@ export function BoardNote(props: {
   const openItems = task.items.filter((item) => !item.done);
   const mustDo = openItems.filter((item) => item.kind === "mandatory").length;
   const decisions =
-    task.decisions.filter((decision) => decision.status === "open").length +
+    task.decisions.filter((decision) => decision.status === "open" && holdsDone(decision)).length +
     openItems.filter((item) => item.kind === "decision").length;
   const workspaces = [
     ...new Set(task.chats.filter((chat) => chat.live !== "ended").map((c) => c.workspaceLabel)),
