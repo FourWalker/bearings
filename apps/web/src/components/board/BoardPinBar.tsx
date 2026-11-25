@@ -491,6 +491,8 @@ function PinSubTack(props: { readonly bursts: number; readonly still: boolean })
       aria-hidden
       data-subtack={plotter ? "plotter" : "pixel"}
       data-phase={phase}
+      // Between bursts it keeps a small life of its own, unless Tack is set to move less.
+      data-lively={look.motion === "full" && !still ? "" : undefined}
       style={{ "--sub-w": `${width}px`, "--sub-from-scale": plotter ? 0.5 : 0.2 } as CSSProperties}
       onAnimationEnd={(event) => {
         if (event.animationName === "subtack-fly") setPhase("land");

@@ -12969,5 +12969,8 @@
   "aa80f9f10b170280": "Tack en el tablero",
   "e43a4ffd1ee1a8c7": "El modelo que responde cuando hablas con Tack en un tablero. Se usa desde el próximo chat nuevo de Tack.",
   "5193eb2cb08523cf": "Tack en una tarea o módulo abierto",
-  "b2fca72362888d8f": "El modelo para un chat iniciado dentro de una tarea, y para Continuar. Un hilo ya en marcha conserva el suyo."
+  "b2fca72362888d8f": "El modelo para un chat iniciado dentro de una tarea, y para Continuar. Un hilo ya en marcha conserva el suyo.",
+  "53628149fa258575": "Modo",
+  "6503db3a86f45d48": "Preguntar: Tack responde y pregunta antes de cambiar nada. No se envía nada hasta que envíes un mensaje.",
+  "ed05243808dcebb8": "Ejecutar: con tu próximo mensaje el agente trabaja en la tarea. No se envía nada hasta que envíes un mensaje."
 }

@@ -12983,5 +12983,8 @@
   "aa80f9f10b170280": "Tack on the board",
   "e43a4ffd1ee1a8c7": "The model that answers when you talk to Tack on a board. Used from Tack's next new chat.",
   "5193eb2cb08523cf": "Tack in an open task or module",
-  "b2fca72362888d8f": "The model for a chat started from inside a task, and for Continue. A thread already running keeps its own."
+  "b2fca72362888d8f": "The model for a chat started from inside a task, and for Continue. A thread already running keeps its own.",
+  "53628149fa258575": "Mode",
+  "6503db3a86f45d48": "Ask: Tack answers and asks before it changes anything. Nothing is sent until you send a message.",
+  "ed05243808dcebb8": "Run: your next message has the agent work on the task. Nothing is sent until you send a message."
 }

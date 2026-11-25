@@ -149,18 +149,36 @@ export function BoardTaskTack(props: {
         ) : null}
       </>
     );
+  // A setting for the next message, not a button that sends anything.
   const mode = (
-    <ToggleGroup
-      aria-label={gt("What a message does")}
-      value={[chat.how]}
-      onValueChange={(next) => {
-        const value = next[0];
-        if (value === "ask" || value === "run") chat.setHow(value);
-      }}
-    >
-      <Toggle value="ask">{gt("Ask")}</Toggle>
-      <Toggle value="run">{gt("Run")}</Toggle>
-    </ToggleGroup>
+    <span className="flex items-center gap-1.5">
+      <span className="text-muted-foreground text-xs">{gt("Mode")}</span>
+      <ToggleGroup
+        aria-label={gt("What a message does")}
+        value={[chat.how]}
+        onValueChange={(next) => {
+          const value = next[0];
+          if (value === "ask" || value === "run") chat.setHow(value);
+        }}
+      >
+        <Toggle
+          value="ask"
+          title={gt(
+            "Ask: Tack answers and asks before it changes anything. Nothing is sent until you send a message.",
+          )}
+        >
+          {gt("Ask")}
+        </Toggle>
+        <Toggle
+          value="run"
+          title={gt(
+            "Run: your next message has the agent work on the task. Nothing is sent until you send a message.",
+          )}
+        >
+          {gt("Run")}
+        </Toggle>
+      </ToggleGroup>
+    </span>
   );
   const composer = (
     <form

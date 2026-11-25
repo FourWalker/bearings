@@ -12974,5 +12974,8 @@
   "aa80f9f10b170280": "Tack auf dem Board",
   "e43a4ffd1ee1a8c7": "Das Modell, das antwortet, wenn du auf einem Board mit Tack sprichst. Gilt ab Tacks nächstem neuen Chat.",
   "5193eb2cb08523cf": "Tack in einer geöffneten Aufgabe oder einem Modul",
-  "b2fca72362888d8f": "Das Modell für einen Chat, der in einer Aufgabe gestartet wird, und für Fortsetzen. Ein laufender Thread behält seines."
+  "b2fca72362888d8f": "Das Modell für einen Chat, der in einer Aufgabe gestartet wird, und für Fortsetzen. Ein laufender Thread behält seines.",
+  "53628149fa258575": "Modus",
+  "6503db3a86f45d48": "Fragen: Tack antwortet und fragt nach, bevor es etwas ändert. Nichts wird gesendet, bis du eine Nachricht sendest.",
+  "ed05243808dcebb8": "Ausführen: Mit deiner nächsten Nachricht arbeitet der Agent an der Aufgabe. Nichts wird gesendet, bis du eine Nachricht sendest."
 }

@@ -12974,5 +12974,8 @@
   "aa80f9f10b170280": "Tack no quadro",
   "e43a4ffd1ee1a8c7": "O modelo que responde quando você fala com o Tack em um quadro. Usado a partir do próximo chat novo do Tack.",
   "5193eb2cb08523cf": "Tack em uma tarefa ou módulo aberto",
-  "b2fca72362888d8f": "O modelo para um chat iniciado dentro de uma tarefa e para Continuar. Um thread já em execução mantém o seu."
+  "b2fca72362888d8f": "O modelo para um chat iniciado dentro de uma tarefa e para Continuar. Um thread já em execução mantém o seu.",
+  "53628149fa258575": "Modo",
+  "6503db3a86f45d48": "Perguntar: o Tack responde e pergunta antes de alterar qualquer coisa. Nada é enviado até você enviar uma mensagem.",
+  "ed05243808dcebb8": "Executar: sua próxima mensagem faz o agente trabalhar na tarefa. Nada é enviado até você enviar uma mensagem."
 }

@@ -12981,5 +12981,8 @@
   "aa80f9f10b170280": "Tack på tavlan",
   "e43a4ffd1ee1a8c7": "Modellen som svarar när du pratar med Tack på en tavla. Används från Tacks nästa nya chatt.",
   "5193eb2cb08523cf": "Tack i en öppen uppgift eller modul",
-  "b2fca72362888d8f": "Modellen för en chatt som startas inifrån en uppgift, och för Fortsätt. En tråd som redan körs behåller sin."
+  "b2fca72362888d8f": "Modellen för en chatt som startas inifrån en uppgift, och för Fortsätt. En tråd som redan körs behåller sin.",
+  "53628149fa258575": "Läge",
+  "6503db3a86f45d48": "Fråga: Tack svarar och frågar innan det ändrar något. Inget skickas förrän du skickar ett meddelande.",
+  "ed05243808dcebb8": "Kör: ditt nästa meddelande låter agenten arbeta med uppgiften. Inget skickas förrän du skickar ett meddelande."
 }

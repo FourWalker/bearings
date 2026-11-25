@@ -207,12 +207,14 @@ export function BoardTaskView(props: BoardTaskViewProps) {
                 </Tabs.Tab>
               ))}
             </Tabs.List>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4 wrap-anywhere">
               {tab === "overview" ? (
                 body("overview")
               ) : (
-                <div className="grid gap-4 @3xl/task:grid-cols-[minmax(0,1fr)_18rem]">
-                  <div className="grid min-w-0 content-start gap-4">{body(tab)}</div>
+                <div className="grid grid-cols-[minmax(0,1fr)] gap-4 @3xl/task:grid-cols-[minmax(0,1fr)_18rem]">
+                  <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-4">
+                    {body(tab)}
+                  </div>
                   <SideColumn {...props} detail={data} onTab={setTab} />
                 </div>
               )}
@@ -1476,7 +1478,7 @@ function SideColumn(
   const last = task.lastAction;
   const flags = flagsOf(index, task);
   return (
-    <aside className="grid content-start gap-3">
+    <aside className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3">
       <Card title={gt("Last action")}>
         {last === null ? (
           <Muted>

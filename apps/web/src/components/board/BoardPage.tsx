@@ -576,7 +576,10 @@ function BoardScreen(props: {
         if (!open) closeModal();
       }}
     >
-      <DialogPopup showCloseButton={false} className="h-[90dvh] w-[min(96vw,72rem)] sm:max-w-none">
+      <DialogPopup
+        showCloseButton={false}
+        className="h-[90dvh] max-h-[96dvh] min-h-96 w-[min(96vw,72rem)] min-w-80 max-w-[98vw] resize overflow-hidden sm:max-w-[98vw]"
+      >
         <DialogTitle className="sr-only">{modalTask?.title ?? ""}</DialogTitle>
         <div className="@container/task h-full min-h-0 overflow-hidden">
           {modalTask !== null ? (

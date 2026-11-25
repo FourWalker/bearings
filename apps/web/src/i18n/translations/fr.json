@@ -12974,5 +12974,8 @@
   "aa80f9f10b170280": "Tack sur le tableau",
   "e43a4ffd1ee1a8c7": "Le modèle qui répond quand vous parlez à Tack sur un tableau. Utilisé dès le prochain nouveau chat de Tack.",
   "5193eb2cb08523cf": "Tack dans une tâche ou un module ouvert",
-  "b2fca72362888d8f": "Le modèle d'un chat lancé depuis une tâche, et de Continuer. Un fil déjà en cours garde le sien."
+  "b2fca72362888d8f": "Le modèle d'un chat lancé depuis une tâche, et de Continuer. Un fil déjà en cours garde le sien.",
+  "53628149fa258575": "Mode",
+  "6503db3a86f45d48": "Demander : Tack répond et demande avant de modifier quoi que ce soit. Rien n'est envoyé tant que vous n'envoyez pas de message.",
+  "ed05243808dcebb8": "Exécuter : votre prochain message fait travailler l'agent sur la tâche. Rien n'est envoyé tant que vous n'envoyez pas de message."
 }

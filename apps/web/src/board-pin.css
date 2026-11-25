@@ -625,6 +625,56 @@ html:not([data-theme-id="plotter"])
   animation: subtack-hop 1.8s ease-in-out 1;
 }
 
+/* Between bursts: a hop and a wing flick every few seconds, still for most of each cycle. */
+[data-subtack="plotter"][data-phase="land"][data-lively] [data-part="wing"] {
+  animation:
+    subtack-flap 1.8s ease-in-out 1,
+    subtack-idle-wing 3.6s ease-in-out 1.8s infinite;
+  animation-play-state: var(--visible-animation-state, running);
+}
+
+[data-subtack="plotter"][data-phase="land"][data-lively] [data-subtack-walk] {
+  animation:
+    subtack-hop 1.8s ease-in-out 1,
+    subtack-idle-hop 3.6s ease-in-out 1.8s infinite;
+}
+
+[data-subtack="pixel"][data-phase="land"][data-lively] [data-subtack-jump] {
+  animation:
+    subtack-stomp 1.5s linear 2s 1 both,
+    subtack-idle-hop 3.6s ease-in-out 3.6s infinite;
+}
+
+@keyframes subtack-idle-wing {
+  0%,
+  22%,
+  100% {
+    rotate: 0deg;
+  }
+  6%,
+  16% {
+    rotate: -42deg;
+  }
+  11% {
+    rotate: 6deg;
+  }
+}
+
+@keyframes subtack-idle-hop {
+  0%,
+  22%,
+  100% {
+    translate: 0 0;
+  }
+  6%,
+  16% {
+    translate: 0 -6px;
+  }
+  11% {
+    translate: 0 0;
+  }
+}
+
 @keyframes subtack-flap-soft {
   0%,
   100% {
