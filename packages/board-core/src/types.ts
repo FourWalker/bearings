@@ -133,6 +133,8 @@ export interface Task {
   origin?: { id: string; title: string }[] | undefined;
   decisions?: Decision[] | undefined;
   docs?: TaskDoc[] | undefined;
+  /** Outputs the person removed: a thread touching the file again does not list it again. */
+  outputsDropped?: string[] | undefined;
   /** Level 1 only: a feature (has a master plan) or a service backlog. */
   kind?: "feature" | "backlog" | undefined;
   mainService?: string | null | undefined;

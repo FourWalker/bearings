@@ -117,6 +117,12 @@ const RESUME_HANDOFF_CHARS = 3000;
 const SEARCH_HITS = 5;
 /** How many changed files a task keeps as done evidence. */
 const TASK_FILES = 200;
+/** A task's documents kind for what its threads produced; listed with no word from the model. */
+export const OUTPUT_KIND = "Output";
+const TASK_OUTPUTS = 20;
+const OUTPUT_FILE = /\.(?:mdx?|docx?|pdf|xlsx?|csv|pptx?|html?|txt|rtf|odt)$/i;
+const ANSWER_LINK = /\[([^\]\n]{1,120})\]\((https?:\/\/[^\s)]+)\)/g;
+const ANSWER_LINKS = 3;
 
 const reply = (text: string, toast?: string): BoardReply => (toast ? { text, toast } : { text });
 const str = (v: unknown, fallback = ""): string =>
@@ -430,18 +436,49 @@ export class BoardChat {
     await this.save({ status: busy ? "working" : "idle", lastAnswer: clip(answer, 800) }).catch(
       () => {},
     );
-    if (this.board && this.sess.taskId && !this.lastActionSetThisTurn && summary) {
-      const t = await this.loadTask(this.sess.taskId);
-      if (t) {
-        t.lastAction = {
-          text: summary,
-          sessionId: this.sess.sessionId,
-          workspaceLabel: this.sess.workspaceLabel,
-          at: this.now(),
-        };
-        await this.saveTask(t).catch(() => {});
-      }
-    }
+    if (!this.board || !this.sess.taskId) return;
+    // A document the answer links to (an artifact, a shared doc) is something the task produced.
+    const links = [...answer.matchAll(ANSWER_LINK)]
+      .slice(0, ANSWER_LINKS)
+      .map((match) => ({ ref: match[2] ?? "", title: match[1] ?? "" }));
+    const setsAction = !this.lastActionSetThisTurn && !!summary;
+    if (!setsAction && links.length === 0) return;
+    const t = await this.loadTask(this.sess.taskId);
+    if (!t) return;
+    const listed = t.status !== "done" && this.addOutputs(t, links);
+    if (!setsAction && !listed) return;
+    if (setsAction)
+      t.lastAction = {
+        text: summary,
+        sessionId: this.sess.sessionId,
+        workspaceLabel: this.sess.workspaceLabel,
+        at: this.now(),
+      };
+    await this.saveTask(t).catch(() => {});
+  }
+
+  /** Lists what a thread produced among the task's documents; true when anything was new. */
+  private addOutputs(t: Task, found: ReadonlyArray<{ ref: string; title: string }>): boolean {
+    const known = new Set([...(t.docs ?? []).map((doc) => doc.ref), ...(t.outputsDropped ?? [])]);
+    const fresh = found.filter((output) => output.ref && !known.has(output.ref));
+    if (fresh.length === 0) return false;
+    const docs = [
+      ...(t.docs ?? []),
+      ...fresh.map((output, i) => ({
+        id: `${this.newId("doc-")}${i}`,
+        kind: OUTPUT_KIND,
+        title: output.title.trim() || base(output.ref),
+        ref: output.ref,
+        note: "",
+        at: this.now(),
+        by: this.sess?.sessionId,
+      })),
+    ];
+    // The oldest listed outputs make room; documents a person or a tool mapped always stay.
+    const extra = docs.filter((doc) => doc.kind === OUTPUT_KIND).length - TASK_OUTPUTS;
+    let dropped = 0;
+    t.docs = docs.filter((doc) => doc.kind !== OUTPUT_KIND || dropped++ >= extra);
+    return true;
   }
 
   /** What the host sees the chat doing now, when that differs from the last turn event. */
@@ -537,6 +574,10 @@ export class BoardChat {
     const had = t.files ?? [];
     if (paths.every((path) => had.includes(path))) return;
     t.files = [...new Set([...paths, ...had])].slice(0, TASK_FILES);
+    this.addOutputs(
+      t,
+      paths.filter((path) => OUTPUT_FILE.test(path)).map((ref) => ({ ref, title: base(ref) })),
+    );
     await this.saveTask(t);
   }
 

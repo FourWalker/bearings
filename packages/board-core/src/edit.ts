@@ -745,6 +745,10 @@ export async function editTask(
     case "removeDoc":
       if (!(task.docs ?? []).some((d) => d.id === edit.docId))
         throw new BoardEditError("No such document on this task.");
+      // A removed output stays off the list when its file is touched again.
+      for (const doc of task.docs ?? [])
+        if (doc.id === edit.docId && doc.kind === "Output")
+          task.outputsDropped = [doc.ref, ...(task.outputsDropped ?? [])].slice(0, 50);
       task.docs = (task.docs ?? []).filter((d) => d.id !== edit.docId);
       await store.saveTask(boardId, task);
       return { message: "Document removed." };

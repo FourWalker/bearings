@@ -6,6 +6,7 @@ import * as NodePath from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "@effect/vitest";
 
 import { BoardChat } from "./chat.ts";
+import { editTask } from "./edit.ts";
 import { type BoardGit, noGit } from "./io.ts";
 import { nodeIO } from "./nodeIO.ts";
 import { nextStep, tickStep } from "./plan.ts";
@@ -183,6 +184,38 @@ describe("BoardChat", () => {
     await off.linkTask({ decline: true });
     await off.createTask({ title: "Flaky upload test", parentId: "retries" });
     expect(off.sess?.taskId).toBeNull();
+  });
+
+  it("lists the documents a task's thread wrote or linked as its outputs, once", async () => {
+    const store = await seedBoard();
+    const chat = await openChat(store, "t1", ws);
+    await chat.turnStart("Write the runbook");
+    await chat.linkTask({ newTaskTitle: "Runbook" });
+    await chat.filesChanged(["docs/runbook.md", "api/retry.ts"]);
+    await chat.turnComplete(
+      "[Manual Test Runbook](https://claude.ai/artifact/abc) is ready.\n\nSee also plain https://example.com.",
+    );
+    const outputs = async () =>
+      ((await store.loadTask("nefx", "runbook")) as Task).docs?.map((doc) => [doc.kind, doc.title]);
+    expect(await outputs()).toEqual([
+      ["Output", "runbook.md"],
+      ["Output", "Manual Test Runbook"],
+    ]);
+    // Touched or linked again, it is not listed twice; removed by the person, it stays off.
+    const task = (await store.loadTask("nefx", "runbook")) as Task;
+    await editTask(
+      store,
+      "nefx",
+      "runbook",
+      { op: "removeDoc", docId: task.docs![0]!.id },
+      { by: "me" },
+    );
+    await chat.filesChanged(["docs/runbook.md", "docs/notes.txt"]);
+    await chat.turnComplete("[Manual Test Runbook](https://claude.ai/artifact/abc) again.");
+    expect(await outputs()).toEqual([
+      ["Output", "Manual Test Runbook"],
+      ["Output", "notes.txt"],
+    ]);
   });
 
   it("finishes a step and its living handoff in one call, and a delegated subtask ticks its parent step", async () => {
