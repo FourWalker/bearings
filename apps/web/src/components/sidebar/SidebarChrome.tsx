@@ -234,6 +234,7 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   const isOnUtilityPage = useLocation({
     select: (location) => isSidebarUtilityPage(location.pathname),
   });
+  const isOnBoard = useLocation({ select: (location) => location.pathname === "/board" });
   const pullRequestsSupported = usePullRequestsSupported();
   const issuesSupported = useIssuesSupported();
   const closeMobileSidebar = () => {
@@ -280,7 +281,9 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
             </span>
           </SidebarMenuButton>
         </SidebarMenuItem>
-      ) : (
+      ) : null}
+      {/* Project Board fork: the board is a place to work from, so it keeps the utility buttons. */}
+      {isOnUtilityPage && !isOnBoard ? null : (
         <>
           <SidebarUtilityItem
             icon={<SettingsIcon />}

@@ -24,6 +24,7 @@ export function isSidebarUtilityPage(pathname: string) {
 const SHELL_LESS_PATHS = new Set(["/pair", "/connect", "/connect-agent", GUEST_PAGE_PATH]);
 
 let mainAppHref: string | null = null;
+let boardHref: string | null = null;
 let appModalReturnHref: string | null = null;
 let appModalReturnHistoryIndex: number | null = null;
 let appModalReturnThreadTarget: ThreadRouteTarget | null = null;
@@ -44,6 +45,7 @@ export function startMainAppLocationTracking(router: AnyRouter): () => void {
       router.state.matches.at(-1)?.params ?? {},
     );
     if (!isSidebarUtilityPage(pathname)) mainAppHref = href;
+    if (pathname === "/board") boardHref = href;
   };
   record();
   return router.subscribe("onResolved", record);
@@ -57,6 +59,12 @@ export function getAppModalReturnThreadTarget() {
 export function useNavigateToMainApp() {
   const navigate = useNavigate();
   return () => navigate({ href: mainAppHref ?? "/" });
+}
+
+/** Project Board fork: back to the board as it was last shown, with its board, task and view. */
+export function useNavigateToBoard() {
+  const navigate = useNavigate();
+  return () => navigate({ href: boardHref ?? "/board" });
 }
 
 /** Leaves Settings or Usage for the page that opened it. */

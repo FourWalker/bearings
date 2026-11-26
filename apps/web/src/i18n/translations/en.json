@@ -1784,6 +1784,8 @@
   "3a163697598a2390": "Connect an environment",
   "181677cda4d3fd0a": "No connected environment can add a project",
   "3a0bf3d17f31584e": "New thread in {project}",
+  "ee5bd0206ed3ba8a": "Back to the board",
+  "ba4f61d54be0e36c": "Back to the board",
   "4b4b64cc95acb8da": "New thread in...",
   "3f581e98c86df72a": "New thread without a project",
   "e510d9a7b684fbfe": "Triage an issue",
@@ -3155,10 +3157,7 @@
     {
       "t": "span",
       "i": 2,
-      "c": [
-        " ",
-        "on the computer that opened this page"
-      ]
+      "c": [" ", "on the computer that opened this page"]
     }
   ],
   "b2d53b4d1d48fbef": [
@@ -3170,10 +3169,7 @@
     {
       "t": "span",
       "i": 2,
-      "c": [
-        " ",
-        "· whoever runs it gets this access"
-      ]
+      "c": [" ", "· whoever runs it gets this access"]
     }
   ],
   "c54cc9c75db9dc58": "Only approve a sign-in you just started.",

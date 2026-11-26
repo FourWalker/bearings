@@ -1783,6 +1783,8 @@
   "3a163697598a2390": "Umgebung verbinden",
   "181677cda4d3fd0a": "Keine verbundene Umgebung kann ein Projekt hinzufügen",
   "3a0bf3d17f31584e": "Neuer Thread in {project}",
+  "ee5bd0206ed3ba8a": "Zurück zum Board",
+  "ba4f61d54be0e36c": "Zurück zum Board",
   "4b4b64cc95acb8da": "Neuer Thread in...",
   "3f581e98c86df72a": "Neuer Thread ohne Projekt",
   "e510d9a7b684fbfe": "Ein Issue einordnen",
@@ -3156,10 +3158,7 @@
     {
       "t": "span",
       "i": 2,
-      "c": [
-        " ",
-        "auf dem Computer, der diese Seite geöffnet hat"
-      ]
+      "c": [" ", "auf dem Computer, der diese Seite geöffnet hat"]
     }
   ],
   "b2d53b4d1d48fbef": [
@@ -3171,10 +3170,7 @@
     {
       "t": "span",
       "i": 2,
-      "c": [
-        " ",
-        "· wer es ausführt, erhält diesen Zugriff"
-      ]
+      "c": [" ", "· wer es ausführt, erhält diesen Zugriff"]
     }
   ],
   "c54cc9c75db9dc58": "Genehmige nur eine Anmeldung, die du gerade selbst gestartet hast.",

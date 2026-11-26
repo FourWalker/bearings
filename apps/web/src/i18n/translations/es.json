@@ -1784,6 +1784,8 @@
   "3a163697598a2390": "Conectar un entorno",
   "181677cda4d3fd0a": "Ningún entorno conectado puede añadir un proyecto",
   "3a0bf3d17f31584e": "Nuevo hilo en {project}",
+  "ee5bd0206ed3ba8a": "Volver al tablero",
+  "ba4f61d54be0e36c": "Volver al tablero",
   "4b4b64cc95acb8da": "Nuevo hilo en...",
   "3f581e98c86df72a": "Nuevo hilo sin proyecto",
   "e510d9a7b684fbfe": "Analizar un problema",
@@ -3155,10 +3157,7 @@
     {
       "t": "span",
       "i": 2,
-      "c": [
-        " ",
-        "en el ordenador que abrió esta página"
-      ]
+      "c": [" ", "en el ordenador que abrió esta página"]
     }
   ],
   "b2d53b4d1d48fbef": [
@@ -3170,10 +3169,7 @@
     {
       "t": "span",
       "i": 2,
-      "c": [
-        " ",
-        "· quien lo ejecute obtiene este acceso"
-      ]
+      "c": [" ", "· quien lo ejecute obtiene este acceso"]
     }
   ],
   "c54cc9c75db9dc58": "Aprueba solo un inicio de sesión que acabes de iniciar.",
