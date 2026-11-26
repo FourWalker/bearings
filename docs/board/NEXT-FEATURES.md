@@ -466,7 +466,7 @@ so that is close to every turn (roughly 2,500–3,000 tokens, estimated).
 | Planning: master plan → docs → plan → tasks    | sent up front only to Level 1–2 tasks, or when the task has no plan     |
 
 - Rules stated in both the tool rules and Board Mode are kept once.
-- Changes to this text are model-facing: run the evals in `evals/` and sync the Claude mod's copy.
+- Changes to this text are model-facing: run the evals in `evals/`.
 
 ### 9.4 Goal executor
 
@@ -511,4 +511,3 @@ so that is close to every turn (roughly 2,500–3,000 tokens, estimated).
 - Can a thread already be limited to a named set of tools, or does the allowlist need new code (§4.3)?
 - Is a provider turn fast enough for a spoken conversation, or is a direct model call needed (§4.3)?
 - Parallel cost limits: max parallel agents per plan/subscription tier?
-- Standalone Claude mod: does it take the Task profile too, or keep the full Board Mode block?

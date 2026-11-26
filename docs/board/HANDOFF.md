@@ -15,6 +15,7 @@ Read it with `node apps/server/src/bin.ts board find --board t3-board "<words>"`
 the detail; update the board task after it.
 
 **Built and committed** (tests, typecheck, lint pass per package; PROGRESS says what ran live).
+
 - Core: T3 profiles, ranked search, done evidence, Goal Mode inline (`4746e7a` to `2f5e9f5`).
 - Live-run fixes: checks and files recorded in the same turn, small Goal gaps (`9c403c0`, `90c5189`).
 - A paused Goal releases its modules; new items need a parent (`72b8081`).
@@ -205,6 +206,7 @@ wasteful moves are measured in [TOKEN-BENCHMARK.md](TOKEN-BENCHMARK.md) (script:
 `.t3/token-benchmark/usage.py`). NEFX side: `C:\nfx\NEFX Tasks handover\DEMO-TEST-HANDOFF.md`.
 
 **Not built.**
+
 - Goals screen: no model picker (the Goal thread uses the project's default model; start from the
   CLI to choose one, see Commands). Resume is a message to the thread. Launched from the UI on the
   Dev Board (Discuss first, an answer, Start now, finished); resume and an Ask-mode answer on a
@@ -225,13 +227,12 @@ wasteful moves are measured in [TOKEN-BENCHMARK.md](TOKEN-BENCHMARK.md) (script:
 - Voice beyond the composer microphone. The native mobile app has no board at all. Other names cannot be listed or removed in the web board.
 
 **Not verified.** Model-behaviour evals: the repo has no `.env` with API keys, and `evals/` has no
-board cases, so none ran. The Claude mod's copy of board-core is not synced
-(`tools/sync-board-core.mjs` lives in the mod's repo, which is not on this machine's
-`C:\Claude-Works`). Parallel Goal groups live. `WorktreeMcpService.test.ts` has one failing Windows
+board cases, so none ran. Parallel Goal groups live. `WorktreeMcpService.test.ts` has one failing Windows
 path test, not confirmed as pre-existing. `node scripts/i18n-check.ts` cannot run `gt generate` on
 Windows; new keys were taken from `vp run i18n:generate` output and added to all ten catalogs by hand.
 
 **Decisions and why.**
+
 - Goal Mode replaces Dispatch, Batch and Orchestra; a Goal points at tasks and keeps no status copy.
 - A Goal is driven only by its thread. The Goals screen therefore starts that thread and talks to
   it, and never writes the Goal file the executor is also writing.
@@ -277,6 +278,7 @@ model-facing text (no API keys here), the 66 older board strings missing from th
 Pin bar's swell and peek never looked at live.
 
 **Commands and traps (Windows).**
+
 - `~/.t3/userdata` is the owner's real T3 data. Always pass `--home-dir` / `--base-dir <clone>\.t3`.
 - Dev on the Dev Board copy: `T3_BOARD_HOME=<clone>/.t3/claude-board node_modules/.bin/vp.cmd run dev
   --home-dir <clone>/.t3`. Without `T3_BOARD_HOME` the dev server reads the real boards in

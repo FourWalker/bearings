@@ -3,8 +3,7 @@ import * as Schema from "effect/Schema";
 import { NonNegativeInt, ProjectId, ThreadId } from "./baseSchemas.ts";
 
 /**
- * The Project Board (`~/.claude-board`), shared with the Claude Code mod and the board app: its
- * boards, their tasks and the chats on them. Ids are the board's own slugs and session ids.
+ * The Project Board (`~/.claude-board`): its boards, their tasks and the chats on them. Ids are the board's own slugs and session ids.
  */
 export const BoardSummary = Schema.Struct({
   id: Schema.String,
@@ -13,7 +12,7 @@ export const BoardSummary = Schema.Struct({
 });
 export type BoardSummary = typeof BoardSummary.Type;
 
-/** `offline`: a Claude Code chat whose window stopped reporting. T3 threads are never offline. */
+/** `offline`: a chat from the old Claude Code mod that stopped reporting. T3 threads are never offline. */
 export const BoardChatLive = Schema.Literals(["working", "idle", "ended", "offline"]);
 export type BoardChatLive = typeof BoardChatLive.Type;
 
@@ -24,7 +23,7 @@ export const BoardChat = Schema.Struct({
   workspaceLabel: Schema.String,
   taskId: Schema.NullOr(Schema.String),
   updatedAt: Schema.Number,
-  /** A thread on this server to open; null for Claude Code chats and threads it doesn't hold. */
+  /** A thread on this server to open; null for the old mod's chats and threads it doesn't hold. */
   threadId: Schema.NullOr(ThreadId),
   provider: Schema.NullOr(Schema.String),
   /** When the chat's current (or last) turn started; 0 before its first. */

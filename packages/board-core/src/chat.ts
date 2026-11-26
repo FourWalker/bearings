@@ -1,8 +1,7 @@
 // @effect-diagnostics globalDate:off globalRandom:off
-/* oxlint-disable t3code/no-em-dash-copy -- Board protocol and tool text shared verbatim with the Claude Code mod; "## Phase A — name" is the plan.md format. */
+/* oxlint-disable t3code/no-em-dash-copy -- "## Phase A — name" is the plan.md format. */
 /**
- * One chat on the board (a Claude Code session or a T3 thread): its record, its context, its tools.
- * Rules and texts must match the Claude Code mod's `hooks/register.ts`, which shares the files.
+ * One T3 thread on the board: its record, its context, its tools.
  *
  * @module board-core/chat
  */
@@ -48,8 +47,6 @@ import {
   tickStep,
 } from "./plan.ts";
 import {
-  type BoardHost,
-  boardModeProtocol,
   resumeHint,
   type T3OnDemandRule,
   t3AssistantRules,
@@ -57,7 +54,6 @@ import {
   t3GoalWorkerRules,
   t3OnDemandRule,
   t3Rules,
-  toolRules,
 } from "./protocol.ts";
 import {
   BoardStore,
@@ -156,7 +152,6 @@ const checkpointMarker = (ref: string | undefined, runId: string | undefined): s
 export class BoardChat {
   readonly store: BoardStore;
   readonly git: BoardGit;
-  readonly host: BoardHost;
 
   board: Board | null = null;
   sess: Session | null = null;
@@ -186,10 +181,9 @@ export class BoardChat {
   private claimOnLink = true;
   private projectRoot: string | undefined;
 
-  constructor(store: BoardStore, git: BoardGit, host: BoardHost) {
+  constructor(store: BoardStore, git: BoardGit) {
     this.store = store;
     this.git = git;
-    this.host = host;
   }
 
   private now(): number {
@@ -430,14 +424,7 @@ export class BoardChat {
     const isNotice = /^<[a-z][\w-]*[\s>]/i.test(t);
     if (!isNotice && t) this.reported = true;
     // Only the first prompt is matched, and only against whole titles and aliases.
-    if (
-      this.host === "t3" &&
-      this.board &&
-      !this.sess.taskId &&
-      !isNotice &&
-      t &&
-      !this.sess.lastPrompt
-    ) {
+    if (this.board && !this.sess.taskId && !isNotice && t && !this.sess.lastPrompt) {
       const named = namedTask(await this.listTasks(), t);
       if (named) this.related = `Possibly related: ${named.id} "${named.title}".`;
     }
@@ -545,7 +532,7 @@ export class BoardChat {
     await this.linkTask({ taskId: t.id }).finally(() => (this.claimOnLink = true));
     if (this.sess?.taskId !== t.id) return;
     if (made) await this.save({ autoLinked: true });
-    const chat = this.host === "t3" ? "thread" : "chat";
+    const chat = "thread";
     this.adoptedNote = `Board: this ${chat} is now linked to ${t.id} "${t.title}", because it ${why}. Its plan and rules come with the next turn (board_read has them now). If the person wants it kept off the item, call board_link with decline: true.`;
   }
 
@@ -638,7 +625,7 @@ export class BoardChat {
     await this.rebuildContext();
     if (!had.length || this.warnedServices.has(svc.id)) return null;
     this.warnedServices.add(svc.id);
-    const thread = this.host === "t3" ? "thread" : "chat";
+    const thread = "thread";
     return `Board: this edit is in ${svc.name}, outside this task's services so far (${had.map((x) => this.svcName(x)).join(", ")}). If it is a bug or extra work beyond this task's scope, stop and follow the out-of-scope protocol (ask: new task in another ${thread} / fix here with recorded scope / task for later). If it is genuinely part of this task, carry on; the task is now tagged ${svc.name}.`;
   }
   /** Ownership lives on modules and master tasks; a task belongs to its module's owner. */
@@ -764,7 +751,7 @@ export class BoardChat {
     if (holder?.owner) {
       const o = holder.owner;
       const here = sameRoot(o.root, this.sess?.workspace);
-      const who = this.host === "t3" ? "thread" : "chat";
+      const who = "thread";
       lines.push(
         `Ownership: "${holder.title}" is ${o.state === "soft" ? "soft-released by" : "owned by"} workspace ${o.label}${here ? " (this one)" : ""}.${!here && o.state === "owned" ? (this.hasOverride(t) ? ` This ${who} works here by a one-time override the person gave — coordinate branches with that copy.` : ` This ${who} must not change it unless the person agrees to an override.`) : ""}${here && o.state === "soft" ? " Reclaim it (board_release reclaim) before continuing here, or let another workspace take over." : ""}`,
       );
@@ -833,7 +820,7 @@ export class BoardChat {
         );
       else if (!mp && master.id === t.id)
         lines.push(
-          `Master plan: not written yet (${this.masterPath(t.id)}). Planning ${this.host === "t3" ? "threads" : "chats"} write it first with board_master_plan, unless the person brings their own.`,
+          `Master plan: not written yet (${this.masterPath(t.id)}). Planning ${"threads"} write it first with board_master_plan, unless the person brings their own.`,
         );
     }
     const docLines: string[] = [];
@@ -880,7 +867,7 @@ export class BoardChat {
       (b) =>
         `- ${b.name} (id ${b.id}; workspaces: ${b.roots.map((r) => `${r.label} = ${r.path}`).join(", ")})`,
     );
-    const where = this.host === "t3" ? "thread's" : "chat's";
+    const where = "thread's";
     return `This ${where} folder (${s?.cwd}) is not on any board yet.
 Suggested root for it: ${s?.suggestedRoot} — suggested board name: ${s?.suggestedName}.
 ${list.length ? `Existing boards:\n${list.join("\n")}` : "There are no boards yet."}
@@ -894,13 +881,10 @@ Before creating any task, ask the person ONE question: create a new board (ask f
       this.context = "";
       return;
     }
-    const chat = this.host === "t3" ? "thread" : "chat";
-    const chats = this.host === "t3" ? "threads" : "chats";
+    const chat = "thread";
+    const chats = "threads";
     if (!b) {
-      this.context =
-        this.host === "t3"
-          ? `## Claude Project Board\nThis thread's folder (${s.cwd}) is not on a board. Only if the person asks to track work: call board_find for the setup steps, and never create a board without asking.`
-          : `## Claude Project Board\n${await this.unassignedHelp()}\nOnly raise this when the person wants a task tracked (or runs /task); don't interrupt one-off questions.`;
+      this.context = `## Claude Project Board\nThis thread's folder (${s.cwd}) is not on a board. Only if the person asks to track work: call board_find for the setup steps, and never create a board without asking.`;
       return;
     }
     const where = `workspace "${s.workspaceLabel}" (${s.workspace})${s.subfolder ? `, folder ${s.subfolder}` : ""}${s.branch ? `, branch ${s.branch}` : ""}`;
@@ -937,14 +921,11 @@ Before creating any task, ask the person ONE question: create a new board (ask f
       const t = await this.loadTask(s.taskId);
       if (t) {
         const linked = `${head}\nThis ${chat} is linked to a task. Continue from the plan and the latest handoff below without asking the person to re-explain them.`;
-        this.context =
-          this.host === "t3"
-            ? `${linked}\n\n${await this.resumeSummary(t)}`
-            : `${linked}\n\n${await this.describeTask(t, true)}\n\n${toolRules(this.host)}`;
+        this.context = `${linked}\n\n${await this.resumeSummary(t)}`;
         return;
       }
     }
-    if (s.assistant && this.host === "t3") {
+    if (s.assistant) {
       const open = (await this.listTasks()).filter((t) => t.status !== "done");
       const goals = (await listGoals(this.store, this.boardId)).filter((g) => g.status !== "done");
       this.context = `${head}\nThis ${chat} is the board's Assistant. The board has ${open.length} open item(s)${goals.length > 0 ? ` and ${goals.length} open Goal(s): ${goals.map((g) => `${g.id} (${g.status})`).join(", ")}` : ""}.`;
@@ -1078,28 +1059,23 @@ ${this.related}`
         : "";
       return `${services}${rules}${registers}`;
     };
-    if (this.host === "t3") {
-      const t = this.sess?.taskId && b ? await this.loadTask(this.sess.taskId) : null;
-      const goal = await this.myGoal();
-      if (goal && this.context) {
-        this.rules = `${t3GoalRules(goal.mode)}${extras()}`;
-        return;
-      }
-      if (this.sess?.assistant && this.context) {
-        this.rules = t3AssistantRules();
-        return;
-      }
-      if ((await this.myWork()) && this.context) {
-        this.rules = `${t3GoalWorkerRules()}${extras()}`;
-        return;
-      }
-      this.rules = this.context
-        ? `${t3Rules({ linked: !!t, boardMode: this.boardModeOn, planning: !!t && levelOf(t) <= 2 })}${this.boardModeOn ? extras() : ""}`
-        : "";
+    const t = this.sess?.taskId && b ? await this.loadTask(this.sess.taskId) : null;
+    const goal = await this.myGoal();
+    if (goal && this.context) {
+      this.rules = `${t3GoalRules(goal.mode)}${extras()}`;
       return;
     }
-    if (this.context && b && this.boardModeOn)
-      this.context += `\n\n${boardModeProtocol(this.host)}${extras()}`;
+    if (this.sess?.assistant && this.context) {
+      this.rules = t3AssistantRules();
+      return;
+    }
+    if ((await this.myWork()) && this.context) {
+      this.rules = `${t3GoalWorkerRules()}${extras()}`;
+      return;
+    }
+    this.rules = this.context
+      ? `${t3Rules({ linked: !!t, boardMode: this.boardModeOn, planning: !!t && levelOf(t) <= 2 })}${this.boardModeOn ? extras() : ""}`
+      : "";
   }
 
   /** Makes this thread the board's Assistant, before its first turn. */
@@ -1134,7 +1110,7 @@ ${this.related}`
   /** The Goal this thread is running, if it is still its executor. */
   private async myGoal(): Promise<Goal | null> {
     const id = this.sess?.goalId;
-    if (!id || !this.board || this.host !== "t3") return null;
+    if (!id || !this.board) return null;
     const goal = await loadGoal(this.store, this.boardId, id);
     return goal?.executor === this.sess?.sessionId ? goal : null;
   }
@@ -1142,7 +1118,7 @@ ${this.related}`
   /** The group this thread works for a Goal's executor, while it is still the group's worker. */
   private async myWork(): Promise<{ goal: Goal; group: GoalGroup } | null> {
     const s = this.sess;
-    if (!s?.goalId || !s.goalGroup || !this.board || this.host !== "t3") return null;
+    if (!s?.goalId || !s.goalGroup || !this.board) return null;
     const goal = await loadGoal(this.store, this.boardId, s.goalId);
     const group = goal?.groups.find((g) => g.id === s.goalGroup);
     return goal && group?.delegated && group.worker === s.sessionId ? { goal, group } : null;
@@ -1152,7 +1128,6 @@ ${this.related}`
     const s = this.sess;
     if (!s || this.ignored) return reply("The board is not available in this folder.");
     if (!this.board) return reply(await this.unassignedHelp());
-    if (this.host !== "t3") return reply("Goals run in T3 threads.");
     const all = await this.listTasks();
     const byId = new Map(all.map((task) => [task.id, task]));
     const action = str(a.action);
@@ -1632,7 +1607,7 @@ ${this.related}`
   /** Adds a situational rule to a tool's reply, the first time a T3 thread meets the situation. */
   private once(rule: T3OnDemandRule, text: string): string {
     // A Goal's executor works to the Goal's rules, not the per-task ones.
-    if (this.host !== "t3" || this.sess?.goalId || this.told.has(rule)) return text;
+    if (this.sess?.goalId || this.told.has(rule)) return text;
     this.told.add(rule);
     return `${text}\n\n${t3OnDemandRule(rule)}`;
   }
@@ -1685,7 +1660,7 @@ ${this.related}`
     const s = this.sess;
     if (!s || this.ignored) return reply("The board is not available in this folder.");
     if (!this.board) return reply(await this.unassignedHelp());
-    const chat = this.host === "t3" ? "thread" : "chat";
+    const chat = "thread";
     if (a.decline) {
       this.reported = true;
       await this.unlink();
@@ -1786,16 +1761,10 @@ ${this.related}`
     );
     await this.rebuildContext();
     const linkedLine = `Linked this ${chat} to the task.${ownerNote ? ` ${ownerNote}` : ""}`;
-    if (this.host === "t3") {
-      // The rest of this turn needs the rules now, not at the next turn.
-      const text = `${linkedLine}\n\n${this.context}\n\n${this.rules}`;
-      return reply(
-        ownerNote && this.boardModeOn ? this.once("ownership", text) : text,
-        `Board: linked to ${t.title}`,
-      );
-    }
+    // The rest of this turn needs the rules now, not at the next turn.
+    const text = `${linkedLine}\n\n${this.context}\n\n${this.rules}`;
     return reply(
-      `${linkedLine}\n\n${await this.describeTask(t, true)}\n\n${toolRules(this.host)}`,
+      ownerNote && this.boardModeOn ? this.once("ownership", text) : text,
       `Board: linked to ${t.title}`,
     );
   }
@@ -1813,7 +1782,7 @@ ${this.related}`
       await this.save({ taskId: null, linkDeclined: true });
     }
     await this.rebuildContext();
-    return reply(`This ${this.host === "t3" ? "thread" : "chat"} is no longer linked to a task.`);
+    return reply(`This ${"thread"} is no longer linked to a task.`);
   }
 
   private async requireTask(a: Record<string, unknown>): Promise<Task | string> {
@@ -1865,7 +1834,7 @@ ${this.related}`
   }
 
   private actor(): EditActor {
-    return { by: this.sess?.sessionId ?? this.host };
+    return { by: this.sess?.sessionId ?? "t3" };
   }
 
   private newId(prefix: string, upper = false, suffixMax = 0): string {
@@ -1992,7 +1961,7 @@ ${this.related}`
 
   private byLine(): string {
     const s = this.sess;
-    return `${this.host === "t3" ? "thread" : "chat"} ${s?.sessionId ?? "?"} in ${s?.workspaceLabel ?? "?"}${s?.subfolder ? `/${s.subfolder}` : ""}`;
+    return `${"thread"} ${s?.sessionId ?? "?"} in ${s?.workspaceLabel ?? "?"}${s?.subfolder ? `/${s.subfolder}` : ""}`;
   }
 
   /**
@@ -2046,7 +2015,7 @@ ${this.related}`
   async createTask(a: Record<string, unknown>): Promise<BoardReply> {
     if (!this.board) return reply(await this.unassignedHelp());
     // Work with no place in the tree is how boards fill with unmapped tasks.
-    if (this.host === "t3" && !a.parentId && !a.topLevel)
+    if (!a.parentId && !a.topLevel)
       return reply(
         "Not created: a new item needs a parent. Pass parentId (board_find lists the features and modules), or topLevel: true when the person wants a new feature or master task.",
       );
@@ -2090,11 +2059,7 @@ ${this.related}`
     await this.adopt(t.id, "created it");
     await this.rebuildContext();
     const pickUp =
-      this.sess?.taskId === t.id
-        ? ""
-        : this.host === "t3"
-          ? ` Start it with Continue in new thread on task ${t.id}.`
-          : ` A chat picks it up with /task ${t.id}.`;
+      this.sess?.taskId === t.id ? "" : ` Start it with Continue in new thread on task ${t.id}.`;
     const created = `Created Level ${level} ${LEVEL_NAME[level]} "${t.title}" (id ${t.id})${par ? ` under "${par.title}"` : ""}.${pickUp}`;
     return reply(this.boardModeOn ? this.once("outOfScope", created) : created);
   }
@@ -2138,7 +2103,7 @@ ${this.related}`
     await this.saveTask(t);
     await this.rebuildContext();
     return reply(
-      `Living handoff saved: ${this.livingPath(t.id)}${repos.length ? `\nRepo state recorded:\n${repos.map((r) => `- ${repoLine(r)}`).join("\n")}` : ""}\n${resumeHint(this.host, t.id)}`,
+      `Living handoff saved: ${this.livingPath(t.id)}${repos.length ? `\nRepo state recorded:\n${repos.map((r) => `- ${repoLine(r)}`).join("\n")}` : ""}\n${resumeHint(t.id)}`,
     );
   }
 
@@ -2411,7 +2376,7 @@ ${this.related}`
     const limit = listing ? 25 : SEARCH_HITS;
     const found = shown.length
       ? `${shown.slice(0, limit).join("\n")}${shown.length > limit ? `\n…and ${shown.length - limit} more: add a word to narrow it. board_read shows a task in full.` : ""}`
-      : listing || this.host !== "t3" || this.aliasTold
+      : listing || this.aliasTold
         ? "No matching tasks."
         : "No matching tasks. If the person points at the item this should have found, offer to save their word as another name for it; once they agree, call board_find with alias and taskId.";
     if (shown.length === 0 && !listing) this.aliasTold = true;
@@ -2450,7 +2415,7 @@ ${this.related}`
     await this.saveTask(holder);
     await this.rebuildContext();
     return reply(
-      `Soft-released "${holder.title}". Another workspace can take over from:\n${repos.map((r) => `- ${repoLine(r)}`).join("\n")}\nThis ${this.host === "t3" ? "thread" : "chat"} should stop working on it unless it reclaims it (board_release reclaim).`,
+      `Soft-released "${holder.title}". Another workspace can take over from:\n${repos.map((r) => `- ${repoLine(r)}`).join("\n")}\nThis ${"thread"} should stop working on it unless it reclaims it (board_release reclaim).`,
     );
   }
 
@@ -2545,7 +2510,7 @@ ${this.related}`
     args: Record<string, unknown>,
     extra?: { readonly t3Checkpoint?: string | undefined; readonly t3RunId?: string | undefined },
   ): Promise<BoardReply> | null {
-    if (this.sess?.assistant && this.host === "t3") {
+    if (this.sess?.assistant) {
       if (name === "board_create_task")
         return this.confirmedByPerson(name, args).then((yes) =>
           yes

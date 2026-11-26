@@ -58,7 +58,7 @@ export const make = Effect.fn("BoardChats.make")(function* (store: BoardStore) {
     if (cwd === undefined) return yield* failure("The thread has no folder.");
     const known = open.get(threadId);
     if (known !== undefined && known.cwd === cwd) return known.chat;
-    const chat = new BoardChat(store, nodeGit, "t3");
+    const chat = new BoardChat(store, nodeGit);
     yield* Effect.promise(() =>
       chat.open({
         sessionId: threadId,

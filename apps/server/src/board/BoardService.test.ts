@@ -54,11 +54,11 @@ it.effect("shows a T3 thread's own status and title, and drops threads this serv
         ["thread:running", "Payouts"],
         ["thread:elsewhere", "Another install"],
       ] as const) {
-        const chat = new BoardChat(store, noGit, "t3");
+        const chat = new BoardChat(store, noGit);
         await chat.open({ sessionId: id, cwd: ws, source: { kind: "t3-thread", threadId: id } });
         await chat.turnStart(prompt);
       }
-      const unattached = new BoardChat(store, noGit, "t3");
+      const unattached = new BoardChat(store, noGit);
       await unattached.open({
         sessionId: "thread:no-board",
         cwd: norm(NodePath.join(tmp, "other")),
@@ -129,7 +129,7 @@ it.effect(
             },
           ],
         });
-        const setup = new BoardChat(store, noGit, "t3");
+        const setup = new BoardChat(store, noGit);
         await setup.open({ sessionId: "thread:setup", cwd: main });
         await setup.createTask({ title: "Refunds", topLevel: true });
         await setup.createTask({ title: "Payouts", parentId: "refunds" });
@@ -183,7 +183,7 @@ it.effect(
         expect(before.tasks.find((t) => t.id === "payouts")?.ownerRoot).toBe(copy);
         // The thread's board chat, opened at its first turn, keeps the link.
         yield* Effect.promise(async () => {
-          const first = new BoardChat(store, noGit, "t3");
+          const first = new BoardChat(store, noGit);
           await first.open({ sessionId: draft, cwd: main });
           await first.turnStart("Continue the refunds work");
         });
@@ -340,7 +340,7 @@ it.effect("the person pauses and ends a Goal without its thread's help", () =>
         version: 1,
         boards: [{ id: "nefx", name: "NEFX", createdAt: 0, roots: [{ path: ws, label: "main" }] }],
       });
-      const exec = new BoardChat(store, noGit, "t3");
+      const exec = new BoardChat(store, noGit);
       await exec.open({
         sessionId: "thread:goal",
         cwd: ws,

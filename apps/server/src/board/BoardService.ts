@@ -380,7 +380,7 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
           for (const sessionId of sessions) {
             const session = await store.readSession(boardId, sessionId);
             if (session === null) continue;
-            const chat = new BoardChat(store, git, "t3");
+            const chat = new BoardChat(store, git);
             await chat.open({ sessionId, cwd: session.cwd, source: session.source });
             await chat.leaveGoal(goal);
           }
@@ -491,7 +491,7 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
         const taskId = input.taskId;
         if (taskId !== null && (await store.loadTask(input.boardId, taskId)) === null)
           return new BoardLinkError({ reason: "not-found", detail: "No such task." });
-        const chat = new BoardChat(store, git, "t3");
+        const chat = new BoardChat(store, git);
         await chat.open({
           sessionId: input.threadId,
           cwd,

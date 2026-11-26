@@ -1,8 +1,7 @@
 // @effect-diagnostics globalDate:off globalRandom:off
 /**
- * What the board needs from its host. The Claude Code mod passes its `$.fs` / `$.process`; T3
- * Code passes Node's filesystem and its own git service. Keeping these as ports keeps the core
- * free of Node, Effect and Claude imports, so both hosts run the same rules on the same files.
+ * What the board needs from its host: T3 Code passes Node's filesystem and its own git service.
+ * Keeping these as ports keeps the core free of Node and Effect imports, and lets tests use fakes.
  *
  * @module board-core/io
  */

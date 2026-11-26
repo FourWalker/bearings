@@ -1,7 +1,7 @@
 /**
- * The Project Board's data model, as stored under `~/.claude-board` (see the board repo's
- * docs/DATA-LAYOUT.md). The Claude Code mod and T3 Code both read and write these shapes, so a
- * field added here must stay optional and old files must keep loading.
+ * The Project Board's data model, as stored under `~/.claude-board`. Boards there were first
+ * written by the old Claude Code mod, so a field added here must stay optional and old files
+ * must keep loading.
  *
  * @module board-core/types
  */
@@ -225,8 +225,8 @@ export interface Registry {
 }
 
 /**
- * Where a chat runs. Claude Code chats are the mod's sessions; T3 threads are reported by the
- * T3 Code fork for any provider. Missing means a Claude Code chat (records made before T3).
+ * Where a chat runs. T3 threads are reported by T3 Code for any provider; `claude-code` (or a
+ * missing source) marks a chat recorded by the old Claude Code mod.
  */
 export type SessionSource =
   | { kind: "claude-code" }

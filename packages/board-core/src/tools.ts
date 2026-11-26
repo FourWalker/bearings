@@ -1,7 +1,7 @@
-/* oxlint-disable t3code/no-em-dash-copy -- Board protocol and tool text shared verbatim with the Claude Code mod; "## Phase A — name" is the plan.md format. */
+/* oxlint-disable t3code/no-em-dash-copy -- "## Phase A — name" is the plan.md format. */
 /**
- * The board tools as JSON-schema definitions: the same names, descriptions and inputs the
- * Claude Code mod registers, for any host (the mod, T3 Code's MCP toolkit).
+ * The board tools as JSON-schema definitions: names, descriptions and inputs, which T3 Code's MCP
+ * toolkit turns into its tools.
  *
  * @module board-core/tools
  */

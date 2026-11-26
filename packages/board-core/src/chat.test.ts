@@ -11,7 +11,7 @@ import { closeGoal, loadGoal, saveGoal } from "./goal.ts";
 import { type BoardGit, noGit } from "./io.ts";
 import { nodeIO } from "./nodeIO.ts";
 import { nextStep, tickStep } from "./plan.ts";
-import { boardModeProtocol } from "./protocol.ts";
+import { t3OnDemandRule } from "./protocol.ts";
 import { BoardStore } from "./store.ts";
 import { norm } from "./text.ts";
 import { BOARD_TOOL_NAMES } from "./tools.ts";
@@ -47,14 +47,8 @@ async function seedBoard(extra: Partial<Registry["boards"][number]> = {}) {
   return store;
 }
 
-async function openChat(
-  store: BoardStore,
-  sessionId: string,
-  cwd: string,
-  host: "t3" | "claude-code" = "t3",
-  git: BoardGit = noGit,
-) {
-  const chat = new BoardChat(store, git, host);
+async function openChat(store: BoardStore, sessionId: string, cwd: string, git: BoardGit = noGit) {
+  const chat = new BoardChat(store, git);
   await chat.open({
     sessionId,
     cwd,
@@ -94,7 +88,7 @@ describe("BoardChat", () => {
     expect(chat.context).toContain("not linked to a board task yet");
 
     // A T3 worktree outside every root goes on its project folder's board.
-    const worktree = new BoardChat(store, noGit, "t3");
+    const worktree = new BoardChat(store, noGit);
     await worktree.open({ sessionId: "t2", cwd: `${ws}-worktrees/retry`, projectRoot: ws });
     expect(worktree.board?.id).toBe("nefx");
     expect(worktree.sess).toMatchObject({ workspace: ws, subfolder: "" });
@@ -275,7 +269,7 @@ describe("BoardChat", () => {
     expect(nextStep(await store.readText(store.planPath("nefx", "retries")))?.id).toBe("A1");
 
     // The subtask finishes: the parent's next step moves past the work it took over.
-    const worker = new BoardChat(new BoardStore(home, nodeIO, clock()), noGit, "t3");
+    const worker = new BoardChat(new BoardStore(home, nodeIO, clock()), noGit);
     await worker.open({
       sessionId: "t2",
       cwd: wsB,
@@ -487,9 +481,9 @@ describe("BoardChat", () => {
     expect((await store.loadTask("nefx", "task"))?.services).toEqual(["api", "web"]);
   });
 
-  it("gives T3 threads short rules apart from the task's state, and Claude chats the mod's protocol", async () => {
+  it("gives T3 threads short rules apart from the task's state", async () => {
     const store = await seedBoard({ boardMode: true, rules: "Use pnpm." });
-    const t3 = await openChat(store, "t1", ws, "t3");
+    const t3 = await openChat(store, "t1", ws);
     expect(t3.boardModeOn).toBe(false);
     expect(t3.context).toContain("standard conversation workflow");
     expect(t3.rules).toMatch(/^Token hygiene/);
@@ -516,16 +510,13 @@ describe("BoardChat", () => {
     expect(t3.context).toBe(before);
     t3.forgetSeen();
     expect((await t3.findTasks({ query: "zzz" })).text).toContain("STOP and ask ONE question");
-    const cc = await openChat(store, "c1", ws, "claude-code");
-    expect(cc.context).not.toContain("one phase per chat");
-    await cc.linkTask({ taskId: "task" });
-    expect(cc.context).toContain("one phase per chat");
-    expect(boardModeProtocol("t3")).not.toMatch(/\bchat\b/);
+    for (const rule of ["outOfScope", "decisions", "ownership"] as const)
+      expect(t3OnDemandRule(rule)).not.toMatch(/\bchats?\b/);
   });
 
   it("finds work by a question's words, in plan steps too, and stops a duplicate task", async () => {
     const store = await seedBoard();
-    const chat = await openChat(store, "t1", ws, "t3");
+    const chat = await openChat(store, "t1", ws);
     await chat.createTask({ title: "Marketplace", topLevel: true });
     await chat.createTask({
       title: "Catalog",
@@ -581,10 +572,10 @@ describe("BoardChat", () => {
     );
 
     // Only a new thread's first prompt is matched, against whole titles and other names.
-    const plain = await openChat(store, "t2", ws, "t3");
+    const plain = await openChat(store, "t2", ws);
     await plain.turnStart("Can we speed up the storefront search?");
     expect(plain.context).toContain('Possibly related: marketplace "Marketplace".');
-    const other = await openChat(store, "t3", ws, "t3");
+    const other = await openChat(store, "t3", ws);
     await other.turnStart("Fix the flaky test");
     await other.turnStart("It is in the storefront");
     expect(other.context).not.toContain("Possibly related");
@@ -613,7 +604,7 @@ describe("BoardChat", () => {
       since: async () => since,
     };
     const store = await seedBoard();
-    const chat = await openChat(store, "t1", ws, "t3", git);
+    const chat = await openChat(store, "t1", ws, git);
     await chat.linkTask({ newTaskTitle: "Task" });
     await chat.filesChanged(["api/a.ts", ".local-run/logs/task/check.log"]);
     const finish = async () => {
@@ -666,7 +657,7 @@ describe("BoardChat", () => {
       since: async () => "same",
     };
     const store = await seedBoard({ boardMode: true });
-    const exec = await openChat(store, "t1", ws, "t3", git);
+    const exec = await openChat(store, "t1", ws, git);
     await exec.createTask({ title: "Feature", topLevel: true });
     await exec.createTask({ title: "Module", parentId: "feature" });
     for (const title of ["Alpha", "Beta", "Gamma"])
@@ -680,7 +671,7 @@ describe("BoardChat", () => {
     expect(started).toContain('Next task: alpha "Alpha"');
     expect(exec.rules).not.toContain("## Board Mode");
     expect(exec.context).toContain("in its other workspace copies: copy-b.");
-    const other = await openChat(store, "t2", ws, "t3", git);
+    const other = await openChat(store, "t2", ws, git);
     expect((await other.goalTool({ action: "start", scope: ["module"] })).text).toMatch(
       /^Not started: a task belongs to one active Goal/,
     );
@@ -751,7 +742,7 @@ describe("BoardChat", () => {
 
   it("keeps a Goal's plans and decisions true on the board, not only in its thread", async () => {
     const store = await seedBoard({ boardMode: true });
-    const exec = await openChat(store, "t1", ws, "t3", noGit);
+    const exec = await openChat(store, "t1", ws, noGit);
     await exec.createTask({ title: "Feature", topLevel: true });
     await exec.createTask({ title: "Module", parentId: "feature" });
     await exec.createTask({ title: "Rollout", parentId: "feature" });
@@ -873,7 +864,7 @@ describe("BoardChat", () => {
 
   it("hands a Goal's group to a child thread, which works it and reports once", async () => {
     const store = await seedBoard({ boardMode: true });
-    const exec = await openChat(store, "t1", ws, "t3");
+    const exec = await openChat(store, "t1", ws);
     await exec.createTask({ title: "Feature", topLevel: true });
     for (const module of ["Api", "Web"]) {
       await exec.createTask({ title: module, parentId: "feature", createAnyway: true });
@@ -885,14 +876,14 @@ describe("BoardChat", () => {
     }
     await exec.goalTool({ action: "start", scope: ["feature"], title: "Ship" });
     // A Goal's executor is still its executor when the server opens its record again.
-    expect((await openChat(store, "t1", ws, "t3")).rules).toContain("## Goal Mode");
+    expect((await openChat(store, "t1", ws)).rules).toContain("## Goal Mode");
     const brief = (await exec.goalTool({ action: "delegate", group: "web" })).text;
     expect(brief).toContain('board_goal {action: "work", goalId: "g-ship", group: "B"}');
     // The executor leaves a group that is out alone.
     expect(exec.context).toContain("B. Web [0/1 done] · with a child thread");
     expect(exec.context).toContain('Next task: api-one "Api one"');
 
-    const child = await openChat(store, "t2", ws, "t3");
+    const child = await openChat(store, "t2", ws);
     const started = (await child.goalTool({ action: "work", goalId: "g-ship", group: "B" })).text;
     expect(started).toContain("## Goal worker");
     expect(started).toContain('Next task: web-one "Web one"');
@@ -931,9 +922,9 @@ describe("BoardChat", () => {
 
   it("lets the board's Assistant find and read, and write only after the person's yes", async () => {
     const store = await seedBoard({ boardMode: true });
-    const setup = await openChat(store, "t1", ws, "t3");
+    const setup = await openChat(store, "t1", ws);
     await setup.createTask({ title: "Marketplace", topLevel: true });
-    const assistant = await openChat(store, "t2", ws, "t3");
+    const assistant = await openChat(store, "t2", ws);
     await assistant.becomeAssistant();
     await assistant.turnStart("Do we have anything on the marketplace?");
     expect(assistant.rules).toContain("## Board Assistant");
@@ -951,7 +942,7 @@ describe("BoardChat", () => {
 
     const draft = { title: "Seller payouts", parentId: "marketplace" };
     // The thread stays the Assistant when the server opens its record again.
-    const reopened = await openChat(store, "t2", ws, "t3");
+    const reopened = await openChat(store, "t2", ws);
     expect(reopened.rules).toContain("## Board Assistant");
     const asked = (await assistant.runTool("board_create_task", draft))?.text;
     expect(asked).toMatch(/^Not created yet: the person has to agree first/);
@@ -987,7 +978,7 @@ describe("BoardChat", () => {
   });
 
   it("exposes every board tool through runTool", () => {
-    const chat = new BoardChat(new BoardStore(home, nodeIO), noGit, "t3");
+    const chat = new BoardChat(new BoardStore(home, nodeIO), noGit);
     for (const name of BOARD_TOOL_NAMES) expect(chat.runTool(name, {})).not.toBeNull();
     expect(chat.runTool("not_a_tool", {})).toBeNull();
   });
@@ -1042,7 +1033,7 @@ describe("readBoardView", () => {
     await linked.savePlan({ markdown: "## Phase A\n- [x] A1 Client\n- [ ] A2 Retry" });
     const loose = await openChat(store, "t2", ws);
     await loose.turnStart("A quick question");
-    const gone = await openChat(store, "t3", ws, "claude-code");
+    const gone = await openChat(store, "t3", ws);
     await gone.turnStart("Old chat");
 
     const t2 = (await store.readSession("nefx", "t2")) as Session;
