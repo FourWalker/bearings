@@ -33,7 +33,7 @@ export function BoardSidebarScope(props: {
   const scope = boardSidebarScope(groups, props.environmentId, props.roots).join("\n");
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- a board is opened by links, the picker and the palette alike, and only here are its projects known: writes them to the sidebar's scope store
   useEffect(() => {
-    if (!all && scope !== "") setScope(scope.split("\n"));
+    if (scope !== "") setScope(all ? [] : scope.split("\n"));
   }, [all, scope, setScope]);
   if (scope === "") return null;
   const label = all
@@ -51,7 +51,6 @@ export function BoardSidebarScope(props: {
             onClick={() => {
               if (all) return setWide(wide.filter((id) => id !== props.boardId));
               setWide([...wide, props.boardId]);
-              setScope([]);
             }}
           />
         }
