@@ -310,6 +310,16 @@ Pin bar's swell and peek never looked at live.
 - Dev on the Dev Board copy: `T3_BOARD_HOME=<clone>/.t3/claude-board node_modules/.bin/vp.cmd run dev
   --home-dir <clone>/.t3`. Without `T3_BOARD_HOME` the dev server reads the real boards in
   `~/.claude-board` (used for the NEFX Goal run; `C:\nfx` is a project in the dev T3 home).
+- Upstream: `upstream` is pingdotgg/t3code, merged in full up to `cef444e553` (2026-11-27). Merge it
+  weekly with `git merge upstream/main` (never rebase); `git rerere` is on, so resolutions repeat
+  themselves. Size a merge first with `git merge-tree --write-tree --name-only HEAD upstream/main`,
+  which writes no files. Board hooks in upstream files: `ProviderTurnStartService.ts`, `server.ts`,
+  `IssueService.ts`, `IssueTrackerRegistry.ts`, `Sidebar.tsx`, `SidebarThreadRow.tsx`,
+  `SidebarThreadHeader.tsx`, `ChatHeader.tsx`, `useHandleNewThread.ts`, `mainAppLocation.ts`.
+- The pre-commit hook runs knip: an export nothing imports blocks the commit.
+- Seven upstream tests in `ProviderTurnStartService.test.ts` (worktree recreation, restored setup,
+  startup and cleanup order) fail on Windows with upstream's own files. Web browser tests do not
+  start here (Chromium does not connect).
 - A restarted dev server needs pairing again: open the `pairingUrl` from its log.
 - Start a thread on a chosen model: `node apps/server/src/bin.ts thread start --base-dir .t3 --provider
   claudeAgent --model claude-opus-5-5 --json <projectId|path> "<message>"`; read it with `thread show`.
