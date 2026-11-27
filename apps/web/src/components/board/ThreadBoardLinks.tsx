@@ -41,10 +41,27 @@ export function ThreadBoardLinks(props: {
     });
   const levelName = (level: 1 | 2 | 3 | null) =>
     level === 1 ? gt("Feature") : level === 2 ? gt("Module") : level === 3 ? gt("Task") : null;
-  const [first, ...rest] = lines;
-  const inHand = first?.inHand ? first : null;
-  const others = inHand === null ? lines : rest;
-  const handTask = inHand === null ? null : (index?.byId.get(inHand.key) ?? null);
+  const marked = lines.find((line) => line.inHand) ?? null;
+  // Links written before the hand mark existed: the board's own record says which task holds this chat.
+  const boardHand =
+    marked === null
+      ? (view.data?.tasks.find((task) =>
+          task.chats.some((chat) => chat.threadId === props.threadId),
+        ) ?? null)
+      : null;
+  const handKey = marked?.key ?? boardHand?.id ?? null;
+  const handTask = handKey === null ? null : (index?.byId.get(handKey) ?? null);
+  const inHand =
+    handKey === null
+      ? null
+      : {
+          key: handKey,
+          title: marked?.title ?? handTask?.title ?? "",
+          level: marked?.level ?? handTask?.level ?? null,
+        };
+  const others = lines
+    .filter((line) => line.key !== handKey)
+    .map((line) => ({ ...line, level: line.level ?? index?.byId.get(line.key)?.level ?? null }));
   const path: ReadonlyArray<BoardTask> =
     index !== null && handTask !== null ? ancestorsOf(index, handTask) : [];
 
