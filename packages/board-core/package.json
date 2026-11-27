@@ -14,6 +14,7 @@
   },
   "scripts": {
     "typecheck": "effect-tsgo tsrs --noEmit",
+    "merge-locale": "node scripts/merge-locale.mjs",
     "test": "vp test run --config ../../vite.config.ts --dir ."
   },
   "devDependencies": {

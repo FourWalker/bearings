@@ -8,3 +8,5 @@ packages/source-control-github/schema/** linguist-generated
 packages/issue-tracker-linear/schema/** linguist-generated
 apps/server/schema/** linguist-generated
 **/*.graphql.ts linguist-generated
+# Project Board fork: merge the locale catalogs by key (packages/board-core/scripts/merge-locale.mjs).
+apps/web/src/i18n/translations/*.json merge=board-locale

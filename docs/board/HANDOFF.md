@@ -316,6 +316,10 @@ Pin bar's swell and peek never looked at live.
   which writes no files. Board hooks in upstream files: `ProviderTurnStartService.ts`, `server.ts`,
   `IssueService.ts`, `IssueTrackerRegistry.ts`, `Sidebar.tsx`, `SidebarThreadRow.tsx`,
   `SidebarThreadHeader.tsx`, `ChatHeader.tsx`, `useHandleNewThread.ts`, `mainAppLocation.ts`.
+- Locale catalogs merge by key, not as text. A new clone needs the driver set up once:
+  `git config merge.board-locale.driver "node packages/board-core/scripts/merge-locale.mjs %O %A %B"`.
+  It writes plain JSON; the pre-commit `vp fmt` restores the catalog formatting. Where both sides
+  translated one string, upstream's text wins.
 - The pre-commit hook runs knip: an export nothing imports blocks the commit.
 - Seven upstream tests in `ProviderTurnStartService.test.ts` (worktree recreation, restored setup,
   startup and cleanup order) fail on Windows with upstream's own files. Web browser tests do not
