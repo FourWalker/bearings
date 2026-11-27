@@ -75,6 +75,15 @@ export interface RepoState {
   lastCommitAt: number;
   at: number;
   service?: string | undefined;
+  /** The merge target at that checkpoint, and HEAD's commits not in it; null: no such branch here. */
+  target?: string | undefined;
+  aheadOfTarget?: number | null | undefined;
+}
+
+/** How finished work reaches `target`: through a merge request first, or merged straight in. */
+export interface MergeMode {
+  mode: "request" | "direct";
+  target: string;
 }
 
 export interface Owner {
@@ -195,6 +204,10 @@ export interface Task {
   bug?: boolean | undefined;
   /** Other words people use for this item; search treats them like its title. */
   aliases?: string[] | undefined;
+  /** Features and modules: their own merge mode. Missing means the parent's, then the board's. */
+  merge?: MergeMode | undefined;
+  /** Features and modules: the open merge request for their work. */
+  mergeRequest?: string | undefined;
 }
 
 export interface Service {
@@ -217,6 +230,7 @@ export interface Board {
   services?: Service[] | undefined;
   registers?: { id: string; topic: string; url: string }[] | undefined;
   rules?: string | undefined;
+  merge?: MergeMode | undefined;
 }
 
 export interface Registry {

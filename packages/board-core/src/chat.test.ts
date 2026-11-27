@@ -585,6 +585,88 @@ describe("BoardChat", () => {
     expect((await chat.findTasks({ query: "storefront" })).text).toBe("No matching tasks.");
   });
 
+  it("follows the nearest merge mode and records the commits not yet in its target", async () => {
+    const asked: string[] = [];
+    const git: BoardGit = {
+      ...noGit,
+      state: async () => ({
+        repo: ws,
+        name: "nfx",
+        branch: "feature/retries",
+        head: "abc1234",
+        upstream: "origin/feature/retries",
+        ahead: 0,
+        behind: 0,
+        dirty: 0,
+        lastCommitAt: 0,
+        at: 0,
+      }),
+      aheadOf: async (_dir, target) => {
+        asked.push(target);
+        return target === "develop" ? 3 : null;
+      },
+    };
+    const store = await seedBoard({ merge: { mode: "direct", target: "main" } });
+    const chat = await openChat(store, "t1", ws, git);
+    await chat.createTask({ title: "Transfers", topLevel: true });
+    await chat.createTask({ title: "Retries", parentId: "transfers" });
+    await chat.createTask({ title: "Backoff", parentId: "retries" });
+    await chat.linkTask({ taskId: "backoff" });
+    expect(chat.context).toContain("is merged directly into main (the board's mode)");
+    // The repo has no branch of that name: the board says so and does not call the work merged.
+    expect((await chat.checkpoint({ markdown: "Objective: ship" })).text).toContain(
+      "no branch main here",
+    );
+
+    const app = { by: "t3-app" };
+    await expect(
+      editTask(store, "nefx", "backoff", { op: "setMerge", merge: null }, app),
+    ).rejects.toThrow("follows the merge mode of its module");
+    await expect(
+      editTask(
+        store,
+        "nefx",
+        "retries",
+        { op: "setMerge", merge: { mode: "request", target: " " } },
+        app,
+      ),
+    ).rejects.toThrow("Name the branch");
+    const request = { mode: "request", target: "develop" } as const;
+    await editTask(store, "nefx", "retries", { op: "setMerge", merge: request }, app);
+    await editTask(
+      store,
+      "nefx",
+      "retries",
+      { op: "setMergeRequest", url: "https://git.example/mr/7" },
+      app,
+    );
+    const read = (await chat.readTask({})).text;
+    expect(read).toContain(
+      'reaches develop through a merge request, never merged straight in (set on "Retries")',
+    );
+    expect(read).toContain("only when the person asks in that turn");
+    expect(read).toContain("Open merge request: https://git.example/mr/7");
+    expect((await chat.checkpoint({ markdown: "Objective: ship" })).text).toContain(
+      "3 commit(s) not in develop",
+    );
+    expect(asked).toEqual(["main", "develop"]);
+    expect((await store.loadTask("nefx", "backoff"))?.repoState?.[0]).toMatchObject({
+      target: "develop",
+      aheadOfTarget: 3,
+    });
+
+    // A thread records the request it opened; from a task it lands on the module.
+    await chat.updateTask({ mergeRequest: "https://git.example/mr/8" });
+    expect((await store.loadTask("nefx", "retries"))?.mergeRequest).toBe(
+      "https://git.example/mr/8",
+    );
+    expect((await chat.updateTask({ mergeRequest: "soon" })).text).toContain("link");
+
+    // Back to inheriting: the module follows the board again.
+    await editTask(store, "nefx", "retries", { op: "setMerge", merge: null }, app);
+    expect((await chat.readTask({})).text).toContain("is merged directly into main");
+  });
+
   it("records evidence when a task is done and checks it cheapest first", async () => {
     let since: "same" | "changed" | "unreachable" = "same";
     const git: BoardGit = {

@@ -68,6 +68,7 @@ import {
   ItemRow,
   LinkAdder,
   MarkdownEditor,
+  MergeModeForm,
   MoveMenu,
   VerdictControls,
   WorkspaceControls,
@@ -1080,6 +1081,8 @@ function RepoBadges(props: {
     readonly upstream: string | null;
     readonly ahead: number | null;
     readonly dirty: number;
+    readonly target?: string | null | undefined;
+    readonly aheadOfTarget?: number | null | undefined;
   };
 }) {
   const gt = useGT();
@@ -1096,6 +1099,23 @@ function RepoBadges(props: {
       <Badge variant={repo.dirty ? "warning" : "success"}>
         {repo.dirty ? gt("{count} uncommitted", { count: repo.dirty }) : gt("clean")}
       </Badge>
+      {repo.target ? (
+        <Badge
+          variant={
+            repo.aheadOfTarget === 0
+              ? "success"
+              : typeof repo.aheadOfTarget === "number"
+                ? "warning"
+                : "outline"
+          }
+        >
+          {repo.aheadOfTarget === 0
+            ? gt("merged into {branch}", { branch: repo.target })
+            : typeof repo.aheadOfTarget === "number"
+              ? gt("{count} not in {branch}", { count: repo.aheadOfTarget, branch: repo.target })
+              : gt("no branch {branch} here", { branch: repo.target })}
+        </Badge>
+      ) : null}
     </>
   );
 }
@@ -1625,6 +1645,7 @@ function SideColumn(
       ) : null}
       <BugsCard {...props} />
       <ServicesCard {...props} />
+      <MergeCard {...props} />
       <OtherNamesCard names={props.detail?.aliases ?? []} />
       <Card title={gt("Linked tasks")}>
         <LinkedTasks {...props} />
@@ -1729,6 +1750,86 @@ function ItemList(props: {
         items.map((item) => <ItemRow key={item.id} item={item} taskId={props.task.id} />)
       )}
     </div>
+  );
+}
+
+/** How the item's finished work reaches its target branch, and the merge request carrying it. */
+function MergeCard(props: BoardTaskViewProps) {
+  const gt = useGT();
+  const { task, board } = props;
+  const { canEdit, edit } = useBoardEdit();
+  const merge = task.merge ?? null;
+  const own = merge?.from?.id === task.id;
+  // A task has no mode or request of its own: both belong to its module or feature.
+  const holder =
+    task.level === 3 && task.parentId !== null ? props.index.byId.get(task.parentId) : task;
+  const request = holder?.mergeRequest ?? null;
+  if (merge === null && request === null && (!canEdit || task.level === 3)) return null;
+  // What the item would follow without a mode of its own.
+  const parent = task.parentId === null ? undefined : props.index.byId.get(task.parentId);
+  const inherited = parent?.merge ?? board.merge ?? null;
+  const said = (value: NonNullable<typeof inherited>) =>
+    value.mode === "request"
+      ? gt("Review first, into {branch}", { branch: value.target })
+      : gt("Merge directly to {branch}", { branch: value.target });
+  return (
+    <Card title={gt("Merging")}>
+      {merge === null ? (
+        <Muted>
+          <T>No merge mode set on the board.</T>
+        </Muted>
+      ) : (
+        <p className="text-sm">
+          {said(merge)}
+          <span className="ms-1 text-muted-foreground text-xs">
+            {own
+              ? gt("· set here")
+              : merge.from
+                ? gt("· from {task}", { task: merge.from.title })
+                : gt("· the board's mode")}
+          </span>
+        </p>
+      )}
+      {canEdit && task.level !== 3 ? (
+        <MergeModeForm
+          key={`${merge?.mode}:${merge?.target}:${own}`}
+          value={own && merge ? { mode: merge.mode, target: merge.target } : null}
+          unset={
+            inherited ? gt("Follow: {mode}", { mode: said(inherited) }) : gt("Follow the board")
+          }
+          suggested={inherited?.target ?? "main"}
+          onSave={(next) => edit({ op: "setMerge", merge: next })}
+        />
+      ) : null}
+      {request !== null ? (
+        <div className="flex items-center gap-2 text-sm">
+          <a
+            className="wrap-anywhere min-w-0 flex-1 hover:underline"
+            href={request}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {gt("Merge request ↗")}
+          </a>
+          {canEdit && holder ? (
+            <Button
+              variant="ghost-muted"
+              size="icon-xs"
+              aria-label={gt("Remove")}
+              onClick={() => void edit({ op: "setMergeRequest", url: "" }, holder.id)}
+            >
+              <XIcon />
+            </Button>
+          ) : null}
+        </div>
+      ) : merge?.mode === "request" && holder ? (
+        <AddRow
+          button={gt("Add")}
+          placeholder={gt("Merge request link")}
+          onAdd={(url) => edit({ op: "setMergeRequest", url }, holder.id)}
+        />
+      ) : null}
+    </Card>
   );
 }
 

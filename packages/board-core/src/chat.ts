@@ -62,6 +62,7 @@ import {
   decisionType,
   findBoard,
   levelOf,
+  mergeOf,
 } from "./store.ts";
 import { BOARD_TOOL_NAMES } from "./tools.ts";
 import { findOnBoard, namedTask, queryWords } from "./search.ts";
@@ -137,7 +138,15 @@ const str = (v: unknown, fallback = ""): string =>
   v === undefined || v === null ? fallback : String(v);
 
 export const repoLine = (r: RepoState): string =>
-  `${r.name} · ${r.branch} @ ${r.head} · ${!r.upstream ? "not pushed (no upstream)" : r.ahead ? `${r.ahead} commit(s) not pushed` : "pushed"}${r.behind ? `, ${r.behind} behind` : ""} · ${r.dirty ? `${r.dirty} uncommitted` : "clean"}`;
+  `${r.name} · ${r.branch} @ ${r.head} · ${!r.upstream ? "not pushed (no upstream)" : r.ahead ? `${r.ahead} commit(s) not pushed` : "pushed"}${r.behind ? `, ${r.behind} behind` : ""} · ${r.dirty ? `${r.dirty} uncommitted` : "clean"}${r.target ? ` · ${r.aheadOfTarget === null || r.aheadOfTarget === undefined ? `no branch ${r.target} here` : r.aheadOfTarget ? `${r.aheadOfTarget} commit(s) not in ${r.target}` : `merged into ${r.target}`}` : ""}`;
+
+/** How a task's finished work reaches its target branch, as its thread is told. */
+export const mergeLine = (board: Board | null, chain: ReadonlyArray<Task>): string => {
+  const merge = mergeOf(board, chain);
+  if (!merge) return "";
+  const request = chain.find((t) => t.mergeRequest && levelOf(t) !== 3)?.mergeRequest;
+  return `Merging: finished work ${merge.mode === "request" ? `reaches ${merge.target} through a merge request, never merged straight in` : `is merged directly into ${merge.target}`} (${merge.from ? `set on "${merge.from.title}"` : "the board's mode"}). This says how, not when: push, open the request or merge only when the person asks in that turn.${request ? ` Open merge request: ${request}` : ""}`;
+};
 
 interface PendingCheckpoint {
   readonly boardId: string;
@@ -682,7 +691,16 @@ export class BoardChat {
       const st = await this.git.state(this.sess.cwd);
       if (st) seen.set(st.repo, st);
     }
-    return [...seen.values()];
+    const merge = mergeOf(this.board, [t, ...(await this.store.ancestorsOf(this.boardId, t))]);
+    const aheadOf = this.git.aheadOf;
+    if (!merge || !aheadOf) return [...seen.values()];
+    return Promise.all(
+      [...seen.values()].map(async (st) => ({
+        ...st,
+        target: merge.target,
+        aheadOfTarget: await aheadOf(st.repo, merge.target).catch(() => null),
+      })),
+    );
   }
   async describeTask(t: Task, full: boolean): Promise<string> {
     const plan = await this.readPlan(t.id);
@@ -756,6 +774,8 @@ export class BoardChat {
         `Ownership: "${holder.title}" is ${o.state === "soft" ? "soft-released by" : "owned by"} workspace ${o.label}${here ? " (this one)" : ""}.${!here && o.state === "owned" ? (this.hasOverride(t) ? ` This ${who} works here by a one-time override the person gave — coordinate branches with that copy.` : ` This ${who} must not change it unless the person agrees to an override.`) : ""}${here && o.state === "soft" ? " Reclaim it (board_release reclaim) before continuing here, or let another workspace take over." : ""}`,
       );
     }
+    const merging = mergeLine(this.board, [t, ...anc]);
+    if (merging) lines.push(merging);
     if (t.repoState?.length)
       lines.push(
         "Repo state at the last checkpoint:",
@@ -1013,6 +1033,7 @@ ${this.related}`
       t.description && `Purpose: ${clip(t.description, 350)}`,
       anc.length > 0 && `Under: ${anc.map((a) => a.title).join(" › ")}`,
       owner && `Owner: workspace ${owner.label}${owner.state === "soft" ? " (soft-released)" : ""}`,
+      mergeLine(this.board, [t, ...anc]),
       next
         ? `Next action: ${next.id} – ${next.text} (step ${progress.done + 1} of ${progress.total}). The plan's checklist is authoritative if the handoff below disagrees.`
         : plan
@@ -1899,6 +1920,17 @@ ${this.related}`
     if (Array.isArray(a.services)) t.services = [...new Set(a.services.map(String))];
     if (a.mainService !== undefined) t.mainService = a.mainService ? str(a.mainService) : null;
     if (a.kind === "feature" || a.kind === "backlog") t.kind = a.kind;
+    if (typeof a.mergeRequest === "string") {
+      const url = a.mergeRequest.trim();
+      if (url && !/^https?:\/\/\S+$/.test(url))
+        return reply("mergeRequest takes the merge request's link.");
+      // A task's request is its module's: one request carries the module's branch.
+      const up = levelOf(t) === 3 ? (await this.store.ancestorsOf(this.boardId, t))[0] : undefined;
+      const holder = up ?? t;
+      if (url) holder.mergeRequest = url;
+      else delete holder.mergeRequest;
+      if (up) await this.saveTask(up);
+    }
     for (const it of (Array.isArray(a.add) ? a.add : []) as Array<{
       kind?: unknown;
       text?: unknown;

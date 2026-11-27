@@ -16,6 +16,8 @@ import { boardEnvironment } from "~/state/board";
 import { formatEnvironmentQueryError, useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
 
+import { MergeModeForm } from "./BoardTaskEditors";
+
 /**
  * Project Board fork: the board app's ⚙. The board's name, its workspace copies, the services
  * that tag tasks by folder, project rules, Board Mode and external registers.
@@ -119,6 +121,21 @@ function SettingsBody(props: {
             </T>
           </span>
         </label>
+      </Section>
+      <Section title={gt("Merging finished work")}>
+        <MergeModeForm
+          value={settings.merge ?? null}
+          unset={gt("Not set")}
+          suggested="main"
+          onSave={(merge) => save({ op: "setMerge", merge })}
+        />
+        <p className="text-muted-foreground text-xs">
+          <T>
+            Review first: work reaches the target branch through a merge request. Merge directly: it
+            is merged straight in. Features and modules follow this unless they set their own. A
+            thread still pushes, opens a request or merges only when you ask.
+          </T>
+        </p>
       </Section>
       <RegistersSection settings={settings} save={save} />
     </div>

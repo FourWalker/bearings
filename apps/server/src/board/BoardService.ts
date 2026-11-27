@@ -321,6 +321,7 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
       services: (board.services ?? []).map((s) => ({ id: s.id, name: s.name, match: s.match })),
       rules: board.rules ?? "",
       boardMode: !!board.boardMode,
+      merge: board.merge ?? null,
       registers: (board.registers ?? []).map((r) => ({ id: r.id, topic: r.topic, url: r.url })),
     } satisfies BoardSettings;
   });

@@ -396,6 +396,10 @@ export const SCHEMA = {
       },
       mainService: { type: "string" },
       kind: { type: "string", enum: ["feature", "backlog"] },
+      mergeRequest: {
+        type: "string",
+        description: 'Link of the merge request opened for this module\'s work; "" clears it.',
+      },
       review: {
         type: "object",
         description:

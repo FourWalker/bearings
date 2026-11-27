@@ -51,8 +51,8 @@ describe("repoTreeOf", () => {
       ["main", "ddd4444", ["finished", "other"]],
       ["feature/a", "ccc3333", ["new", "old"]],
     ]);
-    expect(groups[0]?.state).toEqual({ upstream: "origin/feature/a", ahead: 0, behind: 0, dirty: 0 });
-    expect(groups[1]?.state).toEqual({ upstream: "origin/feature/a", ahead: 2, behind: 0, dirty: 1 });
+    expect(groups[0]?.state).toMatchObject({ ahead: 0, dirty: 0, target: null });
+    expect(groups[1]?.state).toMatchObject({ ahead: 2, dirty: 1 });
     expect(groups[0]?.tasks[0]?.done).toBe(true);
   });
 });

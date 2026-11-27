@@ -72,6 +72,23 @@ export const BoardTaskLink = Schema.Struct({
 });
 export type BoardTaskLink = typeof BoardTaskLink.Type;
 
+export const BoardMergeMode = Schema.Struct({
+  /** `request`: through a merge request first; `direct`: merged straight into `target`. */
+  mode: Schema.Literals(["request", "direct"]),
+  target: Schema.String,
+});
+export type BoardMergeMode = typeof BoardMergeMode.Type;
+
+const RepoStanding = {
+  upstream: Schema.NullOr(Schema.String),
+  ahead: Schema.NullOr(Schema.Number),
+  behind: Schema.NullOr(Schema.Number),
+  dirty: Schema.Number,
+  /** The merge target at that checkpoint and HEAD's commits not in it; absent from older servers. */
+  target: Schema.optional(Schema.NullOr(Schema.String)),
+  aheadOfTarget: Schema.optional(Schema.NullOr(Schema.Number)),
+};
+
 export const BoardTask = Schema.Struct({
   id: Schema.String,
   title: Schema.String,
@@ -128,6 +145,16 @@ export const BoardTask = Schema.Struct({
   evidence: Schema.NullOr(Schema.String),
   /** What the Goal's thread reported when it finished the task, in full. */
   doneNote: Schema.NullOr(Schema.String),
+  /** The merge mode the task works under; `from` null means the board's. Absent: older server. */
+  merge: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        ...BoardMergeMode.fields,
+        from: Schema.NullOr(Schema.Struct({ id: Schema.String, title: Schema.String })),
+      }),
+    ),
+  ),
+  mergeRequest: Schema.optional(Schema.NullOr(Schema.String)),
 });
 export type BoardTask = typeof BoardTask.Type;
 
@@ -178,6 +205,7 @@ export const BoardView = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   boardMode: Schema.Boolean,
+  merge: Schema.optional(Schema.NullOr(BoardMergeMode)),
   registers: Schema.optional(
     Schema.Array(
       Schema.Struct({
@@ -307,11 +335,8 @@ export const BoardTaskDetail = Schema.Struct({
       name: Schema.String,
       branch: Schema.String,
       head: Schema.String,
-      upstream: Schema.NullOr(Schema.String),
-      ahead: Schema.NullOr(Schema.Number),
-      behind: Schema.NullOr(Schema.Number),
-      dirty: Schema.Number,
       at: Schema.Number,
+      ...RepoStanding,
     }),
   ),
   /** A feature's or module's tasks, by the repo and branch each was last recorded on. */
@@ -322,14 +347,7 @@ export const BoardTaskDetail = Schema.Struct({
         branch: Schema.String,
         head: Schema.String,
         /** Null when only a finished task's evidence names the branch: its push state is unknown. */
-        state: Schema.NullOr(
-          Schema.Struct({
-            upstream: Schema.NullOr(Schema.String),
-            ahead: Schema.NullOr(Schema.Number),
-            behind: Schema.NullOr(Schema.Number),
-            dirty: Schema.Number,
-          }),
-        ),
+        state: Schema.NullOr(Schema.Struct(RepoStanding)),
         at: Schema.Number,
         tasks: Schema.Array(
           Schema.Struct({
@@ -466,6 +484,10 @@ export const BoardTaskEdit = Schema.Union([
   /** Gives the task's module or master task to a workspace copy (by root), or releases it. */
   Schema.Struct({ op: Schema.Literal("setOwner"), root: Schema.NullOr(Schema.String) }),
   Schema.Struct({ op: Schema.Literal("softRelease") }),
+  /** A feature's or module's own merge mode; null goes back to the parent's or the board's. */
+  Schema.Struct({ op: Schema.Literal("setMerge"), merge: Schema.NullOr(BoardMergeMode) }),
+  /** The open merge request for a feature's or module's work; "" clears it. */
+  Schema.Struct({ op: Schema.Literal("setMergeRequest"), url: Schema.String }),
   Schema.Struct({ op: Schema.Literal("reclaim") }),
 ]);
 export type BoardTaskEdit = typeof BoardTaskEdit.Type;
@@ -497,6 +519,7 @@ export const BoardSettingsEdit = Schema.Union([
   }),
   Schema.Struct({ op: Schema.Literal("saveRules"), rules: Schema.String }),
   Schema.Struct({ op: Schema.Literal("setBoardMode"), on: Schema.Boolean }),
+  Schema.Struct({ op: Schema.Literal("setMerge"), merge: Schema.NullOr(BoardMergeMode) }),
   /** Stops a Goal without its thread's help: paused can resume, ended is final. */
   Schema.Struct({
     op: Schema.Literal("stopGoal"),
@@ -538,6 +561,7 @@ export const BoardSettings = Schema.Struct({
   ),
   rules: Schema.String,
   boardMode: Schema.Boolean,
+  merge: Schema.optional(Schema.NullOr(BoardMergeMode)),
   registers: Schema.Array(
     Schema.Struct({ id: Schema.String, topic: Schema.String, url: Schema.String }),
   ),

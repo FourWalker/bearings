@@ -45,6 +45,8 @@ export interface BoardGit {
     head: string,
     files: ReadonlyArray<string>,
   ) => Promise<"same" | "changed" | "unreachable" | null>;
+  /** Commits on HEAD at `dir` that branch `target` lacks; null when the repo has no such branch. */
+  readonly aheadOf?: (dir: string, target: string) => Promise<number | null>;
 }
 
 export interface BoardClock {

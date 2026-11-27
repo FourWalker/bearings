@@ -1,5 +1,6 @@
 import type {
   BoardDecisionType,
+  BoardMergeMode,
   BoardTask,
   BoardTaskEdit,
   EnvironmentId,
@@ -116,6 +117,64 @@ export function ChoiceSelect<V extends string>(props: {
         </SelectPopup>
       </Select>
     </div>
+  );
+}
+
+/**
+ * Picks how finished work reaches its target branch. `unset` names the choice that stores
+ * nothing: no mode on a board, the parent's mode on a feature or module.
+ */
+export function MergeModeForm(props: {
+  readonly value: BoardMergeMode | null;
+  readonly unset: string;
+  /** The branch offered when a mode is first picked. */
+  readonly suggested: string;
+  readonly onSave: (merge: BoardMergeMode | null) => Promise<boolean>;
+}) {
+  const gt = useGT();
+  const [mode, setMode] = useState<BoardMergeMode["mode"] | "unset">(props.value?.mode ?? "unset");
+  const [target, setTarget] = useState(props.value?.target ?? props.suggested);
+  const changed =
+    mode !== (props.value?.mode ?? "unset") ||
+    (mode !== "unset" && target.trim() !== props.value?.target);
+  return (
+    <form
+      className="flex flex-wrap items-center gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void props.onSave(mode === "unset" ? null : { mode, target: target.trim() });
+      }}
+    >
+      <ChoiceSelect
+        value={mode}
+        label={gt("Merge mode")}
+        choices={[
+          ["unset", props.unset],
+          ["request", gt("Review first")],
+          ["direct", gt("Merge directly")],
+        ]}
+        onChange={setMode}
+      />
+      {mode === "unset" ? null : (
+        <div className="w-40">
+          <Input
+            size="sm"
+            placeholder={gt("Target branch")}
+            aria-label={gt("Target branch")}
+            value={target}
+            onChange={(event) => setTarget(event.target.value)}
+          />
+        </div>
+      )}
+      <Button
+        type="submit"
+        variant="outline"
+        size="xs"
+        disabled={!changed || (mode !== "unset" && !target.trim())}
+      >
+        <T>Save</T>
+      </Button>
+    </form>
   );
 }
 

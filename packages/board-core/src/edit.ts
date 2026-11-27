@@ -15,7 +15,7 @@ import {
   setStepDone,
   stepDone,
 } from "./plan.ts";
-import { type BoardStore, decisionType, levelOf } from "./store.ts";
+import { type BoardStore, cleanMerge, decisionType, levelOf } from "./store.ts";
 import { doneEvidence } from "./verify.ts";
 import { base, isInside, norm, sameRoot, slug, stamp } from "./text.ts";
 import type {
@@ -25,6 +25,7 @@ import type {
   ItemKind,
   Level,
   LinkType,
+  MergeMode,
   RepoState,
   Root,
   Session,
@@ -134,6 +135,10 @@ export type TaskEdit =
   | { readonly op: "setOwner"; readonly root: string | null }
   /** Hands the module over once everything is pushed, clean and checkpointed. */
   | { readonly op: "softRelease" }
+  /** A feature's or module's own merge mode; null goes back to the parent's or the board's. */
+  | { readonly op: "setMerge"; readonly merge: MergeMode | null }
+  /** The open merge request for a feature's or module's work; "" clears it. */
+  | { readonly op: "setMergeRequest"; readonly url: string }
   | { readonly op: "reclaim" };
 
 export interface EditResult {
@@ -829,6 +834,29 @@ export async function editTask(
       await store.saveTask(boardId, task);
       return { message: "Saved." };
     }
+    case "setMerge": {
+      if (levelOf(task) === 3)
+        throw new BoardEditError("A task follows the merge mode of its module.");
+      if (edit.merge === null) delete task.merge;
+      else {
+        const merge = cleanMerge(edit.merge);
+        if (typeof merge === "string") throw new BoardEditError(merge);
+        task.merge = merge;
+      }
+      await store.saveTask(boardId, task);
+      return { message: "Saved." };
+    }
+    case "setMergeRequest": {
+      if (levelOf(task) === 3)
+        throw new BoardEditError("A merge request is recorded on the module or feature.");
+      const url = edit.url.trim();
+      if (url && !/^https?:\/\/\S+$/.test(url))
+        throw new BoardEditError("A merge request is recorded by its link.");
+      if (url) task.mergeRequest = url;
+      else delete task.mergeRequest;
+      await store.saveTask(boardId, task);
+      return { message: "Saved." };
+    }
     case "star":
       if (edit.on) task.starredAt ??= now;
       else delete task.starredAt;
@@ -1062,6 +1090,8 @@ export type BoardSettingsEdit =
     }
   | { readonly op: "saveRules"; readonly rules: string }
   | { readonly op: "setBoardMode"; readonly on: boolean }
+  /** The board's merge mode, which features and modules follow unless they set their own. */
+  | { readonly op: "setMerge"; readonly merge: MergeMode | null }
   | {
       readonly op: "saveRegisters";
       readonly registers: ReadonlyArray<{
@@ -1203,6 +1233,14 @@ export async function editBoard(
       break;
     case "setBoardMode":
       board.boardMode = edit.on;
+      break;
+    case "setMerge":
+      if (edit.merge === null) delete board.merge;
+      else {
+        const merge = cleanMerge(edit.merge);
+        if (typeof merge === "string") throw new BoardEditError(merge);
+        board.merge = merge;
+      }
       break;
     case "saveRegisters":
       board.registers = edit.registers

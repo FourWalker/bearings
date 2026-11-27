@@ -14,7 +14,7 @@ import {
 } from "./plan.ts";
 import { goalOpen, listGoals } from "./goal.ts";
 import { evidenceLine } from "./verify.ts";
-import { type BoardStore, decisionType } from "./store.ts";
+import { type BoardStore, decisionType, mergeOf } from "./store.ts";
 import { norm } from "./text.ts";
 import type {
   Decision,
@@ -22,6 +22,7 @@ import type {
   CheckResult,
   Item,
   Level,
+  MergeMode,
   Owner,
   RepoState,
   Session,
@@ -128,6 +129,12 @@ export interface BoardViewTask {
   readonly evidence: string | null;
   /** What the Goal's thread reported when it finished the task, in full. */
   readonly doneNote: string | null;
+  /** The merge mode the task works under; `from` names the feature or module that set it. */
+  readonly merge:
+    | (MergeMode & { readonly from: { readonly id: string; readonly title: string } | null })
+    | null;
+  /** A feature's or module's own open merge request. */
+  readonly mergeRequest: string | null;
 }
 
 export interface BoardViewGoal {
@@ -176,6 +183,8 @@ export interface BoardView {
   readonly id: string;
   readonly name: string;
   readonly boardMode: boolean;
+  /** The board's own merge mode. */
+  readonly merge: MergeMode | null;
   readonly registers: ReadonlyArray<{
     readonly id: string;
     readonly topic: string;
@@ -256,6 +265,21 @@ export async function readBoardView(
   const all = await store.listTasks(boardId);
   const byId = new Map(all.map((t) => [t.id, t]));
   // As BoardChat.ownerHolder: a task belongs to its module's owner, else the nearest owned parent.
+  const mergeFor = (t: Task): BoardViewTask["merge"] => {
+    const chain: Task[] = [];
+    for (let cur: Task | undefined = t; cur && !chain.includes(cur);) {
+      chain.push(cur);
+      cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+    }
+    const merge = mergeOf(board, chain);
+    return merge
+      ? {
+          mode: merge.mode,
+          target: merge.target,
+          from: merge.from ? { id: merge.from.id, title: merge.from.title } : null,
+        }
+      : null;
+  };
   const ownerRoot = (t: Task): string | null => {
     let cur = t.level === 3 && t.parentId ? (byId.get(t.parentId) ?? t) : t;
     for (let i = 0; i < 3; i++) {
@@ -380,6 +404,8 @@ export async function readBoardView(
         goal: goals.get(t.id) ?? null,
         evidence: t.status === "done" && t.doneEvidence ? evidenceLine(t.doneEvidence) : null,
         doneNote: t.status === "done" ? (t.doneNote ?? null) : null,
+        merge: mergeFor(t),
+        mergeRequest: t.mergeRequest ?? null,
       };
     }),
   );
@@ -387,6 +413,7 @@ export async function readBoardView(
     id: board.id,
     name: board.name,
     boardMode: !!board.boardMode,
+    merge: board.merge ?? null,
     registers: board.registers ?? [],
     services: (board.services ?? []).map((s) => ({ id: s.id, name: s.name, match: s.match })),
     workspaces: board.roots.map((r) => ({ label: r.label, root: norm(r.path) })),
@@ -457,7 +484,7 @@ export interface BoardTaskDetail {
     }
   >;
   readonly repoState: ReadonlyArray<
-    Pick<RepoState, "name" | "branch" | "head" | "upstream" | "ahead" | "behind" | "dirty" | "at">
+    Pick<RepoState, "name" | "branch" | "head" | "at"> & RepoStanding
   >;
   /** A feature's or module's tasks below it, by the repo and branch they were last recorded on. */
   readonly repoTree: ReadonlyArray<RepoGroup>;
@@ -478,13 +505,28 @@ export interface BoardTaskDetail {
   }>;
 }
 
+type RepoStanding = Pick<RepoState, "upstream" | "ahead" | "behind" | "dirty"> & {
+  /** The merge target at that checkpoint; null when no merge mode was set then. */
+  readonly target: string | null;
+  readonly aheadOfTarget: number | null;
+};
+
+const standingOf = (r: RepoState): RepoStanding => ({
+  upstream: r.upstream,
+  ahead: r.ahead,
+  behind: r.behind,
+  dirty: r.dirty,
+  target: r.target ?? null,
+  aheadOfTarget: r.aheadOfTarget ?? null,
+});
+
 export interface RepoGroup {
   readonly name: string;
   readonly branch: string;
   /** The newest commit recorded on the branch by any of its tasks. */
   readonly head: string;
   /** Push and clean state at the newest checkpoint; null when only done evidence names the branch. */
-  readonly state: Pick<RepoState, "upstream" | "ahead" | "behind" | "dirty"> | null;
+  readonly state: RepoStanding | null;
   readonly at: number;
   readonly tasks: ReadonlyArray<{
     readonly id: string;
@@ -517,14 +559,7 @@ ${r.branch}`;
         at: r.at,
       };
       const group = groups.get(key);
-      const state = r.state
-        ? {
-            upstream: r.state.upstream,
-            ahead: r.state.ahead,
-            behind: r.state.behind,
-            dirty: r.state.dirty,
-          }
-        : null;
+      const state = r.state ? standingOf(r.state) : null;
       if (!group) {
         groups.set(key, {
           name: r.name,
@@ -674,11 +709,8 @@ export async function readTaskDetail(
       name: r.name,
       branch: r.branch,
       head: r.head,
-      upstream: r.upstream,
-      ahead: r.ahead,
-      behind: r.behind,
-      dirty: r.dirty,
       at: r.at,
+      ...standingOf(r),
     })),
     repoTree: repoTreeOf(all.filter((x) => x.id !== task.id && tree.has(x.id))),
     parents: rootFirst.map((a, i) => ({
