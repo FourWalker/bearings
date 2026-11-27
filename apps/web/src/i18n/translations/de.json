@@ -13066,5 +13066,20 @@
   "3c2d7c2dce71134b": "Dem Board folgen",
   "a9871c11f0c66825": "Merge Request ↗",
   "278318a274c62b90": "Link zum Merge Request",
-  "15902343207e6b24": "Auf dem Board ist kein Merge-Modus festgelegt."
+  "15902343207e6b24": "Auf dem Board ist kein Merge-Modus festgelegt.",
+  "f520593d4aac2dd2": "Builds und Slots",
+  "b37121e90c9a39c3": "leer",
+  "a98b2fc95e3b4921": "Slot entfernen",
+  "be8534bfc2e6504e": "Slot-Name",
+  "d5c5606782f1686e": "Build-Version",
+  "da4ab7fc894d631f": "Commit (optional)",
+  "ac5437fdbb8da6d6": "Ein Slot ist ein benannter Ort, an dem ein Build liegt, etwa deine Installation oder ein Demo-Server. Gib den Commit an, aus dem ein Build erstellt wurde, und das Board markiert, welche fertigen Aufgaben er enthält. Build- und Installationsskripte können einen Slot setzen mit: t3 board slot NAME --version VERSION",
+  "4d73ab94226f0519": "Build setzen",
+  "e56b70b7e05ad1f5": "in {slot}",
+  "54cda760d1f771d6": "Builds",
+  "8c0756d97b5af575": "Gelandet in {version}",
+  "344f9bbe87b2776a": "Gefunden in {version}",
+  "c6bc662ae036824a": "Build, in dem der Fehler gefunden wurde",
+  "7f8f2dc9c22e2c23": "Grüne Slots enthalten diese Arbeit.",
+  "85f508d7db415cba": "Von keinem Slot ist bekannt, dass sein Build diese Arbeit enthält."
 }

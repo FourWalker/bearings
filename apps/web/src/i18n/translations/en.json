@@ -13075,5 +13075,20 @@
   "3c2d7c2dce71134b": "Follow the board",
   "a9871c11f0c66825": "Merge request ↗",
   "278318a274c62b90": "Merge request link",
-  "15902343207e6b24": "No merge mode set on the board."
+  "15902343207e6b24": "No merge mode set on the board.",
+  "f520593d4aac2dd2": "Builds and slots",
+  "b37121e90c9a39c3": "empty",
+  "a98b2fc95e3b4921": "Remove slot",
+  "be8534bfc2e6504e": "Slot name",
+  "d5c5606782f1686e": "Build version",
+  "da4ab7fc894d631f": "Commit (optional)",
+  "ac5437fdbb8da6d6": "A slot is a named place a build lives, such as your install or a demo server. Give the commit a build was made from and the board marks which finished tasks it holds. Build and install scripts can set a slot with: t3 board slot NAME --version VERSION",
+  "4d73ab94226f0519": "Set build",
+  "e56b70b7e05ad1f5": "in {slot}",
+  "54cda760d1f771d6": "Builds",
+  "8c0756d97b5af575": "Landed in {version}",
+  "344f9bbe87b2776a": "Found in {version}",
+  "c6bc662ae036824a": "Build the bug was found in",
+  "7f8f2dc9c22e2c23": "Green slots hold this work.",
+  "85f508d7db415cba": "No slot's build is known to hold this work."
 }

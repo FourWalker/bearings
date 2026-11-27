@@ -137,6 +137,7 @@ function SettingsBody(props: {
           </T>
         </p>
       </Section>
+      <SlotsSection settings={settings} save={save} />
       <RegistersSection settings={settings} save={save} />
     </div>
   );
@@ -422,6 +423,114 @@ function RulesEditor(props: { readonly settings: BoardSettings; readonly save: S
         </Button>
       </div>
     </div>
+  );
+}
+
+/** Where builds live and the build in each; saving a slot's name again replaces its build. */
+function SlotsSection(props: { readonly settings: BoardSettings; readonly save: Save }) {
+  const gt = useGT();
+  const slots = props.settings.slots ?? [];
+  const [slot, setSlot] = useState("");
+  const [version, setVersion] = useState("");
+  const [ref, setRef] = useState("");
+  const [note, setNote] = useState("");
+  return (
+    <Section title={gt("Builds and slots")}>
+      <p className="text-muted-foreground text-xs">
+        <T>
+          A slot is a named place a build lives, such as your install or a demo server. Give the
+          commit a build was made from and the board marks which finished tasks it holds. Build and
+          install scripts can set a slot with: t3 board slot NAME --version VERSION
+        </T>
+      </p>
+      {slots.map((entry) => (
+        <div key={entry.id} className="flex items-center gap-2 text-sm">
+          <Badge variant="outline">{entry.name}</Badge>
+          <button
+            type="button"
+            className="wrap-anywhere min-w-0 flex-1 text-start hover:underline"
+            onClick={() => {
+              setSlot(entry.name);
+              setVersion(entry.version);
+              setRef(entry.ref ?? "");
+              setNote(entry.note);
+            }}
+          >
+            {entry.version || gt("empty")}
+            {entry.ref ? (
+              <span className="ms-1 font-mono text-muted-foreground text-xs">@ {entry.ref}</span>
+            ) : null}
+            {entry.note ? (
+              <span className="ms-2 text-muted-foreground text-xs">{entry.note}</span>
+            ) : null}
+          </button>
+          <Button
+            variant="ghost-muted"
+            size="icon-xs"
+            aria-label={gt("Remove slot")}
+            onClick={() => void props.save({ op: "removeSlot", id: entry.id })}
+          >
+            <XIcon />
+          </Button>
+        </div>
+      ))}
+      <form
+        className="grid grid-cols-2 gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void props
+            .save({
+              op: "setSlot",
+              slot: slot.trim(),
+              version: version.trim(),
+              ...(ref.trim() ? { ref: ref.trim() } : {}),
+              note: note.trim(),
+            })
+            .then((ok) => {
+              if (!ok) return;
+              setSlot("");
+              setVersion("");
+              setRef("");
+              setNote("");
+            });
+        }}
+      >
+        <Input
+          size="sm"
+          placeholder={gt("Slot name")}
+          aria-label={gt("Slot name")}
+          value={slot}
+          onChange={(event) => setSlot(event.target.value)}
+        />
+        <Input
+          size="sm"
+          placeholder={gt("Build version")}
+          aria-label={gt("Build version")}
+          value={version}
+          onChange={(event) => setVersion(event.target.value)}
+        />
+        <Input
+          size="sm"
+          placeholder={gt("Commit (optional)")}
+          aria-label={gt("Commit (optional)")}
+          spellCheck={false}
+          value={ref}
+          onChange={(event) => setRef(event.target.value)}
+        />
+        <Input
+          size="sm"
+          placeholder={gt("Note")}
+          aria-label={gt("Note")}
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+        />
+        <div>
+          <Button type="submit" variant="outline" size="xs" disabled={!slot.trim()}>
+            <T>Set build</T>
+          </Button>
+        </div>
+      </form>
+    </Section>
   );
 }
 

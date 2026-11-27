@@ -13073,5 +13073,20 @@
   "3c2d7c2dce71134b": "Följ tavlan",
   "a9871c11f0c66825": "Merge request ↗",
   "278318a274c62b90": "Länk till merge request",
-  "15902343207e6b24": "Inget merge-läge är angivet på tavlan."
+  "15902343207e6b24": "Inget merge-läge är angivet på tavlan.",
+  "f520593d4aac2dd2": "Byggen och platser",
+  "b37121e90c9a39c3": "tom",
+  "a98b2fc95e3b4921": "Ta bort plats",
+  "be8534bfc2e6504e": "Platsens namn",
+  "d5c5606782f1686e": "Byggets version",
+  "da4ab7fc894d631f": "Commit (valfritt)",
+  "ac5437fdbb8da6d6": "En plats är ett namngivet ställe där ett bygge finns, till exempel din installation eller en demoserver. Ange den commit ett bygge gjordes från, så markerar tavlan vilka färdiga uppgifter det innehåller. Bygg- och installationsskript kan sätta en plats med: t3 board slot NAME --version VERSION",
+  "4d73ab94226f0519": "Ange bygge",
+  "e56b70b7e05ad1f5": "i {slot}",
+  "54cda760d1f771d6": "Byggen",
+  "8c0756d97b5af575": "Landade i {version}",
+  "344f9bbe87b2776a": "Hittad i {version}",
+  "c6bc662ae036824a": "Bygget där buggen hittades",
+  "7f8f2dc9c22e2c23": "Gröna platser innehåller det här arbetet.",
+  "85f508d7db415cba": "Ingen plats har ett bygge som man vet innehåller det här arbetet."
 }

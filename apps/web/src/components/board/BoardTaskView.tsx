@@ -1220,6 +1220,13 @@ function HandoffTab(props: BoardTaskViewProps & { readonly detail: BoardTaskDeta
                           {gt("recorded at {head}", { head: entry.head })}
                         </span>
                       ) : null}
+                      {(props.board.slots ?? [])
+                        .filter((slot) => entry.inSlots?.includes(slot.id))
+                        .map((slot) => (
+                          <Badge key={slot.id} variant="success">
+                            {gt("in {slot}", { slot: slot.name })}
+                          </Badge>
+                        ))}
                     </li>
                   );
                 })}
@@ -1646,6 +1653,7 @@ function SideColumn(
       <BugsCard {...props} />
       <ServicesCard {...props} />
       <MergeCard {...props} />
+      <BuildCard {...props} />
       <OtherNamesCard names={props.detail?.aliases ?? []} />
       <Card title={gt("Linked tasks")}>
         <LinkedTasks {...props} />
@@ -1750,6 +1758,68 @@ function ItemList(props: {
         items.map((item) => <ItemRow key={item.id} item={item} taskId={props.task.id} />)
       )}
     </div>
+  );
+}
+
+/** The board's slots with the build in each, and the build this item landed in or was found in. */
+function BuildCard(props: BoardTaskViewProps) {
+  const gt = useGT();
+  const { task, board } = props;
+  const { canEdit, edit } = useBoardEdit();
+  const slots = board.slots ?? [];
+  const landedIn = task.landedIn ?? null;
+  const foundIn = task.foundIn ?? null;
+  if (slots.length === 0 && landedIn === null && foundIn === null && !(task.bug && canEdit))
+    return null;
+  return (
+    <Card title={gt("Builds")}>
+      {landedIn !== null ? (
+        <p className="text-sm">{gt("Landed in {version}", { version: landedIn })}</p>
+      ) : null}
+      {foundIn !== null ? (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="min-w-0 flex-1">{gt("Found in {version}", { version: foundIn })}</span>
+          {canEdit ? (
+            <Button
+              variant="ghost-muted"
+              size="icon-xs"
+              aria-label={gt("Remove")}
+              onClick={() => void edit({ op: "setBuild", foundIn: "" })}
+            >
+              <XIcon />
+            </Button>
+          ) : null}
+        </div>
+      ) : task.bug ? (
+        <AddRow
+          button={gt("Add")}
+          placeholder={gt("Build the bug was found in")}
+          onAdd={(version) => edit({ op: "setBuild", foundIn: version })}
+        />
+      ) : null}
+      {slots.map((slot) => (
+        <div key={slot.id} className="flex flex-wrap items-center gap-2 text-sm">
+          <Badge variant={task.inSlots?.includes(slot.id) ? "success" : "outline"}>
+            {slot.name}
+          </Badge>
+          <span className="wrap-anywhere min-w-0">
+            {slot.version || gt("empty")}
+            {slot.ref ? (
+              <span className="ms-1 font-mono text-muted-foreground text-xs">@ {slot.ref}</span>
+            ) : null}
+          </span>
+        </div>
+      ))}
+      {slots.length > 0 && task.status === "done" ? (
+        <Muted>
+          {task.inSlots?.length ? (
+            <T>Green slots hold this work.</T>
+          ) : (
+            <T>No slot's build is known to hold this work.</T>
+          )}
+        </Muted>
+      ) : null}
+    </Card>
   );
 }
 

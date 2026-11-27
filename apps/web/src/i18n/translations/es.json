@@ -13061,5 +13061,20 @@
   "3c2d7c2dce71134b": "Seguir al tablero",
   "a9871c11f0c66825": "Solicitud de fusión ↗",
   "278318a274c62b90": "Enlace de la solicitud de fusión",
-  "15902343207e6b24": "No hay modo de fusión definido en el tablero."
+  "15902343207e6b24": "No hay modo de fusión definido en el tablero.",
+  "f520593d4aac2dd2": "Builds y slots",
+  "b37121e90c9a39c3": "vacío",
+  "a98b2fc95e3b4921": "Quitar slot",
+  "be8534bfc2e6504e": "Nombre del slot",
+  "d5c5606782f1686e": "Versión del build",
+  "da4ab7fc894d631f": "Commit (opcional)",
+  "ac5437fdbb8da6d6": "Un slot es un lugar con nombre donde vive un build, como tu instalación o un servidor de demostración. Indica el commit del que salió un build y el tablero marcará qué tareas terminadas contiene. Los scripts de build e instalación pueden fijar un slot con: t3 board slot NAME --version VERSION",
+  "4d73ab94226f0519": "Fijar build",
+  "e56b70b7e05ad1f5": "en {slot}",
+  "54cda760d1f771d6": "Builds",
+  "8c0756d97b5af575": "Llegó en {version}",
+  "344f9bbe87b2776a": "Encontrado en {version}",
+  "c6bc662ae036824a": "Build en el que se encontró el error",
+  "7f8f2dc9c22e2c23": "Los slots en verde contienen este trabajo.",
+  "85f508d7db415cba": "No se sabe que el build de ningún slot contenga este trabajo."
 }

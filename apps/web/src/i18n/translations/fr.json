@@ -13066,5 +13066,20 @@
   "3c2d7c2dce71134b": "Suivre le tableau",
   "a9871c11f0c66825": "Demande de fusion ↗",
   "278318a274c62b90": "Lien de la demande de fusion",
-  "15902343207e6b24": "Aucun mode de fusion défini sur le tableau."
+  "15902343207e6b24": "Aucun mode de fusion défini sur le tableau.",
+  "f520593d4aac2dd2": "Builds et emplacements",
+  "b37121e90c9a39c3": "vide",
+  "a98b2fc95e3b4921": "Retirer l'emplacement",
+  "be8534bfc2e6504e": "Nom de l'emplacement",
+  "d5c5606782f1686e": "Version du build",
+  "da4ab7fc894d631f": "Commit (facultatif)",
+  "ac5437fdbb8da6d6": "Un emplacement est un lieu nommé où se trouve un build, comme votre installation ou un serveur de démo. Indiquez le commit dont un build est issu et le tableau marque les tâches terminées qu'il contient. Les scripts de build et d'installation peuvent définir un emplacement avec : t3 board slot NAME --version VERSION",
+  "4d73ab94226f0519": "Définir le build",
+  "e56b70b7e05ad1f5": "dans {slot}",
+  "54cda760d1f771d6": "Builds",
+  "8c0756d97b5af575": "Arrivé dans {version}",
+  "344f9bbe87b2776a": "Trouvé dans {version}",
+  "c6bc662ae036824a": "Build où le bug a été trouvé",
+  "7f8f2dc9c22e2c23": "Les emplacements en vert contiennent ce travail.",
+  "85f508d7db415cba": "Aucun emplacement n'a de build connu pour contenir ce travail."
 }

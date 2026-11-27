@@ -13066,5 +13066,20 @@
   "3c2d7c2dce71134b": "Seguir o quadro",
   "a9871c11f0c66825": "Merge request ↗",
   "278318a274c62b90": "Link do merge request",
-  "15902343207e6b24": "Nenhum modo de merge definido no quadro."
+  "15902343207e6b24": "Nenhum modo de merge definido no quadro.",
+  "f520593d4aac2dd2": "Builds e slots",
+  "b37121e90c9a39c3": "vazio",
+  "a98b2fc95e3b4921": "Remover slot",
+  "be8534bfc2e6504e": "Nome do slot",
+  "d5c5606782f1686e": "Versão do build",
+  "da4ab7fc894d631f": "Commit (opcional)",
+  "ac5437fdbb8da6d6": "Um slot é um lugar com nome onde um build fica, como a sua instalação ou um servidor de demonstração. Informe o commit de que um build foi feito e o quadro marca quais tarefas concluídas ele contém. Scripts de build e instalação podem definir um slot com: t3 board slot NAME --version VERSION",
+  "4d73ab94226f0519": "Definir build",
+  "e56b70b7e05ad1f5": "em {slot}",
+  "54cda760d1f771d6": "Builds",
+  "8c0756d97b5af575": "Entrou em {version}",
+  "344f9bbe87b2776a": "Encontrado em {version}",
+  "c6bc662ae036824a": "Build em que o bug foi encontrado",
+  "7f8f2dc9c22e2c23": "Os slots em verde contêm este trabalho.",
+  "85f508d7db415cba": "Não se sabe de nenhum slot cujo build contenha este trabalho."
 }
