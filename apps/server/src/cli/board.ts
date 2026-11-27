@@ -7,6 +7,9 @@ import {
   BoardEditError,
   BoardStore,
   createBoard,
+  createTask,
+  editTask,
+  type TaskEdit,
   findBoard,
   findOnBoard,
   levelOf,
@@ -14,12 +17,15 @@ import {
   nextStep,
   planProgress,
   readBoardSummaries,
+  setSlot,
+  slotLines,
 } from "@t3tools/board-core";
-import { defaultBoardHome, nodeIO } from "@t3tools/board-core/node";
+import { defaultBoardHome, nodeGit, nodeIO } from "@t3tools/board-core/node";
 import { boardTaskUrl } from "@t3tools/issue-tracker-board/shared/boardIssue";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { Argument, Command, Flag } from "effect/cli";
@@ -42,6 +48,38 @@ const read = <A>(run: () => Promise<A>) =>
     try: run,
     catch: () => new BoardCliError({ detail: "The board folder could not be read." }),
   });
+
+const write = <A>(run: () => Promise<A>) =>
+  Effect.tryPromise({
+    try: run,
+    catch: (cause) =>
+      new BoardCliError({
+        detail:
+          cause instanceof BoardEditError
+            ? cause.message
+            : "The board folder could not be written.",
+      }),
+  });
+
+const readMarkdown = Effect.fn("boardCli.readMarkdown")(function* (path: Option.Option<string>) {
+  if (Option.isNone(path)) return undefined;
+  const fs = yield* FileSystem.FileSystem;
+  return yield* fs
+    .readFileString(path.value)
+    .pipe(Effect.mapError(() => new BoardCliError({ detail: `Could not read ${path.value}.` })));
+});
+
+const listOf = (value: Option.Option<string>) =>
+  Option.getOrUndefined(
+    Option.map(value, (text) =>
+      text
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean),
+    ),
+  );
+
+const CLI_ACTOR = { by: "t3-cli" };
 
 /** The board a command means: the one named, this directory's, or the only one there is. */
 const resolveBoard = Effect.fn("boardCli.resolveBoard")(function* (
@@ -196,20 +234,12 @@ const boardCreateCommand = Command.make("create", {
   Command.withHandler((flags) =>
     Effect.gen(function* () {
       const path = Option.getOrElse(flags.path, () => "") || (yield* HostProcess.WorkingDirectory);
-      const board = yield* Effect.tryPromise({
-        try: () =>
-          createBoard(new BoardStore(defaultBoardHome(), nodeIO), {
-            name: flags.name,
-            roots: [{ path, label: Option.getOrElse(flags.label, () => "") }],
-          }),
-        catch: (cause) =>
-          new BoardCliError({
-            detail:
-              cause instanceof BoardEditError
-                ? cause.message
-                : "The board folder could not be written.",
-          }),
-      });
+      const board = yield* write(() =>
+        createBoard(new BoardStore(defaultBoardHome(), nodeIO), {
+          name: flags.name,
+          roots: [{ path, label: Option.getOrElse(flags.label, () => "") }],
+        }),
+      );
       yield* Console.log(
         `Created the ${board.name} board (id ${board.id}) on ${board.roots[0]?.path}.`,
       );
@@ -217,13 +247,203 @@ const boardCreateCommand = Command.make("create", {
   ),
 );
 
+const servicesFlag = Flag.String("services").pipe(
+  Flag.withDescription("Service ids it touches, separated by commas."),
+  Flag.optional,
+);
+const planFlag = Flag.String("plan").pipe(
+  Flag.withDescription(
+    'A markdown file with the whole plan: "## Phase A" headings, "- [ ] A1 name" steps.',
+  ),
+  Flag.optional,
+);
+const descriptionFlag = Flag.String("description").pipe(
+  Flag.withDescription("One-line purpose."),
+  Flag.optional,
+);
+
+const boardAddCommand = Command.make("add", {
+  board: boardFlag,
+  title: Argument.String("title").pipe(Argument.withDescription("The new item's title.")),
+  parent: Flag.String("parent").pipe(
+    Flag.withDescription("Id of the feature (for a module) or module (for a task) it belongs to."),
+    Flag.optional,
+  ),
+  topLevel: Flag.Boolean("top-level").pipe(
+    Flag.withDescription("Create a feature, which has no parent."),
+    Flag.withDefault(false),
+  ),
+  backlog: Flag.Boolean("backlog").pipe(
+    Flag.withDescription("With --top-level: a service's backlog instead of a feature."),
+    Flag.withDefault(false),
+  ),
+  fromStep: Flag.String("from-step").pipe(
+    Flag.withDescription("The parent plan step this item takes over."),
+    Flag.optional,
+  ),
+  bug: Flag.Boolean("bug").pipe(
+    Flag.withDescription("It fixes a bug found in finished work."),
+    Flag.withDefault(false),
+  ),
+  createAnyway: Flag.Boolean("create-anyway").pipe(
+    Flag.withDescription("Create it although the board has similar work."),
+    Flag.withDefault(false),
+  ),
+  description: descriptionFlag,
+  services: servicesFlag,
+  plan: planFlag,
+}).pipe(
+  Command.withDescription("Add a feature, module or task to a board. Prints its id."),
+  Command.withHandler((flags) =>
+    Effect.gen(function* () {
+      const { store, boardId } = yield* openBoard(flags.board);
+      if (Option.isNone(flags.parent) !== flags.topLevel)
+        return yield* new BoardCliError({
+          detail: "Pass either --parent with the item it belongs to, or --top-level.",
+        });
+      if (!flags.createAnyway && Option.isNone(flags.fromStep)) {
+        const { lines } = yield* read(() =>
+          findOnBoard(store, boardId, flags.title, { every: true }),
+        );
+        if (lines.length > 0)
+          return yield* new BoardCliError({
+            detail: `Not created: the board may already have this.\n${lines.slice(0, 3).join("\n")}\nPass --create-anyway if none of these is it.`,
+          });
+      }
+      const plan = yield* readMarkdown(flags.plan);
+      const task = yield* write(() =>
+        createTask(
+          store,
+          boardId,
+          {
+            title: flags.title,
+            parentId: Option.getOrNull(flags.parent),
+            description: Option.getOrUndefined(flags.description),
+            kind: flags.backlog ? "backlog" : "feature",
+            services: listOf(flags.services),
+            bug: flags.bug,
+            fromStep: Option.getOrUndefined(flags.fromStep),
+            plan,
+          },
+          CLI_ACTOR,
+        ),
+      );
+      yield* Console.log(task.id);
+    }).pipe(reportBoardErrors),
+  ),
+);
+
+const boardUpdateCommand = Command.make("update", {
+  board: boardFlag,
+  task: taskArgument,
+  title: Flag.String("title").pipe(Flag.withDescription("A new title."), Flag.optional),
+  description: descriptionFlag,
+  status: Flag.Literals("status", ["active", "paused", "done"]).pipe(Flag.optional),
+  services: servicesFlag,
+  plan: planFlag,
+  handoff: Flag.String("handoff").pipe(
+    Flag.withDescription("A markdown file with the whole living handoff."),
+    Flag.optional,
+  ),
+}).pipe(
+  Command.withDescription("Change a task's title, purpose, status, services, plan or handoff."),
+  Command.withHandler((flags) =>
+    Effect.gen(function* () {
+      const { store, boardId } = yield* openBoard(flags.board);
+      const task = yield* loadTask(store, boardId, flags.task);
+      const plan = yield* readMarkdown(flags.plan);
+      const handoff = yield* readMarkdown(flags.handoff);
+      const fields = {
+        title: Option.getOrUndefined(flags.title),
+        description: Option.getOrUndefined(flags.description),
+        status: Option.getOrUndefined(flags.status),
+        services: listOf(flags.services),
+      };
+      const edits: TaskEdit[] = [];
+      if (plan !== undefined) edits.push({ op: "savePlan", markdown: plan });
+      if (handoff !== undefined) edits.push({ op: "saveHandoff", markdown: handoff });
+      if (Object.values(fields).some((value) => value !== undefined))
+        edits.push({ op: "update", ...fields });
+      if (edits.length === 0)
+        return yield* new BoardCliError({ detail: "Nothing to change: pass at least one flag." });
+      for (const edit of edits) {
+        const { message } = yield* write(() =>
+          editTask(store, boardId, task.id, edit, CLI_ACTOR, nodeGit),
+        );
+        yield* Console.log(message);
+      }
+    }).pipe(reportBoardErrors),
+  ),
+);
+
+const boardSlotCommand = Command.make("slot", {
+  board: boardFlag,
+  slot: Argument.String("slot").pipe(
+    Argument.withDescription(
+      'The slot\'s name, e.g. "frozen" or "next". A new name makes the slot.',
+    ),
+  ),
+  version: Flag.String("version").pipe(
+    Flag.withDescription('The version of the build now in the slot; "" empties it.'),
+  ),
+  ref: Flag.String("ref").pipe(
+    Flag.withDescription("The commit the build was made from. Defaults to HEAD of this directory."),
+    Flag.optional,
+  ),
+  note: Flag.String("note").pipe(Flag.optional),
+}).pipe(
+  Command.withDescription(
+    "Record which build is in a slot, from a build or install script. Finished tasks the build holds are marked as landed in it.",
+  ),
+  Command.withHandler((flags) =>
+    Effect.gen(function* () {
+      const { store, boardId } = yield* openBoard(flags.board);
+      const cwd = yield* HostProcess.WorkingDirectory;
+      const { message } = yield* write(() =>
+        setSlot(
+          store,
+          boardId,
+          {
+            slot: flags.slot,
+            version: flags.version,
+            ref: Option.getOrUndefined(flags.ref),
+            dir: cwd,
+            note: Option.getOrUndefined(flags.note),
+          },
+          CLI_ACTOR,
+          nodeGit,
+        ),
+      );
+      yield* Console.log(message);
+    }).pipe(reportBoardErrors),
+  ),
+);
+
+const boardSlotsCommand = Command.make("slots", { board: boardFlag }).pipe(
+  Command.withDescription("List the board's slots and the build in each."),
+  Command.withHandler((flags) =>
+    Effect.gen(function* () {
+      const { store, boardId } = yield* openBoard(flags.board);
+      const registry = yield* read(() => store.loadRegistry());
+      const lines = slotLines(registry.boards.find((board) => board.id === boardId) ?? null);
+      yield* Console.log(lines.length > 0 ? lines.join("\n") : "No slots yet.");
+    }).pipe(reportBoardErrors),
+  ),
+);
+
 export const boardCommand = Command.make("board").pipe(
-  Command.withDescription("The Project Board: list or create boards, find work, show a task."),
+  Command.withDescription(
+    "The Project Board: list or create boards, add, find, show and update tasks, and record builds.",
+  ),
   Command.withSubcommands([
     boardListCommand,
     boardCreateCommand,
+    boardAddCommand,
+    boardUpdateCommand,
     boardFindCommand,
     boardShowCommand,
     boardLinkCommand,
+    boardSlotCommand,
+    boardSlotsCommand,
   ]),
 );

@@ -34,7 +34,8 @@ through Claude-only APIs. Here, each job maps onto a T3 piece that already serve
   `%USERPROFILE%\.claude-board\` (see the board repo's `docs/DATA-LAYOUT.md`): `boards.json`, tasks,
   plan.md, handoffs, decisions, links, ownership.
 - The logic gets lifted out of the mod's `register.ts`. The Claude mod is then rewritten to import it,
-  so existing Claude Code chats keep working during the move.
+  so existing Claude Code chats keep working during the move. (Since 2026-11-26 the mod is no
+  longer kept in sync: owner, D-MWXQ9IY6512331.)
 - **Same data on disk.** Old Claude sessions and new T3 threads appear on one board.
 - Session records gain a `source` field: `{ kind: "t3-thread", threadId, environmentId, provider, model }`
   or `{ kind: "claude-code", sessionId }`.
@@ -82,7 +83,7 @@ through Claude-only APIs. Here, each job maps onto a T3 piece that already serve
 - Each tool runs as the calling thread's own board chat (`apps/server/src/board/BoardChats.ts`).
   The thread's folder (its worktree, else its project's root) picks the board, and the record
   carries `source: { kind: "t3-thread", threadId, provider, model }`.
-- Tool inputs stay as JSON Schema in `board-core` (shared with the Claude mod) and are converted to
+- Tool inputs stay as JSON Schema in `board-core` and are converted to
   Effect Schema in `tools.ts`.
 - Registered in `McpHttpServer.ts` beside `IssuesToolkit`. Every provider thread already receives
   T3's MCP session, so every model gets the tools. Outside MCP clients don't see them, since a

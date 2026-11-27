@@ -33,6 +33,8 @@ import { useAtomValue } from "@effect/atom-react";
 import { useOrchestrationCommand } from "../../state/use-orchestration-command";
 import { readEnvironmentScope, useEnvironmentScope } from "../../state/session";
 import { ProjectFavicon } from "../ProjectFavicon";
+import { useNavigateToBoard } from "../sidebar/mainAppLocation";
+import { useProjectBoardSupported } from "../../state/environments";
 import {
   WorkspaceBreadcrumb,
   WorkspaceBreadcrumbItem,
@@ -85,6 +87,9 @@ export const ChatHeader = memo(function ChatHeader({
   onFindInThread,
 }: ChatHeaderProps) {
   const gt = useGT();
+  // Project Board fork: with a board, the workspace name leads back to it, not to a new thread.
+  const boardSupported = useProjectBoardSupported();
+  const navigateToBoard = useNavigateToBoard();
   const activeProjectName = activeProject?.isScratch ? gt("No project") : activeProject?.title;
   const activeProjectCwd = activeProject?.workspaceRoot ?? null;
   const interfaceFont = useClientSettings((settings) => settings.fontFamilySans);
@@ -269,8 +274,12 @@ export const ChatHeader = memo(function ChatHeader({
                   render={
                     <button
                       type="button"
-                      aria-label={gt("New thread in {project}", { project: activeProjectName })}
-                      onClick={onNewThreadInProject}
+                      aria-label={
+                        boardSupported
+                          ? gt("Back to the board")
+                          : gt("New thread in {project}", { project: activeProjectName })
+                      }
+                      onClick={boardSupported ? () => void navigateToBoard() : onNewThreadInProject}
                       className="inline-flex min-w-0 max-w-full cursor-pointer items-center gap-1.5 rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                     />
                   }
@@ -284,9 +293,13 @@ export const ChatHeader = memo(function ChatHeader({
                   />
                 </TooltipTrigger>
                 <TooltipPopup side="top">
-                  <T>
-                    New thread in <Var>{activeProjectName}</Var>
-                  </T>
+                  {boardSupported ? (
+                    <T>Back to the board</T>
+                  ) : (
+                    <T>
+                      New thread in <Var>{activeProjectName}</Var>
+                    </T>
+                  )}
                 </TooltipPopup>
               </Tooltip>
             </WorkspaceBreadcrumbItem>

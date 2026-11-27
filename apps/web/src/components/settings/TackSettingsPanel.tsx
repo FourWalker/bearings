@@ -4,10 +4,13 @@ import type { ReactNode } from "react";
 import { TACK_SKINS, type TackMotion, type TackSkin } from "~/components/board/tackAvatar.logic";
 import { TackAvatar, useTackLook, useTackPen } from "~/components/board/TackAvatar";
 import { usePinCatch } from "~/components/board/BoardPinBar";
+import { useStarReviewOff } from "~/components/board/BoardTree";
 import { useTackPlace, useTackShowMode } from "~/components/board/BoardTack";
 import {
+  type TackAccess,
   type TackModelRole,
   useBoardPanelOpen,
+  useTackAccess,
   useTackHome,
   useTackModels,
 } from "~/components/board/tackSettings";
@@ -66,8 +69,14 @@ export function TackSettingsPanel() {
   const [show, setShow] = useTackShowMode();
   const [panelOpen, setPanelOpen] = useBoardPanelOpen();
   const [catching, setCatching] = usePinCatch();
+  const [reviewOff, setReviewOff] = useStarReviewOff();
   const [taskSize, setTaskSize] = useTaskTackSize();
   const [models, setModels] = useTackModels();
+  const [access, setAccess] = useTackAccess();
+  const accesses: ReadonlyArray<readonly [TackAccess, string]> = [
+    ["ask", gt("Asks before each step")],
+    ["full", gt("Full access")],
+  ];
   const { environments } = useEnvironments();
   const providersByEnvironment = useEnvironmentProviders();
   const boards = environments.filter(
@@ -167,6 +176,33 @@ export function TackSettingsPanel() {
         )}
       </SettingsSection>
 
+      <SettingsSection id="tack-access" title={gt("What Tack may do")}>
+        {row(
+          gt("Board Tack access"),
+          gt(
+            "Tack on a board answers and shows tasks. Creating a task always needs your yes, whatever is set here.",
+          ),
+          <Choice
+            label={gt("Board Tack access")}
+            value={access.board}
+            onChange={(board) => setAccess({ ...access, board })}
+            options={accesses}
+          />,
+        )}
+        {row(
+          gt("Task Tack access"),
+          gt(
+            "Tack in an open task works on it when the mode is Run. Ask mode always asks before each step.",
+          ),
+          <Choice
+            label={gt("Task Tack access")}
+            value={access.task}
+            onChange={(task) => setAccess({ ...access, task })}
+            options={accesses}
+          />,
+        )}
+      </SettingsSection>
+
       <SettingsSection id="tack-look" title={gt("Look")}>
         <SettingsRow
           title={gt("Avatar")}
@@ -258,6 +294,16 @@ export function TackSettingsPanel() {
               ["tack", gt("By Tack: a Sub Tack goes to the bar")],
             ]}
           />,
+        )}
+      </SettingsSection>
+
+      <SettingsSection id="board-stars" title={gt("Starred items")}>
+        {row(
+          gt("Daily star review"),
+          gt(
+            "The first time a board opens each day, list its starred items so you can unstar some.",
+          ),
+          toggle(gt("Daily star review"), !reviewOff, (on) => setReviewOff(!on)),
         )}
       </SettingsSection>
 

@@ -1,7 +1,7 @@
 /**
- * The Project Board's data model, as stored under `~/.claude-board` (see the board repo's
- * docs/DATA-LAYOUT.md). The Claude Code mod and T3 Code both read and write these shapes, so a
- * field added here must stay optional and old files must keep loading.
+ * The Project Board's data model, as stored under `~/.claude-board`. Boards there were first
+ * written by the old Claude Code mod, so a field added here must stay optional and old files
+ * must keep loading.
  *
  * @module board-core/types
  */
@@ -20,8 +20,17 @@ export interface Implemented {
   at?: number | undefined;
 }
 
+/**
+ * What an open decision holds up. blocker: work stops until the person decides. mandatory: settle
+ * or skip it before the task is done. optional: nothing. feature: product direction, filed at
+ * Level 1, never holds a task. A decision without a type reads as mandatory (a recommendation as
+ * optional).
+ */
+export type DecisionType = "blocker" | "mandatory" | "optional" | "feature";
+
 export interface Decision {
   id: string;
+  type?: DecisionType | undefined;
   title: string;
   description: string;
   level: Level;
@@ -66,6 +75,29 @@ export interface RepoState {
   lastCommitAt: number;
   at: number;
   service?: string | undefined;
+  /** The merge target at that checkpoint, and HEAD's commits not in it; null: no such branch here. */
+  target?: string | undefined;
+  aheadOfTarget?: number | null | undefined;
+}
+
+/** How finished work reaches `target`: through a merge request first, or merged straight in. */
+export interface MergeMode {
+  mode: "request" | "direct";
+  target: string;
+}
+
+/** A named place a build lives (frozen, next, demo) and the build in it now. */
+export interface Slot {
+  id: string;
+  name: string;
+  /** "" while the slot holds no build. */
+  version: string;
+  /** The repo (by name) and commit the build was made from, when known. */
+  repo?: string | undefined;
+  ref?: string | undefined;
+  note: string;
+  at: number;
+  by?: string | undefined;
 }
 
 export interface Owner {
@@ -99,6 +131,8 @@ export interface TaskSessionRef {
   sessionId: string;
   linkedAt: number;
   workspaceLabel: string;
+  /** The chat ticked a plan step here: it stays listed on the task after it links elsewhere. */
+  ticked?: { step: string; at: number } | undefined;
 }
 
 export interface CheckResult {
@@ -113,6 +147,16 @@ export interface DoneEvidence {
   repos: { repo: string; name: string; branch: string; head: string; dirty: number }[];
   files: string[];
   check?: CheckResult | undefined;
+  /** What a later reader of its handoff and diff found, at the commits they read it at. */
+  review?:
+    | {
+        ok: boolean;
+        note: string;
+        repos: { repo: string; name: string; head: string }[];
+        at: number;
+        by?: string | undefined;
+      }
+    | undefined;
   at: number;
 }
 
@@ -124,6 +168,12 @@ export interface Task {
   createdAt: number;
   updatedAt: number;
   lastAction: { text: string; sessionId: string; workspaceLabel: string; at: number } | null;
+  /** The last tick, status change or last-action line; `updatedAt` also moves on bookkeeping. */
+  lastActionAt?: number | undefined;
+  /** When the last plan step was ticked or the status set to done, whichever came first. */
+  doneAt?: number | undefined;
+  /** Set while a person keeps the item starred. */
+  starredAt?: number | undefined;
   items: Item[];
   sessions: TaskSessionRef[];
   /** 1 = master task, 2 = module, 3 = task. Missing means 1 (tasks made before levels existed). */
@@ -168,6 +218,16 @@ export interface Task {
   bug?: boolean | undefined;
   /** Other words people use for this item; search treats them like its title. */
   aliases?: string[] | undefined;
+  /** Features and modules: their own merge mode. Missing means the parent's, then the board's. */
+  merge?: MergeMode | undefined;
+  /** Features and modules: the open merge request for their work. */
+  mergeRequest?: string | undefined;
+  /** The first build whose commit held this task's finished work. */
+  landedIn?: string | undefined;
+  /** A bug: the build it was found in. */
+  foundIn?: string | undefined;
+  /** Slots whose build holds this task's finished work, as of when each slot was last set. */
+  inSlots?: string[] | undefined;
 }
 
 export interface Service {
@@ -190,6 +250,8 @@ export interface Board {
   services?: Service[] | undefined;
   registers?: { id: string; topic: string; url: string }[] | undefined;
   rules?: string | undefined;
+  merge?: MergeMode | undefined;
+  slots?: Slot[] | undefined;
 }
 
 export interface Registry {
@@ -198,8 +260,8 @@ export interface Registry {
 }
 
 /**
- * Where a chat runs. Claude Code chats are the mod's sessions; T3 threads are reported by the
- * T3 Code fork for any provider. Missing means a Claude Code chat (records made before T3).
+ * Where a chat runs. T3 threads are reported by T3 Code for any provider; `claude-code` (or a
+ * missing source) marks a chat recorded by the old Claude Code mod.
  */
 export type SessionSource =
   | { kind: "claude-code" }

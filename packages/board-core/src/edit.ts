@@ -7,16 +7,25 @@
  * @module board-core/edit
  */
 import { type BoardGit, systemClock } from "./io.ts";
-import { markStepDelegated, setDelegatedDone, setStepDone, stepDone } from "./plan.ts";
-import { type BoardStore, levelOf } from "./store.ts";
+import {
+  markStepDelegated,
+  planPhases,
+  planProgress,
+  setDelegatedDone,
+  setStepDone,
+  stepDone,
+} from "./plan.ts";
+import { type BoardStore, cleanMerge, decisionType, levelOf } from "./store.ts";
 import { doneEvidence } from "./verify.ts";
 import { base, isInside, norm, sameRoot, slug, stamp } from "./text.ts";
 import type {
   Board,
   Decision,
+  DecisionType,
   ItemKind,
   Level,
   LinkType,
+  MergeMode,
   RepoState,
   Root,
   Session,
@@ -48,6 +57,7 @@ export type TaskEdit =
   | { readonly op: "deleteItem"; readonly itemId: string }
   | { readonly op: "savePlan"; readonly markdown: string }
   | { readonly op: "toggleStep"; readonly step: string }
+  | { readonly op: "star"; readonly on: boolean }
   | { readonly op: "saveHandoff"; readonly markdown: string }
   | { readonly op: "saveMasterPlan"; readonly markdown: string }
   | {
@@ -58,6 +68,7 @@ export type TaskEdit =
       readonly note: string;
     }
   | { readonly op: "removeDoc"; readonly docId: string }
+  | { readonly op: "removeAlias"; readonly alias: string }
   | {
       readonly op: "addLink";
       readonly to: string;
@@ -79,6 +90,7 @@ export type TaskEdit =
       readonly refs: ReadonlyArray<string>;
       /** The level it affects: filed on this task or the parent at that level. */
       readonly level: Level;
+      readonly type?: DecisionType | undefined;
       readonly recommendation?:
         | {
             readonly area: string;
@@ -90,7 +102,7 @@ export type TaskEdit =
   | {
       readonly op: "setDecision";
       readonly decisionId: string;
-      readonly action: "decide" | "drop" | "reopen";
+      readonly action: "decide" | "drop" | "skip" | "reopen";
       readonly verdict?: string | undefined;
     }
   | {
@@ -100,6 +112,7 @@ export type TaskEdit =
       readonly description?: string | undefined;
       readonly options?: string | undefined;
       readonly refs?: ReadonlyArray<string> | undefined;
+      readonly type?: DecisionType | undefined;
       readonly area?: string | undefined;
       readonly lldCheck?: string | undefined;
       readonly register?: string | null | undefined;
@@ -122,6 +135,16 @@ export type TaskEdit =
   | { readonly op: "setOwner"; readonly root: string | null }
   /** Hands the module over once everything is pushed, clean and checkpointed. */
   | { readonly op: "softRelease" }
+  /** A feature's or module's own merge mode; null goes back to the parent's or the board's. */
+  | { readonly op: "setMerge"; readonly merge: MergeMode | null }
+  /** The open merge request for a feature's or module's work; "" clears it. */
+  | { readonly op: "setMergeRequest"; readonly url: string }
+  /** The build the work landed in, and for a bug the build it was found in; "" clears one. */
+  | {
+      readonly op: "setBuild";
+      readonly landedIn?: string | undefined;
+      readonly foundIn?: string | undefined;
+    }
   | { readonly op: "reclaim" };
 
 export interface EditResult {
@@ -140,6 +163,59 @@ const newId = (store: BoardStore, prefix: string, upper = false, suffixMax = 0):
   return `${prefix}${upper ? t.toUpperCase() : t}${suffixMax ? store.clock.random(suffixMax) : ""}`;
 };
 
+/** Records an action on a task, and its done time once it is done or no plan step is left. */
+export function stampProgress(task: Task, plan: string, now: number): void {
+  task.lastActionAt = now;
+  const { done, total } = planProgress(plan);
+  if (task.status === "done" || (total > 0 && done === total)) task.doneAt ??= now;
+  else delete task.doneAt;
+}
+
+const tickedIn = (plan: string) =>
+  planPhases(plan).flatMap((phase) => phase.steps.filter((step) => step.done).map((s) => s.id));
+
+/**
+ * Lists a chat on a task whose plan steps it ticked between `before` and `after`. This is "worked
+ * on", not the chat's link: its task in hand, context and ownership stay where they are.
+ */
+export function markWorked(
+  task: Task,
+  session: Pick<Session, "sessionId" | "workspaceLabel">,
+  before: string,
+  after: string,
+  now: number,
+): void {
+  const had = new Set(tickedIn(before));
+  const step = tickedIn(after)
+    .filter((id) => !had.has(id))
+    .at(-1);
+  if (step === undefined) return;
+  const ref = task.sessions.find((r) => r.sessionId === session.sessionId);
+  if (ref) ref.ticked = { step, at: now };
+  else
+    task.sessions.push({
+      sessionId: session.sessionId,
+      linkedAt: now,
+      workspaceLabel: session.workspaceLabel,
+      ticked: { step, at: now },
+    });
+}
+
+/** Takes a chat off a task it only worked on; a chat linked to the task stays listed. */
+export async function dropWorked(
+  store: BoardStore,
+  boardId: string,
+  taskId: string,
+  session: Pick<Session, "sessionId" | "taskId">,
+): Promise<void> {
+  const task = await store.loadTask(boardId, taskId);
+  const ref = task?.sessions.find((r) => r.sessionId === session.sessionId);
+  if (!task || !ref?.ticked) return;
+  if (session.taskId === taskId) delete ref.ticked;
+  else task.sessions = task.sessions.filter((r) => r !== ref);
+  await store.saveTask(boardId, task);
+}
+
 async function requireTask(store: BoardStore, boardId: string, id: string): Promise<Task> {
   const task = await store.loadTask(boardId, id);
   if (!task) throw new BoardEditError(`No task "${id}".`);
@@ -155,6 +231,8 @@ export async function syncDelegatedSteps(
   store: BoardStore,
   boardId: string,
   task: Task,
+  /** The chat that finished the subtask: it is listed on the parent whose step that ticked. */
+  by?: Pick<Session, "sessionId" | "workspaceLabel"> | null,
 ): Promise<string[]> {
   if (!task.parentId) return [];
   const path = store.planPath(boardId, task.parentId);
@@ -162,6 +240,12 @@ export async function syncDelegatedSteps(
   const updated = setDelegatedDone(plan, task.id, task.status === "done");
   if (updated === plan) return [];
   await store.io.write(path, updated);
+  const parent = await store.loadTask(boardId, task.parentId);
+  if (parent) {
+    if (by) markWorked(parent, by, plan, updated, store.clock.now());
+    stampProgress(parent, updated, store.clock.now());
+    await store.saveTask(boardId, parent);
+  }
   const before = plan.split(/\r?\n/);
   return updated
     .split(/\r?\n/)
@@ -317,6 +401,7 @@ async function fileDecision(
     readonly options?: string | undefined;
     readonly refs?: ReadonlyArray<string> | undefined;
     readonly level?: number | undefined;
+    readonly type?: DecisionType | undefined;
     readonly recommendation?:
       | {
           readonly r?: string | undefined;
@@ -332,7 +417,7 @@ async function fileDecision(
   if (!title) throw new BoardEditError("title is required.");
   const current = await requireTask(store, boardId, task.id);
   const chain = [current, ...(await store.ancestorsOf(boardId, current))];
-  const want = input.level ?? levelOf(task);
+  const want = input.type === "feature" ? 1 : (input.level ?? levelOf(task));
   const owner = chain.find((x) => levelOf(x) <= want) ?? chain.at(-1) ?? task;
   const decision: Decision = {
     id: newId(store, "D-", true, 1_000_000),
@@ -346,6 +431,7 @@ async function fileDecision(
     status: "open",
     at: store.clock.now(),
     by: actor.by,
+    ...(input.type ? { type: input.type } : {}),
   };
   if (input.recommendation) {
     decision.rec = {
@@ -375,17 +461,42 @@ export async function findDecision(
   return owner && decision ? { decision, owner } : null;
 }
 
-/** Records the person's verdict, drops a decision, or reopens it. The caller saves `owner`. */
+/** Whether an open decision of this type keeps its task from done. */
+export const holdsDone = (decision: Pick<Decision, "type" | "rec" | "status">): boolean =>
+  decision.status === "open" &&
+  (decisionType(decision) === "blocker" || decisionType(decision) === "mandatory");
+
+/** The open decisions that keep `task` from done: its own, and those it raised higher up. */
+export function holdingDecisions(task: Task, all: ReadonlyArray<Task>): Decision[] {
+  return [
+    ...(task.decisions ?? []).filter(holdsDone),
+    ...all
+      .filter((other) => other.id !== task.id)
+      .flatMap((other) => other.decisions ?? [])
+      .filter((decision) => decision.raisedFrom?.id === task.id && holdsDone(decision)),
+  ];
+}
+
+/**
+ * Records the person's verdict, drops, skips or reopens a decision. The caller saves `owner`.
+ * A skip is a drop that says who skipped: reopening undoes it.
+ */
 export function settleDecision(
   store: BoardStore,
   decision: Decision,
-  action: "decide" | "drop" | "reopen",
+  action: "decide" | "drop" | "skip" | "reopen",
   verdict: string,
+  by = "the person",
 ): void {
   if (action === "decide") {
     decision.status = "decided";
     decision.verdict = verdict;
     decision.decidedAt = store.clock.now();
+  } else if (action === "skip") {
+    if (decisionType(decision) === "blocker")
+      throw new BoardEditError("A blocker can't be skipped: decide it, or change its type.");
+    decision.status = "dropped";
+    decision.verdict = `Skipped by ${by}${verdict ? `: ${verdict}` : ""}`;
   } else if (action === "drop") {
     decision.status = "dropped";
     decision.verdict = verdict;
@@ -418,7 +529,8 @@ export async function setSessionTask(
   await store.writeSession(boardId, linked);
   if (session.taskId && session.taskId !== task?.id) {
     const previous = await store.loadTask(boardId, session.taskId);
-    if (previous?.sessions.some((ref) => ref.sessionId === session.sessionId)) {
+    // A chat that ticked a step there stays listed as having worked on it.
+    if (previous?.sessions.some((ref) => ref.sessionId === session.sessionId && !ref.ticked)) {
       previous.sessions = previous.sessions.filter((ref) => ref.sessionId !== session.sessionId);
       await store.saveTask(boardId, previous);
     }
@@ -629,6 +741,16 @@ export async function checkSoftRelease(
   return { ok: problems.length === 0, problems, pickup, node, owner: node.owner };
 }
 
+/** The workspace copy an unowned task was done in: the only one, or the one all its files are in. */
+function copyOf(task: Task, roots: ReadonlyArray<Root>): string | undefined {
+  if (roots.length === 1) return roots[0]?.path;
+  const files = task.files ?? [];
+  if (files.length === 0) return undefined;
+  return roots
+    .filter((root) => files.every((file) => isInside(file, root.path)))
+    .toSorted((a, b) => b.path.length - a.path.length)[0]?.path;
+}
+
 /** Applies one change a person made to a task in an app. `git` reads repo state for a soft release. */
 export async function editTask(
   store: BoardStore,
@@ -654,19 +776,20 @@ export async function editTask(
       if (!wasDone && task.status === "done" && git) {
         const node = await ownerNodeOf(store, boardId, task);
         const board = (await store.loadRegistry()).boards.find((b) => b.id === boardId);
-        // Without an owner, only a one-workspace board says which copy holds the work.
-        const root =
-          node.owner?.root ?? (board?.roots.length === 1 ? board.roots[0]?.path : undefined);
-        if (board && root)
+        const root = node.owner?.root ?? copyOf(task, board?.roots ?? []);
+        // With no copy to name, the files and check still count; its commit is left unknown.
+        if (board)
           task.doneEvidence = doneEvidence(
             task,
-            await reposAt(store, boardId, board, node, root, git),
+            root ? await reposAt(store, boardId, board, node, root, git) : [],
             now,
           );
       }
       if (edit.kind !== undefined && levelOf(task) === 1) task.kind = edit.kind;
       if (edit.mainService !== undefined) task.mainService = edit.mainService;
       if (edit.services !== undefined) task.services = [...new Set(edit.services)];
+      if (edit.status !== undefined)
+        stampProgress(task, await store.readText(store.planPath(boardId, task.id)), now);
       await store.saveTask(boardId, task);
       const steps =
         wasDone !== (task.status === "done") ? await syncDelegatedSteps(store, boardId, task) : [];
@@ -694,13 +817,16 @@ export async function editTask(
     case "deleteItem": {
       const item = task.items.find((i) => i.id === edit.itemId);
       if (!item) throw new BoardEditError("No such item.");
-      if (edit.op === "toggleItem") item.done = !item.done;
-      else task.items = task.items.filter((i) => i.id !== edit.itemId);
+      if (edit.op === "toggleItem") {
+        item.done = !item.done;
+        task.lastActionAt = now;
+      } else task.items = task.items.filter((i) => i.id !== edit.itemId);
       await store.saveTask(boardId, task);
       return { message: "Saved." };
     }
     case "savePlan":
       await store.io.write(store.planPath(boardId, task.id), edit.markdown.trimEnd() + "\n");
+      stampProgress(task, edit.markdown, now);
       await store.saveTask(boardId, task);
       return { message: "Plan saved." };
     case "toggleStep": {
@@ -708,10 +834,49 @@ export async function editTask(
       const plan = await store.readText(path);
       const done = stepDone(plan, edit.step);
       if (done === null) throw new BoardEditError(`No step "${edit.step}" in the plan.`);
-      await store.io.write(path, setStepDone(plan, edit.step, !done));
+      const next = setStepDone(plan, edit.step, !done);
+      await store.io.write(path, next);
+      stampProgress(task, next, now);
       await store.saveTask(boardId, task);
       return { message: "Saved." };
     }
+    case "setMerge": {
+      if (levelOf(task) === 3)
+        throw new BoardEditError("A task follows the merge mode of its module.");
+      if (edit.merge === null) delete task.merge;
+      else {
+        const merge = cleanMerge(edit.merge);
+        if (typeof merge === "string") throw new BoardEditError(merge);
+        task.merge = merge;
+      }
+      await store.saveTask(boardId, task);
+      return { message: "Saved." };
+    }
+    case "setMergeRequest": {
+      if (levelOf(task) === 3)
+        throw new BoardEditError("A merge request is recorded on the module or feature.");
+      const url = edit.url.trim();
+      if (url && !/^https?:\/\/\S+$/.test(url))
+        throw new BoardEditError("A merge request is recorded by its link.");
+      if (url) task.mergeRequest = url;
+      else delete task.mergeRequest;
+      await store.saveTask(boardId, task);
+      return { message: "Saved." };
+    }
+    case "setBuild": {
+      for (const key of ["landedIn", "foundIn"] as const) {
+        const version = edit[key]?.trim();
+        if (version) task[key] = version;
+        else if (version === "") delete task[key];
+      }
+      await store.saveTask(boardId, task);
+      return { message: "Saved." };
+    }
+    case "star":
+      if (edit.on) task.starredAt ??= now;
+      else delete task.starredAt;
+      await store.saveTask(boardId, task);
+      return { message: edit.on ? "Starred." : "Star removed." };
     case "saveHandoff": {
       const md = edit.markdown.trim();
       const header = `<!-- living handoff, rewritten in place · last by ${actor.by}, ${stamp(now)} -->\n`;
@@ -752,6 +917,12 @@ export async function editTask(
       task.docs = (task.docs ?? []).filter((d) => d.id !== edit.docId);
       await store.saveTask(boardId, task);
       return { message: "Document removed." };
+    case "removeAlias":
+      if (!task.aliases?.includes(edit.alias))
+        throw new BoardEditError("No such other name on this task.");
+      task.aliases = task.aliases.filter((alias) => alias !== edit.alias);
+      await store.saveTask(boardId, task);
+      return { message: "Other name removed." };
     case "addLink":
     case "removeLink":
       await setTaskLink(
@@ -804,6 +975,7 @@ export async function editTask(
           options: edit.options,
           refs: edit.refs,
           level: edit.level,
+          type: edit.type,
           recommendation: edit.recommendation,
         },
         actor,
@@ -830,6 +1002,7 @@ export async function editTask(
       if (edit.description !== undefined) d.description = edit.description;
       if (edit.options !== undefined) d.options = edit.options;
       if (edit.refs !== undefined) d.refs = [...edit.refs];
+      if (edit.type !== undefined) d.type = edit.type;
       if (d.rec) {
         if (edit.area !== undefined) d.rec.area = edit.area;
         if (edit.lldCheck !== undefined) d.rec.lldCheck = edit.lldCheck;
@@ -932,6 +1105,10 @@ export type BoardSettingsEdit =
     }
   | { readonly op: "saveRules"; readonly rules: string }
   | { readonly op: "setBoardMode"; readonly on: boolean }
+  /** The board's merge mode, which features and modules follow unless they set their own. */
+  | { readonly op: "setMerge"; readonly merge: MergeMode | null }
+  | ({ readonly op: "setSlot" } & Omit<SlotBuild, "dir">)
+  | { readonly op: "removeSlot"; readonly id: string }
   | {
       readonly op: "saveRegisters";
       readonly registers: ReadonlyArray<{
@@ -1015,12 +1192,112 @@ export async function createBoard(
   return board;
 }
 
-/** Applies one change to the board's settings in `boards.json`. */
+/** A build put in a slot. An empty `version` empties the slot. */
+export interface SlotBuild {
+  /** The slot's name; a new name makes a new slot. */
+  readonly slot: string;
+  readonly version: string;
+  /** The commit the build was made from. Without it and with `dir`, HEAD there. */
+  readonly ref?: string | undefined;
+  /** The checkout the build was made in. Without it `ref` is looked up in the board's workspaces. */
+  readonly dir?: string | undefined;
+  readonly note?: string | undefined;
+}
+
+/**
+ * Points a slot at a build, then marks which finished tasks that build holds: those whose done
+ * commits in the build's repo are all in its history. A task's first such build is where it landed.
+ */
+export async function setSlot(
+  store: BoardStore,
+  boardId: string,
+  input: SlotBuild,
+  actor: EditActor,
+  git?: BoardGit,
+): Promise<EditResult> {
+  const reg = await store.loadRegistry();
+  const board = reg.boards.find((b) => b.id === boardId);
+  if (!board) throw new BoardEditError("No such board.");
+  const id = slug(input.slot);
+  if (!id) throw new BoardEditError("Name the slot.");
+  const version = input.version.trim();
+  const asked = input.ref?.trim() ?? "";
+  if (!version && asked) throw new BoardEditError("A build needs a version.");
+  let built: { dir: string; repo: string; ref: string } | undefined;
+  if (version && git?.commit && (asked || input.dir)) {
+    for (const dir of input.dir ? [input.dir] : board.roots.map((r) => r.path)) {
+      const ref = await git.commit(dir, asked || "HEAD").catch(() => null);
+      if (!ref) continue;
+      built = { dir, ref, repo: (await git.state(dir).catch(() => null))?.name ?? base(dir) };
+      break;
+    }
+    if (!built && asked)
+      throw new BoardEditError(
+        `No commit "${asked}" in ${input.dir ?? "this board's workspaces"}.`,
+      );
+  }
+  const slots = (board.slots ??= []);
+  let slot = slots.find((x) => x.id === id);
+  if (!slot) {
+    slot = { id, name: input.slot.trim(), version, note: "", at: 0 };
+    slots.push(slot);
+  }
+  slot.version = version;
+  slot.note = input.note?.trim() ?? "";
+  slot.at = store.clock.now();
+  slot.by = actor.by;
+  if (built) Object.assign(slot, { repo: built.repo, ref: built.ref });
+  else {
+    delete slot.repo;
+    delete slot.ref;
+  }
+  await store.saveRegistry(reg);
+
+  const inBuild = new Map<string, boolean>();
+  let held = 0;
+  for (const task of await store.listTasks(boardId)) {
+    const done = built ? (task.doneEvidence?.repos.filter((r) => r.name === built.repo) ?? []) : [];
+    const heads = done.map((r) => r.head);
+    // Uncommitted work at done time is not in the recorded commit, as its evidence line says.
+    let holds = heads.length > 0 && done.every((r) => r.dirty === 0);
+    for (const head of heads) {
+      if (built && !inBuild.has(head))
+        inBuild.set(
+          head,
+          (await git?.contains?.(built.dir, head, built.ref).catch(() => null)) === true,
+        );
+      holds &&= inBuild.get(head) === true;
+    }
+    const was = task.inSlots?.includes(id) ?? false;
+    const lands = holds && !task.landedIn;
+    const unlands = !holds && !!version && task.landedIn === version;
+    if (holds) held++;
+    if (holds === was && !lands && !unlands) continue;
+    const rest = (task.inSlots ?? []).filter((x) => x !== id);
+    if (holds) rest.push(id);
+    if (rest.length) task.inSlots = rest;
+    else delete task.inSlots;
+    if (lands) task.landedIn = version;
+    if (unlands) delete task.landedIn;
+    // Not saveTask: a new build is not work on the task, and must not reorder the board.
+    await store.writeJson(`${store.taskDir(boardId, task.id)}/task.json`, task);
+  }
+  if (!version) return { message: `Slot "${slot.name}" is empty.` };
+  return {
+    message: built
+      ? `Slot "${slot.name}" holds ${version} @ ${built.ref} (${built.repo}): ${held} finished task(s) are in it.`
+      : `Slot "${slot.name}" holds ${version}. No commit is recorded for it, so the board cannot say which tasks it holds.`,
+  };
+}
+
+/** Applies one change to the board's settings in `boards.json`. `git` resolves a slot's commit. */
 export async function editBoard(
   store: BoardStore,
   boardId: string,
   edit: BoardSettingsEdit,
+  git?: BoardGit,
 ): Promise<EditResult> {
+  if (edit.op === "setSlot") return setSlot(store, boardId, edit, { by: "t3-app" }, git);
   const reg = await store.loadRegistry();
   const board = reg.boards.find((b) => b.id === boardId);
   if (!board) throw new BoardEditError("No such board.");
@@ -1074,6 +1351,21 @@ export async function editBoard(
     case "setBoardMode":
       board.boardMode = edit.on;
       break;
+    case "setMerge":
+      if (edit.merge === null) delete board.merge;
+      else {
+        const merge = cleanMerge(edit.merge);
+        if (typeof merge === "string") throw new BoardEditError(merge);
+        board.merge = merge;
+      }
+      break;
+    case "removeSlot": {
+      const rest = (board.slots ?? []).filter((x) => x.id !== edit.id);
+      if (rest.length === (board.slots ?? []).length) throw new BoardEditError("No such slot.");
+      if (rest.length) board.slots = rest;
+      else delete board.slots;
+      break;
+    }
     case "saveRegisters":
       board.registers = edit.registers
         .map((x) => ({ id: slug(x.id || x.topic), topic: x.topic.trim(), url: x.url.trim() }))

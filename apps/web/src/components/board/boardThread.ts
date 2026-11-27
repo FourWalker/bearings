@@ -10,18 +10,6 @@ import { environmentServerConfigsAtom } from "~/state/server";
 
 import { type TackModelRole, readTackModel } from "./tackSettings";
 
-/** How far a thread the board starts may act without asking: the project's default for new threads. */
-export function boardThreadRunMode(environmentId: EnvironmentId, projectId: ProjectId) {
-  const settings =
-    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.settings ??
-    DEFAULT_SERVER_SETTINGS;
-  return resolveProjectSettings(
-    settings,
-    projectId,
-    readProject(scopeProjectRef(environmentId, projectId)),
-  ).settings.defaultRuntimeMode;
-}
-
 /**
  * The model a thread the board starts itself runs on: the one chosen for Tack in that role, while
  * its provider is still there, else the project's default; null when none is set up.

@@ -12,15 +12,18 @@ import {
   planProgress,
   type PlanStep,
 } from "./plan.ts";
-import { listGoals } from "./goal.ts";
+import { goalOpen, listGoals } from "./goal.ts";
 import { evidenceLine } from "./verify.ts";
-import type { BoardStore } from "./store.ts";
+import { type BoardStore, decisionType, mergeOf } from "./store.ts";
 import { norm } from "./text.ts";
 import type {
   Decision,
+  DecisionType,
   CheckResult,
   Item,
   Level,
+  MergeMode,
+  Slot,
   Owner,
   RepoState,
   Session,
@@ -60,6 +63,7 @@ export interface BoardViewDecision {
   readonly id: string;
   readonly title: string;
   readonly status: Decision["status"];
+  readonly type: DecisionType;
   readonly level: Level;
   readonly raisedFrom: { readonly id: string; readonly title: string } | null;
   /** The recommendation's R#, when the decision is one. */
@@ -93,9 +97,20 @@ export interface BoardViewTask {
     readonly workspaceLabel: string;
     readonly sessionId: string;
   } | null;
+  /** The last tick, status change or last-action line; tasks from before it was kept use `updatedAt`. */
+  readonly lastActionAt: number;
+  /** When the last plan step was ticked or the task was set done; null while neither holds. */
+  readonly doneAt: number | null;
+  readonly starredAt: number | null;
   readonly next: PlanStep | null;
   readonly steps: { readonly done: number; readonly total: number };
   readonly chats: ReadonlyArray<BoardViewChat>;
+  /** Chats linked elsewhere that ticked a step of this task's plan, the latest tick first. */
+  readonly worked: ReadonlyArray<{
+    readonly chat: BoardViewChat;
+    readonly step: string;
+    readonly at: number;
+  }>;
   readonly items: ReadonlyArray<Pick<Item, "id" | "kind" | "text" | "done">>;
   readonly decisions: ReadonlyArray<BoardViewDecision>;
   readonly links: ReadonlyArray<Pick<TaskLink, "to" | "type" | "note">>;
@@ -115,12 +130,23 @@ export interface BoardViewTask {
   readonly evidence: string | null;
   /** What the Goal's thread reported when it finished the task, in full. */
   readonly doneNote: string | null;
+  /** The merge mode the task works under; `from` names the feature or module that set it. */
+  readonly merge:
+    | (MergeMode & { readonly from: { readonly id: string; readonly title: string } | null })
+    | null;
+  /** A feature's or module's own open merge request. */
+  readonly mergeRequest: string | null;
+  /** The first build that held its finished work, and for a bug the build it was found in. */
+  readonly landedIn: string | null;
+  readonly foundIn: string | null;
+  /** Ids of the slots whose build holds its finished work. */
+  readonly inSlots: ReadonlyArray<string>;
 }
 
 export interface BoardViewGoal {
   readonly id: string;
   readonly title: string;
-  readonly status: "running" | "paused" | "done";
+  readonly status: "running" | "paused" | "done" | "ended";
   readonly mode: "auto" | "ask";
   readonly pausedReason: string | null;
   /** The session running it now. */
@@ -132,6 +158,9 @@ export interface BoardViewGoal {
     /** "" while it waits for the person. */
     readonly settled: string;
     readonly by: "model" | "person";
+    /** The same decision in the board's register, where a verdict is recorded. */
+    readonly decisionId: string | null;
+    readonly blocker: boolean;
   }>;
   /** The Goal's order of work: a group starts once the groups it depends on are finished. */
   readonly groups: ReadonlyArray<{
@@ -160,6 +189,10 @@ export interface BoardView {
   readonly id: string;
   readonly name: string;
   readonly boardMode: boolean;
+  /** The board's own merge mode. */
+  readonly merge: MergeMode | null;
+  /** Where builds live, and the build in each. */
+  readonly slots: ReadonlyArray<Slot>;
   readonly registers: ReadonlyArray<{
     readonly id: string;
     readonly topic: string;
@@ -236,9 +269,25 @@ export async function readBoardView(
     .filter((s) => !s.supersededBy && (s.taskId || s.lastPrompt || s.title))
     .toSorted((a, b) => b.updatedAt - a.updatedAt);
   const chats = sessions.map((s) => chatOf(s, now));
+  const chatBySession = new Map(chats.map((chat) => [chat.sessionId, chat]));
   const all = await store.listTasks(boardId);
   const byId = new Map(all.map((t) => [t.id, t]));
   // As BoardChat.ownerHolder: a task belongs to its module's owner, else the nearest owned parent.
+  const mergeFor = (t: Task): BoardViewTask["merge"] => {
+    const chain: Task[] = [];
+    for (let cur: Task | undefined = t; cur && !chain.includes(cur);) {
+      chain.push(cur);
+      cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+    }
+    const merge = mergeOf(board, chain);
+    return merge
+      ? {
+          mode: merge.mode,
+          target: merge.target,
+          from: merge.from ? { id: merge.from.id, title: merge.from.title } : null,
+        }
+      : null;
+  };
   const ownerRoot = (t: Task): string | null => {
     let cur = t.level === 3 && t.parentId ? (byId.get(t.parentId) ?? t) : t;
     for (let i = 0; i < 3; i++) {
@@ -257,11 +306,11 @@ export async function readBoardView(
   );
   for (const goal of await listGoals(store, boardId)) {
     const taskIds = goal.groups.flatMap((group) => group.taskIds);
-    if (goal.status !== "done")
+    if (goal.status === "running" || goal.status === "paused")
       for (const taskId of taskIds)
         goals.set(taskId, { id: goal.id, title: goal.title, status: goal.status });
     const ran = new Set([...goal.executors, ...goal.groups.flatMap((group) => group.worker ?? [])]);
-    (goal.status === "done" ? finishedGoals : openGoals).push({
+    (goalOpen(goal) ? openGoals : finishedGoals).push({
       id: goal.id,
       title: goal.title,
       status: goal.status,
@@ -278,6 +327,8 @@ export async function readBoardView(
           title: decision.title,
           settled: answered ? filed.verdict : decision.settled,
           by: answered ? ("person" as const) : decision.by,
+          decisionId: filed ? filed.id : null,
+          blocker: filed !== undefined && decisionType(filed) === "blocker",
         };
       }),
       groups: goal.groups.map((group) => ({
@@ -316,14 +367,26 @@ export async function readBoardView(
               sessionId: t.lastAction.sessionId,
             }
           : null,
+        lastActionAt: Math.max(t.lastActionAt ?? 0, t.lastAction?.at ?? 0) || t.updatedAt,
+        doneAt: t.doneAt ?? (t.status === "done" ? (t.doneEvidence?.at ?? t.updatedAt) : null),
+        starredAt: t.starredAt ?? null,
         next: nextStep(plan),
         steps: planProgress(plan),
         chats: chats.filter((c) => c.taskId === t.id),
+        worked: t.sessions
+          .flatMap((ref) => {
+            const chat = chatBySession.get(ref.sessionId);
+            return ref.ticked && chat && chat.taskId !== t.id
+              ? [{ chat, step: ref.ticked.step, at: ref.ticked.at }]
+              : [];
+          })
+          .toSorted((a, b) => b.at - a.at),
         items: t.items.map((i) => ({ id: i.id, kind: i.kind, text: i.text, done: i.done })),
         decisions: (t.decisions ?? []).map((d) => ({
           id: d.id,
           title: d.title,
           status: d.status,
+          type: decisionType(d),
           level: d.level || (t.level === 2 || t.level === 3 ? t.level : 1),
           raisedFrom: d.raisedFrom ?? null,
           r: d.rec?.r ?? null,
@@ -349,6 +412,11 @@ export async function readBoardView(
         goal: goals.get(t.id) ?? null,
         evidence: t.status === "done" && t.doneEvidence ? evidenceLine(t.doneEvidence) : null,
         doneNote: t.status === "done" ? (t.doneNote ?? null) : null,
+        merge: mergeFor(t),
+        mergeRequest: t.mergeRequest ?? null,
+        landedIn: t.landedIn ?? null,
+        foundIn: t.foundIn ?? null,
+        inSlots: (t.inSlots ?? []).filter((id) => board.slots?.some((slot) => slot.id === id)),
       };
     }),
   );
@@ -356,6 +424,8 @@ export async function readBoardView(
     id: board.id,
     name: board.name,
     boardMode: !!board.boardMode,
+    merge: board.merge ?? null,
+    slots: board.slots ?? [],
     registers: board.registers ?? [],
     services: (board.services ?? []).map((s) => ({ id: s.id, name: s.name, match: s.match })),
     workspaces: board.roots.map((r) => ({ label: r.label, root: norm(r.path) })),
@@ -383,6 +453,8 @@ export interface BoardTaskDetail {
   /** The living handoff, without its header comment. */
   readonly handoff: string;
   readonly handoffCheckpoint: string | null;
+  /** Other names search finds the task by. */
+  readonly aliases: ReadonlyArray<string>;
   readonly checks: ReadonlyArray<CheckResult & { readonly taskTitle: string }>;
   /** Step notes, newest first. */
   readonly stepNotes: ReadonlyArray<{
@@ -406,6 +478,7 @@ export interface BoardTaskDetail {
       Decision,
       "id" | "title" | "description" | "options" | "verdict" | "status" | "level" | "refs" | "at"
     > & {
+      readonly type: DecisionType;
       readonly group: "own" | "up" | "inherited";
       readonly r: string | null;
       readonly area: string;
@@ -423,8 +496,10 @@ export interface BoardTaskDetail {
     }
   >;
   readonly repoState: ReadonlyArray<
-    Pick<RepoState, "name" | "branch" | "head" | "upstream" | "ahead" | "behind" | "dirty" | "at">
+    Pick<RepoState, "name" | "branch" | "head" | "at"> & RepoStanding
   >;
+  /** A feature's or module's tasks below it, by the repo and branch they were last recorded on. */
+  readonly repoTree: ReadonlyArray<RepoGroup>;
   /** Root first: each parent's objective line, as chats on this task see it. */
   readonly parents: ReadonlyArray<{
     readonly id: string;
@@ -440,6 +515,89 @@ export interface BoardTaskDetail {
     readonly branch: string;
     readonly subfolder: string;
   }>;
+}
+
+type RepoStanding = Pick<RepoState, "upstream" | "ahead" | "behind" | "dirty"> & {
+  /** The merge target at that checkpoint; null when no merge mode was set then. */
+  readonly target: string | null;
+  readonly aheadOfTarget: number | null;
+};
+
+const standingOf = (r: RepoState): RepoStanding => ({
+  upstream: r.upstream,
+  ahead: r.ahead,
+  behind: r.behind,
+  dirty: r.dirty,
+  target: r.target ?? null,
+  aheadOfTarget: r.aheadOfTarget ?? null,
+});
+
+export interface RepoGroup {
+  readonly name: string;
+  readonly branch: string;
+  /** The newest commit recorded on the branch by any of its tasks. */
+  readonly head: string;
+  /** Push and clean state at the newest checkpoint; null when only done evidence names the branch. */
+  readonly state: RepoStanding | null;
+  readonly at: number;
+  readonly tasks: ReadonlyArray<{
+    readonly id: string;
+    readonly title: string;
+    readonly head: string;
+    readonly done: boolean;
+    readonly at: number;
+    /** Ids of the slots whose build holds the task's finished work. */
+    readonly inSlots: ReadonlyArray<string>;
+  }>;
+}
+
+/** Groups tasks by the repo and branch each was last recorded on, the newest record first. */
+export function repoTreeOf(tasks: ReadonlyArray<Task>): RepoGroup[] {
+  const groups = new Map<string, { -readonly [K in keyof RepoGroup]: RepoGroup[K] }>();
+  for (const task of tasks) {
+    const recorded = task.repoState?.length
+      ? task.repoState.map((r) => ({ ...r, state: r }))
+      : (task.doneEvidence?.repos ?? []).map((r) => ({
+          ...r,
+          at: task.doneEvidence?.at ?? 0,
+          state: null,
+        }));
+    for (const r of recorded) {
+      const key = `${r.name}
+${r.branch}`;
+      const entry = {
+        id: task.id,
+        title: task.title,
+        head: r.head,
+        done: task.status === "done",
+        at: r.at,
+        inSlots: task.inSlots ?? [],
+      };
+      const group = groups.get(key);
+      const state = r.state ? standingOf(r.state) : null;
+      if (!group) {
+        groups.set(key, {
+          name: r.name,
+          branch: r.branch,
+          head: r.head,
+          state,
+          at: r.at,
+          tasks: [entry],
+        });
+        continue;
+      }
+      group.tasks = [...group.tasks, entry];
+      if (r.at > group.at) {
+        group.head = r.head;
+        group.at = r.at;
+      }
+      // A checkpoint's push state outranks done evidence, which records none.
+      if (state && (r.at >= group.at || !group.state)) group.state = state;
+    }
+  }
+  return [...groups.values()]
+    .map((group) => ({ ...group, tasks: group.tasks.toSorted((a, b) => b.at - a.at) }))
+    .toSorted((a, b) => b.at - a.at);
 }
 
 const stripHeader = (md: string) => md.replace(/^<!--[\s\S]*?-->\s*/, "");
@@ -487,9 +645,8 @@ export async function readTaskDetail(
     store.stepNotes(boardId, task.id),
     Promise.all(rootFirst.map((a) => store.readText(store.livingPath(boardId, a.id)))),
     store.listSessions(boardId),
-    levelOf(task) === 1 ? store.listTasks(boardId) : Promise.resolve([] as Task[]),
+    levelOf(task) === 3 ? Promise.resolve([] as Task[]) : store.listTasks(boardId),
   ]);
-  // A master task's chats are every chat in its tree.
   const tree = new Set([task.id]);
   for (let grew = true; grew;) {
     grew = false;
@@ -508,6 +665,7 @@ export async function readTaskDetail(
       options: d.options,
       verdict: d.verdict,
       status: d.status,
+      type: decisionType(d),
       level: d.level,
       refs: d.refs ?? [],
       at: d.at,
@@ -535,6 +693,7 @@ export async function readTaskDetail(
     planMarkdown: plan,
     handoff: stripHeader(handoff),
     handoffCheckpoint: checkpointOf(handoff),
+    aliases: task.aliases ?? [],
     checks: await checksForTask(store, boardId, task, phases),
     stepNotes: stepNotes.map((n) => ({
       ...n,
@@ -565,20 +724,24 @@ export async function readTaskDetail(
       name: r.name,
       branch: r.branch,
       head: r.head,
-      upstream: r.upstream,
-      ahead: r.ahead,
-      behind: r.behind,
-      dirty: r.dirty,
       at: r.at,
+      ...standingOf(r),
     })),
+    repoTree: repoTreeOf(all.filter((x) => x.id !== task.id && tree.has(x.id))),
     parents: rootFirst.map((a, i) => ({
       id: a.id,
       title: a.title,
       level: levelOf(a),
       objective: parentHandoffs[i] ? objectiveLine(parentHandoffs[i]) : a.description,
     })),
+    // A master task's chats are every chat in its tree; a module's are its own.
     chats: sessions
-      .filter((x) => !x.supersededBy && x.taskId !== null && tree.has(x.taskId))
+      .filter(
+        (x) =>
+          !x.supersededBy &&
+          x.taskId !== null &&
+          (levelOf(task) === 1 ? tree.has(x.taskId) : x.taskId === task.id),
+      )
       .map((x) => ({
         sessionId: x.sessionId,
         lastPrompt: x.lastPrompt,

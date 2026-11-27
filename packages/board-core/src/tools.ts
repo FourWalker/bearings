@@ -1,7 +1,7 @@
-/* oxlint-disable t3code/no-em-dash-copy -- Board protocol and tool text shared verbatim with the Claude Code mod; "## Phase A — name" is the plan.md format. */
+/* oxlint-disable t3code/no-em-dash-copy -- "## Phase A — name" is the plan.md format. */
 /**
- * The board tools as JSON-schema definitions: the same names, descriptions and inputs the
- * Claude Code mod registers, for any host (the mod, T3 Code's MCP toolkit).
+ * The board tools as JSON-schema definitions: names, descriptions and inputs, which T3 Code's MCP
+ * toolkit turns into its tools.
  *
  * @module board-core/tools
  */
@@ -86,11 +86,17 @@ export const SCHEMA = {
     properties: {
       action: {
         type: "string",
-        enum: ["add", "decide", "update", "drop", "reopen", "implemented"],
+        enum: ["add", "decide", "update", "drop", "skip", "reopen", "implemented"],
       },
       id: {
         type: "string",
-        description: "Decision id (D-…) or R# for decide/update/drop/reopen/implemented.",
+        description: "Decision id (D-…) or R# for every action but add.",
+      },
+      type: {
+        type: "string",
+        enum: ["blocker", "mandatory", "optional", "feature"],
+        description:
+          "blocker: work stops until the person decides. mandatory (default): settle or skip before done. optional: holds nothing. feature: product direction, Level 1.",
       },
       title: { type: "string", description: "add: the question to decide." },
       description: {
@@ -252,6 +258,11 @@ export const SCHEMA = {
       },
       taskId: { type: "string" },
       taskIds: { type: "array", items: { type: "string" } },
+      type: {
+        type: "string",
+        enum: ["blocker", "optional"],
+        description: "decide: blocker when `taskIds` can't go on without the person.",
+      },
       note: {
         type: "string",
         description:
@@ -295,6 +306,19 @@ export const SCHEMA = {
       service: { type: "string", description: "Only tasks tagged with this service id." },
       includeDone: { type: "boolean" },
     },
+  },
+  slot: {
+    type: "object",
+    properties: {
+      slot: { type: "string", description: 'The slot\'s name, e.g. "frozen" or "next".' },
+      version: { type: "string", description: 'The build\'s version; "" empties the slot.' },
+      ref: {
+        type: "string",
+        description: "The commit the build was made from. Defaults to HEAD of this checkout.",
+      },
+      note: { type: "string" },
+    },
+    required: ["slot", "version"],
   },
   release: {
     type: "object",
@@ -385,6 +409,21 @@ export const SCHEMA = {
       },
       mainService: { type: "string" },
       kind: { type: "string", enum: ["feature", "backlog"] },
+      foundIn: {
+        type: "string",
+        description: 'A bug task: the build version the bug was found in; "" clears it.',
+      },
+      mergeRequest: {
+        type: "string",
+        description: 'Link of the merge request opened for this module\'s work; "" clears it.',
+      },
+      review: {
+        type: "object",
+        description:
+          "Alone, on a done task: whether its work holds, after reading its handoff and the diff of its files.",
+        properties: { ok: { type: "boolean" }, note: { type: "string" } },
+        required: ["ok", "note"],
+      },
     },
   },
   plan: {
@@ -492,6 +531,12 @@ export const BOARD_TOOLS: ReadonlyArray<BoardToolDefinition> = [
     description:
       "Soft-release, reclaim or drop this workspace's ownership of the linked task's module or master task.",
     inputSchema: SCHEMA.release,
+  },
+  {
+    name: "board_slot",
+    description:
+      "Record which build is in a slot (a named place a build lives, e.g. the person's install). Call it right after you built or installed that build at the person's ask, never to plan one. Finished tasks whose commits the build holds are marked as landed in it.",
+    inputSchema: SCHEMA.slot,
   },
   {
     name: "board_link_task",

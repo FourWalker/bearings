@@ -51,9 +51,13 @@ const task = (id: string, patch: Partial<BoardTask> = {}): BoardTask => ({
   mainService: null,
   services: [],
   lastAction: null,
+  lastActionAt: 0,
+  doneAt: null,
+  starredAt: null,
   next: null,
   steps: { done: 0, total: 0 },
   chats: [],
+  worked: [],
   items: [],
   decisions: [],
   links: [],
@@ -408,8 +412,24 @@ describe("panelOf", () => {
           { id: "3", kind: "decision", text: "Old style", done: false },
         ],
         decisions: [
-          { id: "d", title: "UUIDs?", status: "open", level: 2, raisedFrom: null, r: null },
-          { id: "e", title: "Done", status: "decided", level: 1, raisedFrom: null, r: "R1" },
+          {
+            id: "d",
+            title: "UUIDs?",
+            status: "open",
+            level: 2,
+            raisedFrom: null,
+            r: null,
+            type: "mandatory",
+          },
+          {
+            id: "e",
+            title: "Done",
+            status: "decided",
+            level: 1,
+            raisedFrom: null,
+            r: "R1",
+            type: "mandatory",
+          },
         ],
       }),
       task("finished", {
@@ -482,6 +502,7 @@ it("sorts recommendations numerically and links to the task where they were rais
     level: 1,
     raisedFrom,
     r: null,
+    type: "mandatory",
   } as const;
   const root = task("root", {
     decisions: [
@@ -520,6 +541,7 @@ describe("task views", () => {
             level: 1,
             raisedFrom: { id: "module", title: "module" },
             r: null,
+            type: "mandatory",
           },
         ],
       }),
@@ -528,7 +550,15 @@ describe("task views", () => {
         parentId: "feature",
         links: [{ to: "contract", type: "blocked_by", note: "invoice" }],
         decisions: [
-          { id: "d2", title: "Own", status: "open", level: 2, raisedFrom: null, r: null },
+          {
+            id: "d2",
+            title: "Own",
+            status: "open",
+            level: 2,
+            raisedFrom: null,
+            r: null,
+            type: "mandatory",
+          },
         ],
         items: [{ id: "i1", kind: "decision", text: "Old style", done: false }],
         chats: [chat("idle", { live: "idle", updatedAt: 5 })],
@@ -546,5 +576,30 @@ describe("task views", () => {
       ["idle", "module"],
     ]);
     expect(chatsForView(index, feature, false)).toEqual([]);
+
+    // A chat linked elsewhere that ticked a step is listed once, after the linked ones.
+    const ticker = chat("ticker", { taskId: "other" });
+    const withWorked = indexBoard([
+      task("feature", { worked: [{ chat: ticker, step: "A2", at: 5 }] }),
+      task("module", {
+        level: 2,
+        parentId: "feature",
+        chats: [chat("idle")],
+        worked: [
+          { chat: ticker, step: "M1", at: 9 },
+          { chat: chat("idle"), step: "M2", at: 7 },
+        ],
+      }),
+    ]);
+    expect(
+      chatsForView(withWorked, withWorked.byId.get("feature")!, true).map((entry) => [
+        entry.chat.sessionId,
+        entry.task.id,
+        entry.worked?.step ?? null,
+      ]),
+    ).toEqual([
+      ["idle", "module", null],
+      ["ticker", "module", "M1"],
+    ]);
   });
 });

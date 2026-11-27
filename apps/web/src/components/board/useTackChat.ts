@@ -18,6 +18,7 @@ import { useOrchestrationCommand } from "~/state/use-orchestration-command";
 import { assistantBubbles, isAssistantBusy } from "./board.logic";
 import { boardThreadModelSelection } from "./boardThread";
 import { tackMood, tackNoteCount } from "./tackAvatar.logic";
+import { readTackRuntimeMode } from "./tackSettings";
 
 /** How long after the last keystroke Tack still counts as being typed to. */
 const TYPING_LINGER_MS = 800;
@@ -116,7 +117,7 @@ export function useTackChat(
           input: {
             threadId: threadRef.threadId,
             message: turn,
-            runtimeMode: existing.runtimeMode,
+            runtimeMode: readTackRuntimeMode("board"),
             interactionMode: existing.interactionMode,
             createdAt,
           },
@@ -139,8 +140,11 @@ export function useTackChat(
         fail(formatEnvironmentQueryError(linked.cause));
         return;
       }
-      // Supervised: the Assistant answers and shows; it is not there to change code.
-      const modes = { runtimeMode: "approval-required", interactionMode: "default" } as const;
+      // The board refuses the Assistant's writes without the person's yes, whatever this mode.
+      const modes = {
+        runtimeMode: readTackRuntimeMode("board"),
+        interactionMode: "default",
+      } as const;
       const title = gt("Tack · {board}", { board: props.boardName });
       const result = await startTurn({
         environmentId,

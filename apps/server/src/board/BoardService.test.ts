@@ -54,11 +54,11 @@ it.effect("shows a T3 thread's own status and title, and drops threads this serv
         ["thread:running", "Payouts"],
         ["thread:elsewhere", "Another install"],
       ] as const) {
-        const chat = new BoardChat(store, noGit, "t3");
+        const chat = new BoardChat(store, noGit);
         await chat.open({ sessionId: id, cwd: ws, source: { kind: "t3-thread", threadId: id } });
         await chat.turnStart(prompt);
       }
-      const unattached = new BoardChat(store, noGit, "t3");
+      const unattached = new BoardChat(store, noGit);
       await unattached.open({
         sessionId: "thread:no-board",
         cwd: norm(NodePath.join(tmp, "other")),
@@ -129,7 +129,7 @@ it.effect(
             },
           ],
         });
-        const setup = new BoardChat(store, noGit, "t3");
+        const setup = new BoardChat(store, noGit);
         await setup.open({ sessionId: "thread:setup", cwd: main });
         await setup.createTask({ title: "Refunds", topLevel: true });
         await setup.createTask({ title: "Payouts", parentId: "refunds" });
@@ -183,7 +183,7 @@ it.effect(
         expect(before.tasks.find((t) => t.id === "payouts")?.ownerRoot).toBe(copy);
         // The thread's board chat, opened at its first turn, keeps the link.
         yield* Effect.promise(async () => {
-          const first = new BoardChat(store, noGit, "t3");
+          const first = new BoardChat(store, noGit);
           await first.open({ sessionId: draft, cwd: main });
           await first.turnStart("Continue the refunds work");
         });
@@ -324,6 +324,65 @@ it.effect("a new board gives each folder without a T3 project one, and says why 
       expect((yield* boards.settings({ boardId })).roots[1]?.projectId).toBeNull();
       yield* boards.editBoard({ boardId, edit: { op: "addProject", path: bare } });
       expect(all.map((p) => p.workspaceRoot)).toEqual([held, bare]);
+    }).pipe(Effect.provide(layer));
+  }),
+);
+
+it.effect("the person pauses and ends a Goal without its thread's help", () =>
+  Effect.gen(function* () {
+    const tmp = yield* Effect.promise(() =>
+      NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "board-service-")),
+    );
+    const ws = norm(NodePath.join(tmp, "nfx"));
+    const store = new BoardStore(NodePath.join(tmp, "board"), nodeIO);
+    yield* Effect.promise(async () => {
+      await store.saveRegistry({
+        version: 1,
+        boards: [{ id: "nefx", name: "NEFX", createdAt: 0, roots: [{ path: ws, label: "main" }] }],
+      });
+      const exec = new BoardChat(store, noGit);
+      await exec.open({
+        sessionId: "thread:goal",
+        cwd: ws,
+        source: { kind: "t3-thread", threadId: "thread:goal" },
+      });
+      await exec.createTask({ title: "Feature", topLevel: true });
+      await exec.createTask({ title: "Module", parentId: "feature" });
+      await exec.goalTool({ action: "start", scope: ["feature"], title: "Ship it" });
+    });
+    const interrupted: Array<string> = [];
+    const threads = Layer.mock(ThreadManagement.ThreadManagementService)({
+      getThreadShell: (threadId) =>
+        Effect.succeed({ ...liveThreadShell(threadId), activeRunId: RunId.make("run:1") }),
+      interruptThread: (input) =>
+        Effect.sync(() => {
+          interrupted.push(input.threadId);
+          return { type: "no_active_run" } as const;
+        }),
+    });
+    const layer = Layer.effect(BoardService.BoardService, BoardService.make(store, noGit)).pipe(
+      Layer.provide(Layer.merge(threads, projectsAt([]))),
+    );
+    yield* Effect.gen(function* () {
+      const boards = yield* BoardService.BoardService;
+      const stop = (to: "paused" | "ended") =>
+        boards.editBoard({ boardId: "nefx", edit: { op: "stopGoal", goalId: "g-ship-it", to } });
+      yield* stop("paused");
+      expect(interrupted).toEqual(["thread:goal"]);
+      expect((yield* boards.view({ boardId: "nefx" })).goals[0]).toMatchObject({
+        status: "paused",
+        executor: null,
+        pausedReason: "Paused by the person",
+      });
+      expect((yield* Effect.flip(stop("paused"))).message).toBe("The Goal is already paused.");
+
+      // Ending a paused Goal has no thread to stop; it leaves the open list for good.
+      yield* stop("ended");
+      expect(interrupted).toEqual(["thread:goal"]);
+      const view = yield* boards.view({ boardId: "nefx" });
+      expect(view.goals).toEqual([]);
+      expect(view.finishedGoals[0]).toMatchObject({ id: "g-ship-it", status: "ended" });
+      expect((yield* Effect.flip(stop("ended"))).message).toBe("The Goal is already ended.");
     }).pipe(Effect.provide(layer));
   }),
 );

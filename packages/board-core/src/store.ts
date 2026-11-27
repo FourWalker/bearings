@@ -6,11 +6,46 @@
  */
 import { type BoardClock, type BoardIO, systemClock } from "./io.ts";
 import { isInside, norm, safeFileName } from "./text.ts";
-import type { Board, Level, Registry, Root, Session, Task } from "./types.ts";
+import type {
+  Board,
+  Decision,
+  DecisionType,
+  Level,
+  MergeMode,
+  Registry,
+  Root,
+  Session,
+  Task,
+} from "./types.ts";
 
 export const LEVEL_NAME = { 1: "master task", 2: "module", 3: "task" } as const;
 export const levelOf = (t: Pick<Task, "level">): Level =>
   t.level === 2 || t.level === 3 ? t.level : 1;
+
+export const DECISION_TYPES = ["blocker", "mandatory", "optional", "feature"] as const;
+export const decisionType = (decision: Pick<Decision, "type" | "rec">): DecisionType =>
+  decision.type ?? (decision.rec ? "optional" : "mandatory");
+
+/**
+ * The merge mode a task works under: the nearest feature or module in `chain` (the task first,
+ * then its parents) that set one, else the board's. `from` is null for the board's.
+ */
+export function mergeOf(
+  board: Pick<Board, "merge"> | null | undefined,
+  chain: ReadonlyArray<Task>,
+): (MergeMode & { readonly from: Task | null }) | null {
+  const from = chain.find((t) => t.merge && levelOf(t) !== 3);
+  if (from?.merge) return { ...from.merge, from };
+  return board?.merge ? { ...board.merge, from: null } : null;
+}
+
+/** A merge mode as typed by a person, or the reason it can't be saved. */
+export function cleanMerge(merge: MergeMode): MergeMode | string {
+  const target = merge.target.trim();
+  if (!target) return "Name the branch finished work is merged into.";
+  if (/[\s~^:?*[\\]|\.\.|^-/.test(target)) return `"${target}" is not a branch name.`;
+  return { mode: merge.mode === "request" ? "request" : "direct", target };
+}
 
 const pathSegment = (id: string): string => {
   if (!id || id === "." || id === ".." || safeFileName(id) !== id)

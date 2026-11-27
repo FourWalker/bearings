@@ -3,8 +3,7 @@ import * as Schema from "effect/Schema";
 import { NonNegativeInt, ProjectId, ThreadId } from "./baseSchemas.ts";
 
 /**
- * The Project Board (`~/.claude-board`), shared with the Claude Code mod and the board app: its
- * boards, their tasks and the chats on them. Ids are the board's own slugs and session ids.
+ * The Project Board (`~/.claude-board`): its boards, their tasks and the chats on them. Ids are the board's own slugs and session ids.
  */
 export const BoardSummary = Schema.Struct({
   id: Schema.String,
@@ -13,7 +12,7 @@ export const BoardSummary = Schema.Struct({
 });
 export type BoardSummary = typeof BoardSummary.Type;
 
-/** `offline`: a Claude Code chat whose window stopped reporting. T3 threads are never offline. */
+/** `offline`: a chat from the old Claude Code mod that stopped reporting. T3 threads are never offline. */
 export const BoardChatLive = Schema.Literals(["working", "idle", "ended", "offline"]);
 export type BoardChatLive = typeof BoardChatLive.Type;
 
@@ -24,7 +23,7 @@ export const BoardChat = Schema.Struct({
   workspaceLabel: Schema.String,
   taskId: Schema.NullOr(Schema.String),
   updatedAt: Schema.Number,
-  /** A thread on this server to open; null for Claude Code chats and threads it doesn't hold. */
+  /** A thread on this server to open; null for the old mod's chats and threads it doesn't hold. */
   threadId: Schema.NullOr(ThreadId),
   provider: Schema.NullOr(Schema.String),
   /** When the chat's current (or last) turn started; 0 before its first. */
@@ -41,10 +40,15 @@ export const BoardItem = Schema.Struct({
 export type BoardItem = typeof BoardItem.Type;
 
 /** A decision as the board screen lists it; its full text is read with the task. */
+/** What an open decision holds up; one without a stored type reads as mandatory. */
+export const BoardDecisionType = Schema.Literals(["blocker", "mandatory", "optional", "feature"]);
+export type BoardDecisionType = typeof BoardDecisionType.Type;
+
 export const BoardDecision = Schema.Struct({
   id: Schema.String,
   title: Schema.String,
   status: Schema.Literals(["open", "decided", "dropped"]),
+  type: BoardDecisionType,
   level: Schema.Literals([1, 2, 3]),
   raisedFrom: Schema.NullOr(Schema.Struct({ id: Schema.String, title: Schema.String })),
   /** The recommendation's R#, when the decision is one. */
@@ -68,6 +72,38 @@ export const BoardTaskLink = Schema.Struct({
 });
 export type BoardTaskLink = typeof BoardTaskLink.Type;
 
+export const BoardMergeMode = Schema.Struct({
+  /** `request`: through a merge request first; `direct`: merged straight into `target`. */
+  mode: Schema.Literals(["request", "direct"]),
+  target: Schema.String,
+});
+export type BoardMergeMode = typeof BoardMergeMode.Type;
+
+/** A named place a build lives (frozen, next, demo) and the build in it now. */
+export const BoardSlot = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  /** "" while the slot holds no build. */
+  version: Schema.String,
+  /** The repo and commit the build was made from, when known. */
+  repo: Schema.optional(Schema.String),
+  ref: Schema.optional(Schema.String),
+  note: Schema.String,
+  at: Schema.Number,
+  by: Schema.optional(Schema.String),
+});
+export type BoardSlot = typeof BoardSlot.Type;
+
+const RepoStanding = {
+  upstream: Schema.NullOr(Schema.String),
+  ahead: Schema.NullOr(Schema.Number),
+  behind: Schema.NullOr(Schema.Number),
+  dirty: Schema.Number,
+  /** The merge target at that checkpoint and HEAD's commits not in it; absent from older servers. */
+  target: Schema.optional(Schema.NullOr(Schema.String)),
+  aheadOfTarget: Schema.optional(Schema.NullOr(Schema.Number)),
+};
+
 export const BoardTask = Schema.Struct({
   id: Schema.String,
   title: Schema.String,
@@ -89,9 +125,14 @@ export const BoardTask = Schema.Struct({
       sessionId: Schema.String,
     }),
   ),
+  lastActionAt: Schema.Number,
+  doneAt: Schema.NullOr(Schema.Number),
+  starredAt: Schema.NullOr(Schema.Number),
   next: Schema.NullOr(Schema.Struct({ id: Schema.String, text: Schema.String })),
   steps: Schema.Struct({ done: NonNegativeInt, total: NonNegativeInt }),
   chats: Schema.Array(BoardChat),
+  /** Chats linked elsewhere that ticked a step of this task's plan, the latest tick first. */
+  worked: Schema.Array(Schema.Struct({ chat: BoardChat, step: Schema.String, at: Schema.Number })),
   items: Schema.Array(BoardItem),
   decisions: Schema.Array(BoardDecision),
   links: Schema.Array(BoardTaskLink),
@@ -119,13 +160,29 @@ export const BoardTask = Schema.Struct({
   evidence: Schema.NullOr(Schema.String),
   /** What the Goal's thread reported when it finished the task, in full. */
   doneNote: Schema.NullOr(Schema.String),
+  /** The merge mode the task works under; `from` null means the board's. Absent: older server. */
+  merge: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        ...BoardMergeMode.fields,
+        from: Schema.NullOr(Schema.Struct({ id: Schema.String, title: Schema.String })),
+      }),
+    ),
+  ),
+  mergeRequest: Schema.optional(Schema.NullOr(Schema.String)),
+  /** The first build that held its finished work, and for a bug the build it was found in. */
+  landedIn: Schema.optional(Schema.NullOr(Schema.String)),
+  foundIn: Schema.optional(Schema.NullOr(Schema.String)),
+  /** Ids of the slots whose build holds its finished work. */
+  inSlots: Schema.optional(Schema.Array(Schema.String)),
 });
 export type BoardTask = typeof BoardTask.Type;
 
 export const BoardGoal = Schema.Struct({
   id: Schema.String,
   title: Schema.String,
-  status: Schema.Literals(["running", "paused", "done"]),
+  /** ended: closed for good by the person with tasks left. */
+  status: Schema.Literals(["running", "paused", "done", "ended"]),
   mode: Schema.Literals(["auto", "ask"]),
   pausedReason: Schema.NullOr(Schema.String),
   /** The session running it now. */
@@ -138,6 +195,9 @@ export const BoardGoal = Schema.Struct({
       /** "" while it waits for the person. */
       settled: Schema.String,
       by: Schema.Literals(["model", "person"]),
+      /** The same decision in the board's register, where a verdict is recorded. */
+      decisionId: Schema.NullOr(Schema.String),
+      blocker: Schema.Boolean,
     }),
   ),
   /** The Goal's order of work: a group starts once the groups it depends on are finished. */
@@ -165,6 +225,8 @@ export const BoardView = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   boardMode: Schema.Boolean,
+  merge: Schema.optional(Schema.NullOr(BoardMergeMode)),
+  slots: Schema.optional(Schema.Array(BoardSlot)),
   registers: Schema.optional(
     Schema.Array(
       Schema.Struct({
@@ -225,6 +287,8 @@ export const BoardTaskDetail = Schema.Struct({
   planMarkdown: Schema.String,
   handoff: Schema.String,
   handoffCheckpoint: Schema.optional(Schema.NullOr(Schema.String)),
+  /** Other names search finds the task by; absent from servers made before they were listed. */
+  aliases: Schema.optional(Schema.Array(Schema.String)),
   checks: Schema.optional(
     Schema.Array(
       Schema.Struct({
@@ -265,6 +329,7 @@ export const BoardTaskDetail = Schema.Struct({
       options: Schema.String,
       verdict: Schema.String,
       status: Schema.Literals(["open", "decided", "dropped"]),
+      type: BoardDecisionType,
       level: Level,
       refs: Schema.Array(Schema.String),
       at: Schema.Number,
@@ -291,12 +356,32 @@ export const BoardTaskDetail = Schema.Struct({
       name: Schema.String,
       branch: Schema.String,
       head: Schema.String,
-      upstream: Schema.NullOr(Schema.String),
-      ahead: Schema.NullOr(Schema.Number),
-      behind: Schema.NullOr(Schema.Number),
-      dirty: Schema.Number,
       at: Schema.Number,
+      ...RepoStanding,
     }),
+  ),
+  /** A feature's or module's tasks, by the repo and branch each was last recorded on. */
+  repoTree: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        name: Schema.String,
+        branch: Schema.String,
+        head: Schema.String,
+        /** Null when only a finished task's evidence names the branch: its push state is unknown. */
+        state: Schema.NullOr(Schema.Struct(RepoStanding)),
+        at: Schema.Number,
+        tasks: Schema.Array(
+          Schema.Struct({
+            id: Schema.String,
+            title: Schema.String,
+            head: Schema.String,
+            done: Schema.Boolean,
+            at: Schema.Number,
+            inSlots: Schema.optional(Schema.Array(Schema.String)),
+          }),
+        ),
+      }),
+    ),
   ),
   /** Root first, with each parent's objective line. */
   parents: Schema.Array(
@@ -350,6 +435,7 @@ export const BoardTaskEdit = Schema.Union([
   Schema.Struct({ op: Schema.Literal("deleteItem"), itemId: Schema.String }),
   Schema.Struct({ op: Schema.Literal("savePlan"), markdown: Schema.String }),
   Schema.Struct({ op: Schema.Literal("toggleStep"), step: Schema.String }),
+  Schema.Struct({ op: Schema.Literal("star"), on: Schema.Boolean }),
   Schema.Struct({ op: Schema.Literal("saveHandoff"), markdown: Schema.String }),
   Schema.Struct({ op: Schema.Literal("saveMasterPlan"), markdown: Schema.String }),
   Schema.Struct({
@@ -360,6 +446,7 @@ export const BoardTaskEdit = Schema.Union([
     note: Schema.String,
   }),
   Schema.Struct({ op: Schema.Literal("removeDoc"), docId: Schema.String }),
+  Schema.Struct({ op: Schema.Literal("removeAlias"), alias: Schema.String }),
   Schema.Struct({
     op: Schema.Literal("addLink"),
     to: Schema.String,
@@ -380,6 +467,7 @@ export const BoardTaskEdit = Schema.Union([
     options: Schema.String,
     refs: Schema.Array(Schema.String),
     level: Schema.Literals([1, 2, 3]),
+    type: Schema.optional(BoardDecisionType),
     recommendation: Schema.optional(
       Schema.Struct({
         area: Schema.String,
@@ -391,7 +479,7 @@ export const BoardTaskEdit = Schema.Union([
   Schema.Struct({
     op: Schema.Literal("setDecision"),
     decisionId: Schema.String,
-    action: Schema.Literals(["decide", "drop", "reopen"]),
+    action: Schema.Literals(["decide", "drop", "skip", "reopen"]),
     verdict: Schema.optional(Schema.String),
   }),
   Schema.Struct({
@@ -401,6 +489,7 @@ export const BoardTaskEdit = Schema.Union([
     description: Schema.optional(Schema.String),
     options: Schema.optional(Schema.String),
     refs: Schema.optional(Schema.Array(Schema.String)),
+    type: Schema.optional(BoardDecisionType),
   }),
   Schema.Struct({
     op: Schema.Literal("implemented"),
@@ -417,6 +506,16 @@ export const BoardTaskEdit = Schema.Union([
   /** Gives the task's module or master task to a workspace copy (by root), or releases it. */
   Schema.Struct({ op: Schema.Literal("setOwner"), root: Schema.NullOr(Schema.String) }),
   Schema.Struct({ op: Schema.Literal("softRelease") }),
+  /** A feature's or module's own merge mode; null goes back to the parent's or the board's. */
+  Schema.Struct({ op: Schema.Literal("setMerge"), merge: Schema.NullOr(BoardMergeMode) }),
+  /** The open merge request for a feature's or module's work; "" clears it. */
+  Schema.Struct({ op: Schema.Literal("setMergeRequest"), url: Schema.String }),
+  /** The build the work landed in, and for a bug the build it was found in; "" clears one. */
+  Schema.Struct({
+    op: Schema.Literal("setBuild"),
+    landedIn: Schema.optional(Schema.String),
+    foundIn: Schema.optional(Schema.String),
+  }),
   Schema.Struct({ op: Schema.Literal("reclaim") }),
 ]);
 export type BoardTaskEdit = typeof BoardTaskEdit.Type;
@@ -448,6 +547,22 @@ export const BoardSettingsEdit = Schema.Union([
   }),
   Schema.Struct({ op: Schema.Literal("saveRules"), rules: Schema.String }),
   Schema.Struct({ op: Schema.Literal("setBoardMode"), on: Schema.Boolean }),
+  Schema.Struct({ op: Schema.Literal("setMerge"), merge: Schema.NullOr(BoardMergeMode) }),
+  /** Puts a build in a slot (a new name makes the slot); `ref` is looked up in the workspaces. */
+  Schema.Struct({
+    op: Schema.Literal("setSlot"),
+    slot: Schema.String,
+    version: Schema.String,
+    ref: Schema.optional(Schema.String),
+    note: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({ op: Schema.Literal("removeSlot"), id: Schema.String }),
+  /** Stops a Goal without its thread's help: paused can resume, ended is final. */
+  Schema.Struct({
+    op: Schema.Literal("stopGoal"),
+    goalId: Schema.String,
+    to: Schema.Literals(["paused", "ended"]),
+  }),
   Schema.Struct({
     op: Schema.Literal("saveRegisters"),
     registers: Schema.Array(
@@ -483,6 +598,8 @@ export const BoardSettings = Schema.Struct({
   ),
   rules: Schema.String,
   boardMode: Schema.Boolean,
+  merge: Schema.optional(Schema.NullOr(BoardMergeMode)),
+  slots: Schema.optional(Schema.Array(BoardSlot)),
   registers: Schema.Array(
     Schema.Struct({ id: Schema.String, topic: Schema.String, url: Schema.String }),
   ),

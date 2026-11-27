@@ -139,8 +139,8 @@ task.execute(taskId, mode?)    view.back()
 Gap (2026-11-23): no server-to-client UI channel exists. The web client has command palette
 commands, and composer drafts live in the client. Resolution:
 
-- **One command registry in the client**, shared by buttons, the command palette, keybindings and
-  intents. An intent is a command name plus arguments, nothing else.
+- **No shared command registry** (dropped by the owner, 2026-11-25). An intent is a command name plus
+  arguments, nothing else.
 - **Addressed to one client.** Every Assistant request carries the id of the client that sent it;
   the server delivers the intent only to that client. Other connected devices do not navigate.
 - **Intents never write board data.** They navigate, filter, preview and pre-fill a composer.
@@ -150,7 +150,7 @@ commands, and composer drafts live in the client. Resolution:
 - **No client, no intent.** A call from the CLI, a script or a scheduled run gets a link back.
 - `thread.draftPrompt` is an intent: it fills the composer of the target thread on the requesting
   client and never sends.
-- Surfaces: web and desktop share the registry. Mobile implements the same intent names, or shows
+- Surfaces: web and desktop share the intents. Mobile implements the same intent names, or shows
   the link until it does.
 
 ---
@@ -219,7 +219,7 @@ Undo on navigation and drafts. Expanded thread doubles as the debug view (transc
   "this one" / "the second one" resolve. About ten lines; reuse the composer-context contract if
   it fits.
 - Keep the thread short: a fresh Assistant thread per session, since its state lives on the board.
-- The matcher resolves to the client's command registry (§3.1) and must match the **whole
+- The matcher resolves to a UI intent (§3.1) and must match the **whole
   utterance**, so a sentence that merely starts with "open" goes to the model.
 
 [Proposed] How the Assistant runs. T3 has no direct model call, so the Assistant is a real thread
@@ -466,7 +466,7 @@ so that is close to every turn (roughly 2,500–3,000 tokens, estimated).
 | Planning: master plan → docs → plan → tasks    | sent up front only to Level 1–2 tasks, or when the task has no plan     |
 
 - Rules stated in both the tool rules and Board Mode are kept once.
-- Changes to this text are model-facing: run the evals in `evals/` and sync the Claude mod's copy.
+- Changes to this text are model-facing: run the evals in `evals/`.
 
 ### 9.4 Goal executor
 
@@ -511,4 +511,3 @@ so that is close to every turn (roughly 2,500–3,000 tokens, estimated).
 - Can a thread already be limited to a named set of tools, or does the allowlist need new code (§4.3)?
 - Is a provider turn fast enough for a spoken conversation, or is a direct model call needed (§4.3)?
 - Parallel cost limits: max parallel agents per plan/subscription tier?
-- Standalone Claude mod: does it take the Task profile too, or keep the full Board Mode block?

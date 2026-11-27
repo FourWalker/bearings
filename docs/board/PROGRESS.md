@@ -11,6 +11,7 @@ mapping in [RECONCILIATION.md](RECONCILIATION.md).
 - **Board project:** `C:\Claude Works\Claude Project Board`. The matching standalone changes are on `board/shared-app-edits`, based on `main` at `3380791`.
   - The Claude mod is in `mod/project-board/`; the board app is `mod/project-board/app/server.js`.
   - Its previous `register.ts` is kept in `backup/`.
+  - The mod is no longer kept in sync with this fork (owner, 2026-11-26, D-MWXQ9IY6512331).
 - **Board data:** `%USERPROFILE%\.claude-board`. Boards today: NEFX (3 workspaces) and Claude Project Board.
 - **Tools:** gh, glab, vp and Codex CLI (signed in with ChatGPT) are installed; no Claude CLI on PATH.
   In PowerShell, reload PATH from the User and Machine environment first.
@@ -95,7 +96,7 @@ thread must agree on what's done, blocked and verified, and on the next action.
 - The Threads list now exposes a visible New chat action using T3's normal composer.
   Unlinked conversations use the standard workflow. Models can create board items and hierarchy
   with `board_create_task` during discussion. Taking a task with `board_link` activates the
-  board workflow when Board Mode is enabled for that board. Shared code is synced to the mod.
+  board workflow when Board Mode is enabled for that board.
 - Changed-file checks passed formatting, lint, both knip passes, GraphQL generation,
   typechecks across 41 packages, and 190 tests. After the chat changes, all 18 focused
   chat/reactor tests passed. Packaging regression tests passed 53 cases with 2 platform skips.
@@ -135,7 +136,6 @@ thread must agree on what's done, blocked and verified, and on the next action.
   `vp run dev --home-dir <clone>\.t3`. Open the `pairingUrl` from the log, then `/board`.
 - Free turns: `node apps/server/src/bin.ts thread start --base-dir .t3 --provider devReplay
   --model showcase <folder> "go"`. Real cheap turns: `--provider codex --model gpt-6-luna`.
-- Board app on the copy: `BOARD_ROOT=<copy> BOARD_PORT=4318 node server.js` in the mod's `app/`.
 - `~/.t3/userdata` is the owner's real T3 data: always pass `--home-dir` / `--base-dir`, never run without it.
 
 ## Verified
@@ -189,8 +189,6 @@ thread must agree on what's done, blocked and verified, and on the next action.
   the live run are tested but were not re-run live.
 - The design for what comes next is in [NEXT-FEATURES.md](NEXT-FEATURES.md).
 
-- The board app still shows T3 threads unused since a restart as "offline", and its jump link
-  (`claude://…`) is wrong for T3 threads. T3's own Board page has neither problem.
 - Claude threads in T3 (`T3_BOARD_HOST=t3`) passed the real-provider handoff acceptance above.
 - Service tags arrive with the turn's checkpoint, after the turn, so the "outside this task's
   services" note isn't shown to the agent (the mod shows it mid-turn).
@@ -198,7 +196,6 @@ thread must agree on what's done, blocked and verified, and on the next action.
 - "Continue in new thread" picks the model in the composer, not on the button (the draft uses the
   project's defaults like any new thread). It always starts a local draft: a T3 worktree sits outside
   the board's roots, so the thread would land off the board.
-- The switched Claude mod has been smoke-tested with a fake host, not yet in a real new Claude chat.
 - Windows-only test failures, with and without the board changes: 4 `ProviderTurnStartService.test.ts`
   cases (Git worktrees) and one `ServerEnvironment.test.ts` case (symlink EPERM). The mobile
   `i18n:check` step can't spawn `gt` on Windows; web catalogs pass.
@@ -208,7 +205,3 @@ thread must agree on what's done, blocked and verified, and on the next action.
 `refs/remotes/codex/project-board-handoff` (fetched from its bundle) is kept for reference. Not
 taken: board file reads inside the Orchestrator, plan repair on every save and read, handoff parsing
 by heading patterns, its task-detail tabs (phase 2 rebuilds them to match the board app).
-
-## After editing board-core
-
-Run `node tools/sync-board-core.mjs` in the board project to refresh the mod's copy.

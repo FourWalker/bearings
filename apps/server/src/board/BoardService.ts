@@ -40,11 +40,15 @@ import {
   type BoardGit,
   type BoardViewChat,
   BoardStore,
+  closeGoal,
   findBoard,
+  goalOpen,
+  loadGoal,
   norm,
   readBoardSummaries,
   readBoardView,
   readTaskDetail,
+  saveGoal,
   readUnassignedChats,
 } from "@t3tools/board-core";
 import { defaultBoardHome, nodeGit, nodeIO } from "@t3tools/board-core/node";
@@ -205,7 +209,17 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
       return yield* new BoardReadError({ reason: "not-found", detail: "No such board." });
     }
     const tasks = yield* Effect.forEach(raw.tasks, (task) =>
-      resolve(task.chats).pipe(Effect.map((chats) => ({ ...task, chats }))),
+      Effect.all([resolve(task.chats), resolve(task.worked.map((entry) => entry.chat))]).pipe(
+        Effect.map(([chats, workers]) => ({
+          ...task,
+          chats,
+          // `resolve` drops a chat whose thread is gone, so match by chat, not by position.
+          worked: task.worked.flatMap((entry) => {
+            const chat = workers.find((row) => row.sessionId === entry.chat.sessionId);
+            return chat === undefined ? [] : [{ ...entry, chat }];
+          }),
+        })),
+      ),
     );
     // Only open chats: a T3 thread is open whenever this server holds it, whatever its heartbeat.
     const unlinked = (yield* resolve(raw.unlinked)).filter(
@@ -307,6 +321,8 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
       services: (board.services ?? []).map((s) => ({ id: s.id, name: s.name, match: s.match })),
       rules: board.rules ?? "",
       boardMode: !!board.boardMode,
+      merge: board.merge ?? null,
+      slots: board.slots ?? [],
       registers: (board.registers ?? []).map((r) => ({ id: r.id, topic: r.topic, url: r.url })),
     } satisfies BoardSettings;
   });
@@ -345,8 +361,63 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
     return (board?.roots ?? []).filter((root) => !byRoot.has(norm(root.path)));
   });
 
+  // The person's Pause and End: they hold whether or not the Goal's thread goes along.
+  const stopGoal = Effect.fn("BoardService.stopGoal")(function* (
+    boardId: string,
+    goalId: string,
+    to: "paused" | "ended",
+  ) {
+    yield* onBoard(boardId);
+    const running = yield* editLock.withLock(
+      boardId,
+      Effect.tryPromise({
+        try: async () => {
+          const goal = await loadGoal(store, boardId, goalId);
+          if (goal === null) throw new BoardEditError("No such Goal.");
+          if (!goalOpen(goal) || goal.status === to)
+            throw new BoardEditError(`The Goal is already ${goal.status}.`);
+          const sessions = [goal.executor, ...goal.groups.map((group) => group.worker)].filter(
+            (id) => id !== null && id !== undefined,
+          );
+          for (const sessionId of sessions) {
+            const session = await store.readSession(boardId, sessionId);
+            if (session === null) continue;
+            const chat = new BoardChat(store, git);
+            await chat.open({ sessionId, cwd: session.cwd, source: session.source });
+            await chat.leaveGoal(goal);
+          }
+          closeGoal(goal, to, to === "ended" ? "Ended by the person" : "Paused by the person");
+          await saveGoal(store, boardId, goal);
+          return sessions;
+        },
+        catch: editFailed,
+      }),
+    );
+    yield* Effect.forEach(
+      running,
+      (sessionId) =>
+        Effect.gen(function* () {
+          const threadId = ThreadId.make(sessionId);
+          const shell = yield* threads.getThreadShell(threadId);
+          if (shell === null || shell.activeRunId === null) return;
+          yield* threads.interruptThread({
+            projectId: shell.projectId,
+            commandId: CommandId.make(`board-goal-stop:${goalId}:${shell.activeRunId}`),
+            threadId,
+            reason: `Goal ${to} by the person`,
+          });
+        }).pipe(Effect.ignore),
+      { discard: true },
+    );
+    return {
+      message: to === "ended" ? "The Goal is ended." : "The Goal is paused.",
+      createdId: null,
+    };
+  });
+
   const editBoard = Effect.fn("BoardService.editBoard")(function* (input: BoardEditBoardInput) {
     const edit = input.edit;
+    if (edit.op === "stopGoal") return yield* stopGoal(input.boardId, edit.goalId, edit.to);
     if (edit.op === "addProject") {
       const missing = yield* rootsWithoutProject(input.boardId);
       const root = missing.find((candidate) => norm(candidate.path) === norm(edit.path));
@@ -356,7 +427,7 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
     const result = yield* editLock.withLock(
       "$registry",
       Effect.tryPromise({
-        try: () => editBoardSettings(store, input.boardId, edit),
+        try: () => editBoardSettings(store, input.boardId, edit, git),
         catch: editFailed,
       }),
     );
@@ -422,7 +493,7 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
         const taskId = input.taskId;
         if (taskId !== null && (await store.loadTask(input.boardId, taskId)) === null)
           return new BoardLinkError({ reason: "not-found", detail: "No such task." });
-        const chat = new BoardChat(store, git, "t3");
+        const chat = new BoardChat(store, git);
         await chat.open({
           sessionId: input.threadId,
           cwd,

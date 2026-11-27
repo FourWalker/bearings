@@ -1,5 +1,6 @@
 import type { BoardTask } from "@t3tools/contracts";
 import { useGT } from "gt-react";
+import { ChevronRightIcon, StarIcon } from "lucide-react";
 
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useNowMinute } from "~/hooks/useNowMinute";
@@ -15,11 +16,13 @@ import {
   chatStatusOf,
   dotOf,
   flagsOf,
+  holdsDone,
   levelKindOf,
   ownerHolderOf,
   tagsOf,
 } from "./board.logic";
 import { TackPerch } from "./BoardTack";
+import { type TreeStamp, stampOf } from "./boardTree.logic";
 
 /**
  * Project Board fork: the board app's sticky notes. Each task keeps one colour across visits
@@ -48,6 +51,14 @@ export interface BoardNoteActions {
   /** Opens the thread a chat (by board session id) is, when this server holds it. */
   readonly onOpenChat: (sessionId: string) => void;
   readonly canOpenChat: (sessionId: string) => boolean;
+  /** Stars a task or takes its star off; missing when the person may not edit the board. */
+  readonly onStar?: ((task: BoardTask, on: boolean) => void) | undefined;
+}
+
+/** A note in the Tree view's deck: shut, it shows one line; the rest opens in place. */
+export interface BoardDeck {
+  readonly open: boolean;
+  readonly onToggle: () => void;
 }
 
 function useLevelLabel(index: BoardIndex) {
@@ -360,38 +371,203 @@ function LastAction(props: { readonly task: BoardTask; readonly actions: BoardNo
   );
 }
 
-/** Shared frame: a clickable note that opens its task. */
+/** The star on a note or a task row: filled while the item is starred. */
+export function BoardStar(props: {
+  readonly task: BoardTask;
+  readonly onStar: BoardNoteActions["onStar"];
+  readonly className?: string | undefined;
+}) {
+  const gt = useGT();
+  const { onStar } = props;
+  const on = props.task.starredAt !== null;
+  if (onStar === undefined && !on) return null;
+  return (
+    <button
+      type="button"
+      data-board-star={on ? "on" : "off"}
+      disabled={onStar === undefined}
+      aria-pressed={on}
+      aria-label={on ? gt("Remove the star") : gt("Star")}
+      className={cn(
+        "grid size-5 shrink-0 place-items-center rounded outline-none ring-ring hover:bg-foreground/10 focus-visible:ring-2 focus-visible:ring-inset",
+        on ? "text-board-attention" : "opacity-40 hover:opacity-100",
+        props.className,
+      )}
+      onClick={(event) => {
+        event.stopPropagation();
+        onStar?.(props.task, !on);
+      }}
+    >
+      <StarIcon className={cn("size-3.5", on && "fill-current")} />
+    </button>
+  );
+}
+
+function useStampLabel() {
+  const gt = useGT();
+  return (stamp: TreeStamp) => {
+    switch (stamp) {
+      case "done":
+        return gt("Done");
+      case "blocked":
+        return gt("Blocked");
+      case "needs":
+        return gt("Needs you");
+      case "stopped":
+        return gt("Stopped");
+      case "working":
+        return gt("Working");
+      case "paused":
+        return gt("Paused");
+    }
+  };
+}
+
+const STAMP_TONE: Record<TreeStamp, string> = {
+  done: "bg-foreground/12",
+  paused: "bg-foreground/12",
+  working: "bg-success text-white",
+  needs: "bg-board-attention text-white",
+  blocked: "bg-destructive text-white",
+  stopped: "bg-destructive text-white",
+};
+
+/** A shut deck card: the item's name and where it stands, in one line. */
+function NotePeek(props: {
+  readonly index: BoardIndex;
+  readonly task: BoardTask;
+  readonly actions: BoardNoteActions;
+}) {
+  const { index, task } = props;
+  const stampLabel = useStampLabel();
+  const stamp = stampOf(index, task);
+  const kids = task.level === 2 ? index.kidsOf(task.id) : [];
+  const count =
+    kids.length > 0
+      ? `${kids.filter((kid) => kid.status === "done").length}/${kids.length}`
+      : task.steps.total > 0
+        ? `${task.steps.done}/${task.steps.total}`
+        : "";
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <BoardDotMark dot={dotOf(index, task)} />
+      <h3
+        data-board-note-title
+        className={cn(
+          "min-w-0 flex-1 truncate font-semibold leading-6",
+          task.level === 1 && "text-base",
+        )}
+      >
+        {task.title}
+      </h3>
+      {stamp !== null ? (
+        <span
+          data-board-peek-stamp={stamp}
+          className={cn(
+            "shrink-0 rounded-full px-1.5 py-px font-semibold text-3xs uppercase tracking-wide",
+            STAMP_TONE[stamp],
+          )}
+        >
+          {stampLabel(stamp)}
+        </span>
+      ) : null}
+      {count ? <span className="shrink-0 font-mono text-xs opacity-70">{count}</span> : null}
+      <BoardStar task={task} onStar={props.actions.onStar} />
+      <ChevronRightIcon aria-hidden className="size-3.5 shrink-0 opacity-60" />
+    </div>
+  );
+}
+
+/** When the item was last acted on and, once it has one, its done time. */
+function NoteTimes(props: { readonly task: BoardTask; readonly last: boolean }) {
+  const gt = useGT();
+  const { task } = props;
+  // Re-read each minute, so "2m ago" moves.
+  useNowMinute();
+  if (!props.last && task.doneAt === null) return null;
+  return (
+    <div data-board-note-times className="flex flex-wrap gap-x-3 text-xs opacity-70">
+      {props.last ? (
+        <span>
+          {gt("Last action {when}", { when: formatRelativeTimeLabel(iso(task.lastActionAt)) })}
+        </span>
+      ) : null}
+      {task.doneAt !== null ? (
+        <span>
+          {gt("Done {when}", {
+            when: new Date(task.doneAt).toLocaleString(undefined, {
+              dateStyle: "medium",
+              timeStyle: "short",
+            }),
+          })}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/** Shared frame: a clickable note that opens its task, or in a deck, a shut card that opens itself. */
 function NoteFrame(props: {
+  readonly index: BoardIndex;
   readonly task: BoardTask;
   readonly kind: "note" | "module";
-  readonly onOpen: () => void;
-  readonly className?: string;
+  readonly actions: BoardNoteActions;
+  readonly deck?: BoardDeck | undefined;
   readonly children: React.ReactNode;
 }) {
+  const gt = useGT();
+  const { deck, task } = props;
+  const shut = deck?.open === false;
+  const onOpen = shut ? deck.onToggle : () => props.actions.onOpenTask(task);
   return (
     <div
       role="button"
       tabIndex={0}
       data-board-note={props.kind}
-      data-board-task={props.task.id}
-      data-note-status={props.task.status}
-      data-note-colour={colourIndexOf(props.task.id) + 1}
-      onClick={props.onOpen}
+      data-board-task={task.id}
+      data-note-status={task.status}
+      data-note-colour={colourIndexOf(task.id) + 1}
+      data-board-deck={deck === undefined ? undefined : shut ? "shut" : "open"}
+      aria-expanded={deck === undefined ? undefined : !shut}
+      onClick={onOpen}
       onKeyDown={(event) => {
         if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
           event.preventDefault();
-          props.onOpen();
+          onOpen();
         }
       }}
       className={cn(
         "relative grid min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)] gap-1.5 rounded-lg p-3 text-board-note-ink shadow-sm outline-none ring-ring wrap-anywhere focus-visible:ring-2 focus-visible:ring-inset",
-        NOTE_COLOURS[colourIndexOf(props.task.id)],
-        props.task.status === "done" && "opacity-60",
-        props.className,
+        NOTE_COLOURS[colourIndexOf(task.id)],
+        task.status === "done" && "opacity-60",
+        // A shut module leaves a strip under its line for the next card to sit on.
+        shut && (props.kind === "module" ? "pt-2 pb-4" : "py-2"),
       )}
     >
-      {props.children}
-      <TackPerch taskId={props.task.id} />
+      {shut ? (
+        <NotePeek index={props.index} task={task} actions={props.actions} />
+      ) : (
+        <>
+          {props.children}
+          <div className="absolute end-1.5 top-1.5 flex items-center gap-0.5">
+            <BoardStar task={task} onStar={props.actions.onStar} />
+            {deck !== undefined ? (
+              <button
+                type="button"
+                aria-label={gt("Shut the card")}
+                className="grid size-5 place-items-center rounded opacity-60 outline-none ring-ring hover:bg-foreground/10 hover:opacity-100 focus-visible:ring-2 focus-visible:ring-inset"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  deck.onToggle();
+                }}
+              >
+                <ChevronRightIcon className="size-3.5 rotate-90" />
+              </button>
+            ) : null}
+          </div>
+        </>
+      )}
+      <TackPerch taskId={task.id} />
     </div>
   );
 }
@@ -404,6 +580,7 @@ export function BoardNote(props: {
   readonly actions: BoardNoteActions;
   /** The level views show a note's parents at its foot. */
   readonly showParents?: boolean;
+  readonly deck?: BoardDeck | undefined;
 }) {
   const gt = useGT();
   const { index, task } = props;
@@ -414,7 +591,7 @@ export function BoardNote(props: {
   const openItems = task.items.filter((item) => !item.done);
   const mustDo = openItems.filter((item) => item.kind === "mandatory").length;
   const decisions =
-    task.decisions.filter((decision) => decision.status === "open").length +
+    task.decisions.filter((decision) => decision.status === "open" && holdsDone(decision)).length +
     openItems.filter((item) => item.kind === "decision").length;
   const workspaces = [
     ...new Set(task.chats.filter((chat) => chat.live !== "ended").map((c) => c.workspaceLabel)),
@@ -427,8 +604,8 @@ export function BoardNote(props: {
         : gt(" · {tasks} tasks", { tasks: kids.length });
   const parents = props.showParents === true ? ancestorsOf(index, task) : [];
   return (
-    <NoteFrame kind="note" task={task} onOpen={() => props.actions.onOpenTask(task)}>
-      <div data-board-note-label className="text-3xs uppercase tracking-wide opacity-70">
+    <NoteFrame kind="note" index={index} task={task} actions={props.actions} deck={props.deck}>
+      <div data-board-note-label className="pe-12 text-3xs uppercase tracking-wide opacity-70">
         {levelLabel(task)}
         {task.kind === "backlog" && task.mainService !== null
           ? ` · ${props.serviceName(task.mainService)}`
@@ -474,6 +651,7 @@ export function BoardNote(props: {
           </span>
         ))}
       </div>
+      <NoteTimes task={task} last={false} />
       <LastAction task={task} actions={props.actions} />
       <StatusStrip index={index} task={task} />
       {parents.length > 0 ? (
@@ -510,34 +688,45 @@ function BoardTaskRow(props: {
   const { index, task } = props;
   const flags = flagsOf(index, task);
   return (
-    <button
-      type="button"
-      className={cn(
-        "flex w-full items-center gap-2 rounded px-1 py-0.5 text-start text-sm hover:bg-foreground/10",
-        task.status === "done" && "line-through opacity-60",
-      )}
-      onClick={(event) => {
-        event.stopPropagation();
-        props.actions.onOpenTask(task);
-      }}
-    >
-      <BoardDotMark dot={dotOf(index, task)} />
-      <span className="min-w-0 flex-1 truncate">
-        {flags.blockedBy.length > 0 ? "⛔ " : ""}
-        {task.goal !== null ? "🎯 " : ""}
-        {task.bug || flags.openFixes > 0 ? "🐞 " : ""}
-        {task.title}
-      </span>
-      <span className="text-xs opacity-70">
-        {task.status === "done"
-          ? gt("done")
-          : task.next !== null
-            ? task.next.id
-            : task.steps.total > 0
-              ? "✓"
-              : ""}
-      </span>
-    </button>
+    <div className="group/row flex items-center rounded hover:bg-foreground/10">
+      <button
+        type="button"
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-2 px-1 py-0.5 text-start text-sm",
+          task.status === "done" && "line-through opacity-60",
+        )}
+        onClick={(event) => {
+          event.stopPropagation();
+          props.actions.onOpenTask(task);
+        }}
+      >
+        <BoardDotMark dot={dotOf(index, task)} />
+        <span className="min-w-0 flex-1 truncate">
+          {flags.blockedBy.length > 0 ? "⛔ " : ""}
+          {task.goal !== null ? "🎯 " : ""}
+          {task.bug || flags.openFixes > 0 ? "🐞 " : ""}
+          {task.title}
+        </span>
+        <span className="text-xs opacity-70">
+          {task.status === "done"
+            ? gt("done")
+            : task.next !== null
+              ? task.next.id
+              : task.steps.total > 0
+                ? "✓"
+                : ""}
+        </span>
+      </button>
+      <BoardStar
+        task={task}
+        onStar={props.actions.onStar}
+        className={
+          task.starredAt === null
+            ? "opacity-0 focus-visible:opacity-100 group-hover/row:opacity-60"
+            : undefined
+        }
+      />
+    </div>
   );
 }
 
@@ -546,14 +735,17 @@ export function BoardModuleNote(props: {
   readonly index: BoardIndex;
   readonly task: BoardTask;
   readonly actions: BoardNoteActions;
+  readonly deck?: BoardDeck | undefined;
+  /** The tasks to list, when a filter or an order picked them; all of them otherwise. */
+  readonly tasks?: ReadonlyArray<BoardTask> | undefined;
 }) {
   const { index, task } = props;
   const levelLabel = useLevelLabel(index);
   const statusLabel = useStatusLabel();
-  const kids = index.kidsOf(task.id);
+  const kids = props.tasks ?? index.kidsOf(task.id);
   return (
-    <NoteFrame kind="module" task={task} onOpen={() => props.actions.onOpenTask(task)}>
-      <div data-board-note-label className="text-3xs uppercase tracking-wide opacity-70">
+    <NoteFrame kind="module" index={index} task={task} actions={props.actions} deck={props.deck}>
+      <div data-board-note-label className="pe-12 text-3xs uppercase tracking-wide opacity-70">
         {levelLabel(task)}
         {task.status !== "active" ? ` · ${statusLabel(task.status)}` : ""}
       </div>
@@ -572,6 +764,7 @@ export function BoardModuleNote(props: {
           ))}
         </div>
       ) : null}
+      <NoteTimes task={task} last />
       <StatusStrip index={index} task={task} />
     </NoteFrame>
   );

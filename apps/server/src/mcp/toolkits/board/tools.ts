@@ -17,7 +17,7 @@ interface JsonSchema {
   readonly required?: ReadonlyArray<string>;
 }
 
-/** The board tools' inputs are kept as JSON Schema in board-core, shared with the Claude mod. */
+/** The board tools' inputs are kept as JSON Schema in board-core. */
 const toField = (json: JsonSchema): Schema.Top => {
   const base: Schema.Top =
     json.enum !== undefined && json.enum.length > 0
@@ -69,7 +69,6 @@ const definition = (name: string) => {
   };
 };
 
-/** T3 only: the Claude Code mod has no window to steer, so this tool is not in board-core. */
 const BoardShowTool = Tool.make("board_show", {
   ...shared,
   dependencies: [...shared.dependencies, BoardIntents.BoardIntents],
@@ -128,6 +127,10 @@ export const BoardToolkit = Toolkit.make(
     McpInvocationContext.hiddenFromOutsideClients,
   ),
   Tool.make("board_release", definition("board_release")).annotate(
+    McpSchema.EnabledWhen,
+    McpInvocationContext.hiddenFromOutsideClients,
+  ),
+  Tool.make("board_slot", definition("board_slot")).annotate(
     McpSchema.EnabledWhen,
     McpInvocationContext.hiddenFromOutsideClients,
   ),

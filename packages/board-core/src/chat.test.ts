@@ -7,10 +7,11 @@ import { afterEach, beforeEach, describe, expect, it } from "@effect/vitest";
 
 import { BoardChat } from "./chat.ts";
 import { editTask } from "./edit.ts";
+import { closeGoal, loadGoal, saveGoal } from "./goal.ts";
 import { type BoardGit, noGit } from "./io.ts";
 import { nodeIO } from "./nodeIO.ts";
 import { nextStep, tickStep } from "./plan.ts";
-import { boardModeProtocol } from "./protocol.ts";
+import { t3OnDemandRule } from "./protocol.ts";
 import { BoardStore } from "./store.ts";
 import { norm } from "./text.ts";
 import { BOARD_TOOL_NAMES } from "./tools.ts";
@@ -46,14 +47,8 @@ async function seedBoard(extra: Partial<Registry["boards"][number]> = {}) {
   return store;
 }
 
-async function openChat(
-  store: BoardStore,
-  sessionId: string,
-  cwd: string,
-  host: "t3" | "claude-code" = "t3",
-  git: BoardGit = noGit,
-) {
-  const chat = new BoardChat(store, git, host);
+async function openChat(store: BoardStore, sessionId: string, cwd: string, git: BoardGit = noGit) {
+  const chat = new BoardChat(store, git);
   await chat.open({
     sessionId,
     cwd,
@@ -93,7 +88,7 @@ describe("BoardChat", () => {
     expect(chat.context).toContain("not linked to a board task yet");
 
     // A T3 worktree outside every root goes on its project folder's board.
-    const worktree = new BoardChat(store, noGit, "t3");
+    const worktree = new BoardChat(store, noGit);
     await worktree.open({ sessionId: "t2", cwd: `${ws}-worktrees/retry`, projectRoot: ws });
     expect(worktree.board?.id).toBe("nefx");
     expect(worktree.sess).toMatchObject({ workspace: ws, subfolder: "" });
@@ -144,6 +139,51 @@ describe("BoardChat", () => {
       title: "Build the SFTP client",
     });
     expect(sess.source).toEqual({ kind: "t3-thread", threadId: "t1", provider: "codex" });
+  });
+
+  it("lists a chat on a task whose step it ticks, and leaves its link where it is", async () => {
+    const store = await seedBoard();
+    const chat = await openChat(store, "t1", ws);
+    await chat.turnStart("Build transfers");
+    await chat.createTask({ title: "Transfers", topLevel: true });
+    await chat.createTask({ title: "Retries", parentId: "transfers" });
+    await chat.createTask({ title: "Backoff", parentId: "transfers" });
+    await chat.savePlan({ taskId: "retries", markdown: "- [ ] A1 Loop\n- [ ] A2 Test" });
+    await chat.savePlan({ taskId: "backoff", markdown: "- [ ] B1 Jitter" });
+    await chat.linkTask({ taskId: "retries" });
+    const refs = async (id: string) =>
+      ((await store.loadTask("nefx", id)) as Task).sessions.map((ref) => [
+        ref.sessionId,
+        ref.ticked?.step ?? null,
+      ]);
+    // Saving a plan with nothing ticked is not work on the task.
+    expect(await refs("backoff")).toEqual([]);
+
+    // A tick on another task lists the chat there; it stays linked to its own.
+    await chat.savePlan({ taskId: "backoff", markdown: "- [x] B1 Jitter" });
+    expect(await refs("backoff")).toEqual([["t1", "B1"]]);
+    expect(chat.sess?.taskId).toBe("retries");
+    expect((await chat.workedOn()).map((task) => task.id)).toEqual(["backoff"]);
+
+    // A tick on its own task keeps it listed there after it links elsewhere.
+    await chat.writeHandoff({ step: "A1", markdown: "Loop fixed." });
+    await chat.linkTask({ taskId: "backoff" });
+    expect(await refs("retries")).toEqual([["t1", "A1"]]);
+    expect((await chat.workedOn()).map((task) => task.id)).toEqual(["retries"]);
+
+    const view = await readBoardView(store, "nefx", 1_700_000_100_000);
+    const shown = (id: string) => view?.tasks.find((task) => task.id === id);
+    expect(shown("retries")?.worked.map((entry) => [entry.chat.sessionId, entry.step])).toEqual([
+      ["t1", "A1"],
+    ]);
+    expect(shown("retries")?.chats).toEqual([]);
+    expect(shown("backoff")?.worked).toEqual([]);
+
+    // The person takes it off the task it only worked on; the linked task keeps it.
+    await chat.dropWorked("retries");
+    await chat.dropWorked("backoff");
+    expect(await refs("retries")).toEqual([]);
+    expect(await refs("backoff")).toEqual([["t1", null]]);
   });
 
   it("links a chat on no task to the item it creates, and to a task it records work on", async () => {
@@ -229,7 +269,7 @@ describe("BoardChat", () => {
     expect(nextStep(await store.readText(store.planPath("nefx", "retries")))?.id).toBe("A1");
 
     // The subtask finishes: the parent's next step moves past the work it took over.
-    const worker = new BoardChat(new BoardStore(home, nodeIO, clock()), noGit, "t3");
+    const worker = new BoardChat(new BoardStore(home, nodeIO, clock()), noGit);
     await worker.open({
       sessionId: "t2",
       cwd: wsB,
@@ -371,6 +411,40 @@ describe("BoardChat", () => {
     });
   });
 
+  it("holds a task from done while a blocker or mandatory decision is open", async () => {
+    const store = await seedBoard();
+    const chat = await openChat(store, "t1", ws);
+    await chat.linkTask({ newTaskTitle: "Payments" });
+    await chat.createTask({ title: "Gateway", parentId: "payments" });
+    await chat.linkTask({ taskId: "gateway" });
+    await chat.fileDecision({ title: "Which provider?", level: 1 });
+    await chat.fileDecision({ title: "Dark mode?", type: "feature" });
+    await chat.fileDecision({ title: "Rename it?", type: "optional" });
+    const held = (await chat.updateTask({ status: "done" })).text;
+    expect(held).toContain('Not done: "Gateway"');
+    expect(held).toContain('"Which provider?" (mandatory)');
+    expect(held).not.toContain("Dark mode?");
+    expect(held).not.toContain("Rename it?");
+    expect((await store.loadTask("nefx", "gateway"))?.status).toBe("active");
+    const filed = async () => ((await store.loadTask("nefx", "payments")) as Task).decisions ?? [];
+    // An untyped decision reads as mandatory; a feature decision is filed on the master task.
+    expect(await filed()).toMatchObject([
+      { title: "Which provider?", raisedFrom: { id: "gateway" } },
+      { title: "Dark mode?", type: "feature", level: 1 },
+    ]);
+    const id = (await filed())[0]?.id;
+
+    await chat.fileDecision({ action: "update", id, type: "blocker" });
+    expect((await chat.fileDecision({ action: "skip", id })).text).toContain("can't be skipped");
+    await chat.fileDecision({ action: "update", id, type: "mandatory" });
+    await chat.fileDecision({ action: "skip", id, verdict: "not needed for the demo" });
+    expect((await filed())[0]).toMatchObject({
+      status: "dropped",
+      verdict: "Skipped by the person: not needed for the demo",
+    });
+    expect((await chat.updateTask({ status: "done" })).text).toContain("Board updated");
+  });
+
   it("blocks another workspace copy from an owned module until the person overrides", async () => {
     const store = await seedBoard();
     const a = await openChat(store, "t1", ws);
@@ -407,9 +481,9 @@ describe("BoardChat", () => {
     expect((await store.loadTask("nefx", "task"))?.services).toEqual(["api", "web"]);
   });
 
-  it("gives T3 threads short rules apart from the task's state, and Claude chats the mod's protocol", async () => {
+  it("gives T3 threads short rules apart from the task's state", async () => {
     const store = await seedBoard({ boardMode: true, rules: "Use pnpm." });
-    const t3 = await openChat(store, "t1", ws, "t3");
+    const t3 = await openChat(store, "t1", ws);
     expect(t3.boardModeOn).toBe(false);
     expect(t3.context).toContain("standard conversation workflow");
     expect(t3.rules).toMatch(/^Token hygiene/);
@@ -436,16 +510,13 @@ describe("BoardChat", () => {
     expect(t3.context).toBe(before);
     t3.forgetSeen();
     expect((await t3.findTasks({ query: "zzz" })).text).toContain("STOP and ask ONE question");
-    const cc = await openChat(store, "c1", ws, "claude-code");
-    expect(cc.context).not.toContain("one phase per chat");
-    await cc.linkTask({ taskId: "task" });
-    expect(cc.context).toContain("one phase per chat");
-    expect(boardModeProtocol("t3")).not.toMatch(/\bchat\b/);
+    for (const rule of ["outOfScope", "decisions", "ownership"] as const)
+      expect(t3OnDemandRule(rule)).not.toMatch(/\bchats?\b/);
   });
 
   it("finds work by a question's words, in plan steps too, and stops a duplicate task", async () => {
     const store = await seedBoard();
-    const chat = await openChat(store, "t1", ws, "t3");
+    const chat = await openChat(store, "t1", ws);
     await chat.createTask({ title: "Marketplace", topLevel: true });
     await chat.createTask({
       title: "Catalog",
@@ -501,13 +572,99 @@ describe("BoardChat", () => {
     );
 
     // Only a new thread's first prompt is matched, against whole titles and other names.
-    const plain = await openChat(store, "t2", ws, "t3");
+    const plain = await openChat(store, "t2", ws);
     await plain.turnStart("Can we speed up the storefront search?");
     expect(plain.context).toContain('Possibly related: marketplace "Marketplace".');
-    const other = await openChat(store, "t3", ws, "t3");
+    const other = await openChat(store, "t3", ws);
     await other.turnStart("Fix the flaky test");
     await other.turnStart("It is in the storefront");
     expect(other.context).not.toContain("Possibly related");
+
+    const removeAlias = { op: "removeAlias", alias: "storefront" } as const;
+    await editTask(store, "nefx", "marketplace", removeAlias, { by: "t3-app" });
+    expect((await chat.findTasks({ query: "storefront" })).text).toBe("No matching tasks.");
+  });
+
+  it("follows the nearest merge mode and records the commits not yet in its target", async () => {
+    const asked: string[] = [];
+    const git: BoardGit = {
+      ...noGit,
+      state: async () => ({
+        repo: ws,
+        name: "nfx",
+        branch: "feature/retries",
+        head: "abc1234",
+        upstream: "origin/feature/retries",
+        ahead: 0,
+        behind: 0,
+        dirty: 0,
+        lastCommitAt: 0,
+        at: 0,
+      }),
+      aheadOf: async (_dir, target) => {
+        asked.push(target);
+        return target === "develop" ? 3 : null;
+      },
+    };
+    const store = await seedBoard({ merge: { mode: "direct", target: "main" } });
+    const chat = await openChat(store, "t1", ws, git);
+    await chat.createTask({ title: "Transfers", topLevel: true });
+    await chat.createTask({ title: "Retries", parentId: "transfers" });
+    await chat.createTask({ title: "Backoff", parentId: "retries" });
+    await chat.linkTask({ taskId: "backoff" });
+    expect(chat.context).toContain("is merged directly into main (the board's mode)");
+    // The repo has no branch of that name: the board says so and does not call the work merged.
+    expect((await chat.checkpoint({ markdown: "Objective: ship" })).text).toContain(
+      "no branch main here",
+    );
+
+    const app = { by: "t3-app" };
+    await expect(
+      editTask(store, "nefx", "backoff", { op: "setMerge", merge: null }, app),
+    ).rejects.toThrow("follows the merge mode of its module");
+    await expect(
+      editTask(
+        store,
+        "nefx",
+        "retries",
+        { op: "setMerge", merge: { mode: "request", target: " " } },
+        app,
+      ),
+    ).rejects.toThrow("Name the branch");
+    const request = { mode: "request", target: "develop" } as const;
+    await editTask(store, "nefx", "retries", { op: "setMerge", merge: request }, app);
+    await editTask(
+      store,
+      "nefx",
+      "retries",
+      { op: "setMergeRequest", url: "https://git.example/mr/7" },
+      app,
+    );
+    const read = (await chat.readTask({})).text;
+    expect(read).toContain(
+      'reaches develop through a merge request, never merged straight in (set on "Retries")',
+    );
+    expect(read).toContain("only when the person asks in that turn");
+    expect(read).toContain("Open merge request: https://git.example/mr/7");
+    expect((await chat.checkpoint({ markdown: "Objective: ship" })).text).toContain(
+      "3 commit(s) not in develop",
+    );
+    expect(asked).toEqual(["main", "develop"]);
+    expect((await store.loadTask("nefx", "backoff"))?.repoState?.[0]).toMatchObject({
+      target: "develop",
+      aheadOfTarget: 3,
+    });
+
+    // A thread records the request it opened; from a task it lands on the module.
+    await chat.updateTask({ mergeRequest: "https://git.example/mr/8" });
+    expect((await store.loadTask("nefx", "retries"))?.mergeRequest).toBe(
+      "https://git.example/mr/8",
+    );
+    expect((await chat.updateTask({ mergeRequest: "soon" })).text).toContain("link");
+
+    // Back to inheriting: the module follows the board again.
+    await editTask(store, "nefx", "retries", { op: "setMerge", merge: null }, app);
+    expect((await chat.readTask({})).text).toContain("is merged directly into main");
   });
 
   it("records evidence when a task is done and checks it cheapest first", async () => {
@@ -529,7 +686,7 @@ describe("BoardChat", () => {
       since: async () => since,
     };
     const store = await seedBoard();
-    const chat = await openChat(store, "t1", ws, "t3", git);
+    const chat = await openChat(store, "t1", ws, git);
     await chat.linkTask({ newTaskTitle: "Task" });
     await chat.filesChanged(["api/a.ts", ".local-run/logs/task/check.log"]);
     const finish = async () => {
@@ -551,6 +708,16 @@ describe("BoardChat", () => {
     expect(await finish()).toContain("re-run `npm test` before building on it");
     since = "unreachable";
     expect(await finish()).toContain("done elsewhere, not merged here");
+    // What a reader found stands in for a check, until the files change; a bad finding stays.
+    const review = async (ok: boolean, note: string) =>
+      (await chat.updateTask({ taskId: "task", review: { ok, note } })).text;
+    expect(await review(true, "")).toContain("A review needs ok");
+    since = "same";
+    expect(await review(true, "Matches the API spec.")).toContain("reviewed at abc1234");
+    since = "changed";
+    expect(await review(true, "Matches the API spec.")).toContain("re-run `npm test`");
+    expect(await review(false, "Retries are lost.")).toContain("reassess its code in full");
+    expect(await finish()).not.toContain("Retries are lost.");
   });
 
   it("runs a Goal: tasks in a row with light records, reconciling work done outside it", async () => {
@@ -572,7 +739,7 @@ describe("BoardChat", () => {
       since: async () => "same",
     };
     const store = await seedBoard({ boardMode: true });
-    const exec = await openChat(store, "t1", ws, "t3", git);
+    const exec = await openChat(store, "t1", ws, git);
     await exec.createTask({ title: "Feature", topLevel: true });
     await exec.createTask({ title: "Module", parentId: "feature" });
     for (const title of ["Alpha", "Beta", "Gamma"])
@@ -586,7 +753,7 @@ describe("BoardChat", () => {
     expect(started).toContain('Next task: alpha "Alpha"');
     expect(exec.rules).not.toContain("## Board Mode");
     expect(exec.context).toContain("in its other workspace copies: copy-b.");
-    const other = await openChat(store, "t2", ws, "t3", git);
+    const other = await openChat(store, "t2", ws, git);
     expect((await other.goalTool({ action: "start", scope: ["module"] })).text).toMatch(
       /^Not started: a task belongs to one active Goal/,
     );
@@ -657,7 +824,7 @@ describe("BoardChat", () => {
 
   it("keeps a Goal's plans and decisions true on the board, not only in its thread", async () => {
     const store = await seedBoard({ boardMode: true });
-    const exec = await openChat(store, "t1", ws, "t3", noGit);
+    const exec = await openChat(store, "t1", ws, noGit);
     await exec.createTask({ title: "Feature", topLevel: true });
     await exec.createTask({ title: "Module", parentId: "feature" });
     await exec.createTask({ title: "Rollout", parentId: "feature" });
@@ -713,15 +880,73 @@ describe("BoardChat", () => {
     open.status = "decided";
     open.verdict = "Yes, keep it";
     await store.saveTask("nefx", rollout!);
-    expect((await readBoardView(store, "nefx", 0))?.goals[0]?.decisions).toEqual([
+    expect((await readBoardView(store, "nefx", 0))?.goals[0]?.decisions).toMatchObject([
       { id: "G1", title: "Renumber", settled: "V86 to V89", by: "model" },
       { id: "G2", title: "Keep the fixture invoice?", settled: "Yes, keep it", by: "person" },
     ]);
+
+    // A blocker is the person's in Auto mode too: its task leaves the Goal's order and can't
+    // be marked done.
+    const blocker = await exec.goalTool({
+      action: "decide",
+      title: "Force-push demo?",
+      settled: "yes",
+      type: "blocker",
+      taskIds: ["rollout"],
+    });
+    expect(blocker.text).toContain("G3 as a blocker for the person");
+    expect((await store.loadTask("nefx", "rollout"))?.decisions?.[2]).toMatchObject({
+      status: "open",
+      type: "blocker",
+    });
+    expect((await exec.goalTool({ action: "status" })).text).toContain(
+      "rollout wait on a blocker decision",
+    );
+    expect((await exec.goalTool({ action: "done" })).text).toContain('Not done: "Rollout"');
+    expect((await readBoardView(store, "nefx", 0))?.goals[0]?.decisions[2]).toMatchObject({
+      blocker: true,
+      settled: "",
+    });
+  });
+
+  it("ends a Goal for good: its tasks keep their progress and it can't be resumed", async () => {
+    const store = await seedBoard({ boardMode: true });
+    const exec = await openChat(store, "t1", ws);
+    await exec.createTask({ title: "Feature", topLevel: true });
+    await exec.createTask({ title: "Module", parentId: "feature" });
+    await store.io.write(store.planPath("nefx", "module"), "- [ ] B1 Run it\n- [ ] B2 Decide\n");
+    await exec.goalTool({ action: "start", scope: ["feature"], title: "Ship it" });
+    await exec.goalTool({ action: "task", taskId: "module" });
+    await exec.goalTool({ action: "step", step: "B1" });
+
+    const goal = await loadGoal(store, "nefx", "g-ship-it");
+    if (!goal) throw new Error("The Goal was not saved.");
+    await exec.leaveGoal(goal);
+    closeGoal(goal, "ended", "Ended by the person");
+    await saveGoal(store, "nefx", goal);
+
+    expect((await exec.goalTool({ action: "done" })).text).toContain("not running a Goal");
+    expect((await exec.goalTool({ action: "resume", goalId: "g-ship-it" })).text).toContain(
+      "can't be resumed",
+    );
+    const view = await readBoardView(store, "nefx", 0);
+    expect(view?.goals).toEqual([]);
+    expect(view?.finishedGoals[0]).toMatchObject({ id: "g-ship-it", status: "ended" });
+    expect(view?.tasks.find((task) => task.id === "module")).toMatchObject({
+      goal: null,
+      status: "active",
+    });
+    expect(await store.readText(store.planPath("nefx", "module"))).toBe(
+      "- [x] B1 Run it\n- [ ] B2 Decide\n",
+    );
+    expect(
+      (await exec.goalTool({ action: "start", scope: ["feature"], title: "Again" })).text,
+    ).toContain("Started Goal g-again");
   });
 
   it("hands a Goal's group to a child thread, which works it and reports once", async () => {
     const store = await seedBoard({ boardMode: true });
-    const exec = await openChat(store, "t1", ws, "t3");
+    const exec = await openChat(store, "t1", ws);
     await exec.createTask({ title: "Feature", topLevel: true });
     for (const module of ["Api", "Web"]) {
       await exec.createTask({ title: module, parentId: "feature", createAnyway: true });
@@ -733,14 +958,14 @@ describe("BoardChat", () => {
     }
     await exec.goalTool({ action: "start", scope: ["feature"], title: "Ship" });
     // A Goal's executor is still its executor when the server opens its record again.
-    expect((await openChat(store, "t1", ws, "t3")).rules).toContain("## Goal Mode");
+    expect((await openChat(store, "t1", ws)).rules).toContain("## Goal Mode");
     const brief = (await exec.goalTool({ action: "delegate", group: "web" })).text;
     expect(brief).toContain('board_goal {action: "work", goalId: "g-ship", group: "B"}');
     // The executor leaves a group that is out alone.
     expect(exec.context).toContain("B. Web [0/1 done] · with a child thread");
     expect(exec.context).toContain('Next task: api-one "Api one"');
 
-    const child = await openChat(store, "t2", ws, "t3");
+    const child = await openChat(store, "t2", ws);
     const started = (await child.goalTool({ action: "work", goalId: "g-ship", group: "B" })).text;
     expect(started).toContain("## Goal worker");
     expect(started).toContain('Next task: web-one "Web one"');
@@ -779,9 +1004,9 @@ describe("BoardChat", () => {
 
   it("lets the board's Assistant find and read, and write only after the person's yes", async () => {
     const store = await seedBoard({ boardMode: true });
-    const setup = await openChat(store, "t1", ws, "t3");
+    const setup = await openChat(store, "t1", ws);
     await setup.createTask({ title: "Marketplace", topLevel: true });
-    const assistant = await openChat(store, "t2", ws, "t3");
+    const assistant = await openChat(store, "t2", ws);
     await assistant.becomeAssistant();
     await assistant.turnStart("Do we have anything on the marketplace?");
     expect(assistant.rules).toContain("## Board Assistant");
@@ -799,7 +1024,7 @@ describe("BoardChat", () => {
 
     const draft = { title: "Seller payouts", parentId: "marketplace" };
     // The thread stays the Assistant when the server opens its record again.
-    const reopened = await openChat(store, "t2", ws, "t3");
+    const reopened = await openChat(store, "t2", ws);
     expect(reopened.rules).toContain("## Board Assistant");
     const asked = (await assistant.runTool("board_create_task", draft))?.text;
     expect(asked).toMatch(/^Not created yet: the person has to agree first/);
@@ -835,7 +1060,7 @@ describe("BoardChat", () => {
   });
 
   it("exposes every board tool through runTool", () => {
-    const chat = new BoardChat(new BoardStore(home, nodeIO), noGit, "t3");
+    const chat = new BoardChat(new BoardStore(home, nodeIO), noGit);
     for (const name of BOARD_TOOL_NAMES) expect(chat.runTool(name, {})).not.toBeNull();
     expect(chat.runTool("not_a_tool", {})).toBeNull();
   });
@@ -890,7 +1115,7 @@ describe("readBoardView", () => {
     await linked.savePlan({ markdown: "## Phase A\n- [x] A1 Client\n- [ ] A2 Retry" });
     const loose = await openChat(store, "t2", ws);
     await loose.turnStart("A quick question");
-    const gone = await openChat(store, "t3", ws, "claude-code");
+    const gone = await openChat(store, "t3", ws);
     await gone.turnStart("Old chat");
 
     const t2 = (await store.readSession("nefx", "t2")) as Session;

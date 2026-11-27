@@ -10,6 +10,8 @@ import type {
 } from "@t3tools/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
+  BellIcon,
+  MessageCircleIcon,
   PanelRightCloseIcon,
   PanelRightOpenIcon,
   PlusIcon,
@@ -17,7 +19,7 @@ import {
   TriangleAlertIcon,
 } from "lucide-react";
 import { T, useGT } from "gt-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -73,9 +75,18 @@ import {
   serviceColumns,
   statusMatches,
   subtreeOf,
-  treeRoots,
 } from "./board.logic";
-import { type BoardNoteActions, BoardModuleNote, BoardNote, BoardServiceRow } from "./BoardNotes";
+import { type BoardNoteActions, BoardNote, BoardServiceRow } from "./BoardNotes";
+import {
+  type BoardTree,
+  BoardStarReview,
+  BoardTreeBar,
+  BoardTreeColumns,
+  treeModuleIds,
+  useBoardTree,
+  useStarReview,
+} from "./BoardTree";
+import { type TreeColumn, treeColumns } from "./boardTree.logic";
 import { BoardAssistant } from "./BoardAssistant";
 import {
   TackBoardProvider,
@@ -84,12 +95,15 @@ import {
   TackHost,
   TackOffBoard,
   TackPanelTabs,
+  useTackBoard,
   useTackPlace,
 } from "./BoardTack";
 import { BoardPanel } from "./BoardPanel";
 import { BoardFileActions } from "./BoardFileActions";
 import { boardAttentionOf, isThreadWaiting } from "./boardAttention.logic";
 import { BoardPinBar, useBoardPin } from "./BoardPinBar";
+import { BoardSidebarScope } from "./BoardSidebarScope";
+import { useMediaQuery } from "~/hooks/useMediaQuery";
 import { useBoardPanelOpen } from "./tackSettings";
 import { BoardSettingsButton } from "./BoardSettingsDialog";
 import { BoardCreateDialog } from "./BoardCreateDialog";
@@ -275,16 +289,18 @@ export function BoardPage() {
           </WorkspaceBreadcrumb>
           <div className="min-w-0 flex-1" />
           {environmentId !== null && (
-            <BoardFileActions
-              key={JSON.stringify([environmentId, boardId])}
-              environmentId={environmentId}
-              boardId={boardId}
-              hasArchivedThreads={board?.hasArchivedThreads ?? false}
-              onOpened={(id) => {
-                boards.refresh();
-                selectBoard(id);
-              }}
-            />
+            <div className="contents max-md:hidden">
+              <BoardFileActions
+                key={JSON.stringify([environmentId, boardId])}
+                environmentId={environmentId}
+                boardId={boardId}
+                hasArchivedThreads={board?.hasArchivedThreads ?? false}
+                onOpened={(id) => {
+                  boards.refresh();
+                  selectBoard(id);
+                }}
+              />
+            </div>
           )}
           {boards.data !== null && boards.data.length > 1 && boardId !== null ? (
             <div className="[-webkit-app-region:no-drag]" data-workspace-titlebar-controls>
@@ -475,12 +491,49 @@ function BoardScreen(props: {
     goals: board.goals,
   });
   const canLink = useAtomValue(boardEnvironment.linkThread.permissionAtom(props.environmentId));
-  const [tackPlace, setTackPlace] = useTackPlace();
+  const [storedPlace, setTackPlace] = useTackPlace();
+  // On a phone or an upright tablet the panel is a sheet over the board and Tack hosts it: there
+  // is no corner to roam. A tablet on its side is wide enough for the desktop board.
+  const phone = useMediaQuery("max-lg");
+  const [sheet, setSheet] = useState(false);
+  const tackPlace = phone ? "host" : storedPlace;
+  const viewsRef = useRef<HTMLDivElement>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- the phone's row of views scrolls sideways: keeps the chosen view in sight when a link or the palette picks it
+  useEffect(() => {
+    if (!phone) return;
+    const toggles = viewsRef.current?.querySelectorAll("[data-slot=toggle]");
+    toggles?.[BOARD_VIEW_ORDER.indexOf(props.mode)]?.scrollIntoView({
+      block: "nearest",
+      inline: "center",
+    });
+  }, [phone, props.mode]);
   // Tack sleeps whenever the board opens, even if its chat was left open last time. Held here,
   // because opening a task from the board sends it home.
   const [tackAwake, setTackAwake] = useState(false);
   const [pinnedId, setPinnedId] = useBoardPin(board.id);
   const [panelOpen, setPanelOpen] = useBoardPanelOpen();
+  const tree = useBoardTree(board.id);
+  const starred = board.tasks.filter((task) => task.starredAt !== null);
+  const starReview = useStarReview(board.id, starred.length);
+  const canEdit = useAtomValue(boardEnvironment.editTask.permissionAtom(props.environmentId));
+  const editTask = useAtomCommand(boardEnvironment.editTask, { reportFailure: false });
+  const star = async (tasks: ReadonlyArray<BoardTask>, on: boolean) => {
+    for (const task of tasks) {
+      const result = await editTask({
+        environmentId: props.environmentId,
+        input: { boardId: board.id, taskId: task.id, edit: { op: "star", on } },
+      });
+      if (result._tag === "Failure") {
+        toastManager.add({
+          type: "error",
+          title: gt("Could not save the change"),
+          description: formatEnvironmentQueryError(result.cause),
+        });
+        break;
+      }
+    }
+    props.onChanged();
+  };
   // As in the board app: a master task opens as a page in place of the board; a module or task
   // opens in a modal over whatever is showing. Both are in the URL, so back and shared links work.
   const byId = (id: string | null) => (id === null ? null : (index.byId.get(id) ?? null));
@@ -544,6 +597,7 @@ function BoardScreen(props: {
       const chat = chatsById.get(sessionId);
       if (chat !== undefined) props.onOpenThread(chat);
     },
+    onStar: canEdit ? (task, on) => void star([task], on) : undefined,
   };
   const working = new Set(
     [...chatsById.values()].filter((chat) => chat.live === "working").map((c) => c.workspaceLabel),
@@ -618,6 +672,16 @@ function BoardScreen(props: {
     />
   );
 
+  const starReviewDialog = (
+    <BoardStarReview
+      index={index}
+      open={starReview.open}
+      onClose={starReview.close}
+      onUnstar={(tasks) => void star(tasks, false)}
+    />
+  );
+  const columns = props.mode === "tree" ? treeColumns(index, props.filter, tree.options) : [];
+
   const modal = (
     <Dialog
       open={modalTask !== null}
@@ -627,7 +691,7 @@ function BoardScreen(props: {
     >
       <DialogPopup
         showCloseButton={false}
-        className="h-[90dvh] max-h-[96dvh] min-h-96 w-[min(96vw,72rem)] min-w-80 max-w-[98vw] resize overflow-hidden sm:max-w-[98vw]"
+        className="h-[90dvh] max-h-[96dvh] min-h-96 w-[min(96vw,72rem)] min-w-80 max-w-[98vw] resize overflow-hidden max-md:h-dvh max-md:max-h-dvh max-md:w-screen max-md:max-w-none! max-md:resize-none sm:max-w-[98vw]"
       >
         <DialogTitle className="sr-only">{modalTask?.title ?? ""}</DialogTitle>
         <div className="@container/task h-full min-h-0 overflow-hidden">
@@ -645,12 +709,13 @@ function BoardScreen(props: {
         {pinBar}
         <div className="@container/task min-h-0 flex-1">{taskView(pageTask, closePage)}</div>
         {modal}
+        {starReviewDialog}
       </div>
     );
 
   const panel = panelOf(index, board.unlinked);
   const page = (
-    <div className="flex h-full min-h-0 flex-col">
+    <div data-board-phone={phone ? "" : undefined} className="flex h-full min-h-0 flex-col">
       <header data-board-masthead className="grid gap-2 border-b px-4 py-2">
         <BoardMastheadTitle name={board.name} />
         <div className="flex flex-wrap items-center gap-2">
@@ -690,6 +755,11 @@ function BoardScreen(props: {
             </span>
           ) : null}
           <div className="min-w-0 flex-1" />
+          <BoardSidebarScope
+            environmentId={props.environmentId}
+            boardId={board.id}
+            roots={board.workspaces.map((workspace) => workspace.root)}
+          />
           <BoardSettingsButton
             environmentId={props.environmentId}
             boardId={board.id}
@@ -699,6 +769,7 @@ function BoardScreen(props: {
             <TooltipTrigger
               render={
                 <Button
+                  data-board-panel-toggle
                   variant="ghost-muted"
                   size="icon-xs"
                   aria-pressed={panelOpen}
@@ -728,51 +799,66 @@ function BoardScreen(props: {
               });
             }}
           />
-          <ToggleGroup
-            aria-label={gt("Board view")}
-            value={[props.mode]}
-            onValueChange={(next) => {
-              const value = next[0];
-              if (
-                value === "tree" ||
-                value === "1" ||
-                value === "2" ||
-                value === "3" ||
-                value === "svc" ||
-                value === "register" ||
-                value === "goals"
-              )
-                setSearch({ view: value });
-            }}
-          >
-            <Toggle value="tree">{gt("Tree")}</Toggle>
-            <Toggle value="1">{gt("Level 1")}</Toggle>
-            <Toggle value="2">{gt("Level 2")}</Toggle>
-            <Toggle value="3">{gt("Level 3")}</Toggle>
-            <Toggle value="svc">{gt("By service")}</Toggle>
-            <Toggle value="register">{gt("Register")}</Toggle>
-            <Toggle value="goals">{gt("Goals")}</Toggle>
-          </ToggleGroup>
-          {props.mode !== "register" && props.mode !== "goals" ? (
+          <div ref={viewsRef} data-board-views className="contents">
             <ToggleGroup
-              data-board-status-filter
-              aria-label={gt("Task status")}
-              value={[props.filter]}
+              aria-label={gt("Board view")}
+              value={[props.mode]}
               onValueChange={(next) => {
                 const value = next[0];
-                if (value === "active" || value === "paused" || value === "done" || value === "all")
-                  setSearch({ filter: value });
+                if (
+                  value === "tree" ||
+                  value === "1" ||
+                  value === "2" ||
+                  value === "3" ||
+                  value === "svc" ||
+                  value === "register" ||
+                  value === "goals"
+                )
+                  setSearch({ view: value });
               }}
             >
-              <Toggle value="active">{gt("Active")}</Toggle>
-              <Toggle value="paused">{gt("Paused")}</Toggle>
-              <Toggle value="done">{gt("Done")}</Toggle>
-              <Toggle value="all">{gt("All")}</Toggle>
+              <Toggle value="tree">{gt("Tree")}</Toggle>
+              <Toggle value="1">{gt("Level 1")}</Toggle>
+              <Toggle value="2">{gt("Level 2")}</Toggle>
+              <Toggle value="3">{gt("Level 3")}</Toggle>
+              <Toggle value="svc">{gt("By service")}</Toggle>
+              <Toggle value="register">{gt("Register")}</Toggle>
+              <Toggle value="goals">{gt("Goals")}</Toggle>
             </ToggleGroup>
-          ) : null}
+            {props.mode !== "register" && props.mode !== "goals" ? (
+              <ToggleGroup
+                data-board-status-filter
+                aria-label={gt("Task status")}
+                value={[props.filter]}
+                onValueChange={(next) => {
+                  const value = next[0];
+                  if (
+                    value === "active" ||
+                    value === "paused" ||
+                    value === "done" ||
+                    value === "all"
+                  )
+                    setSearch({ filter: value });
+                }}
+              >
+                <Toggle value="active">{gt("Active")}</Toggle>
+                <Toggle value="paused">{gt("Paused")}</Toggle>
+                <Toggle value="done">{gt("Done")}</Toggle>
+                <Toggle value="all">{gt("All")}</Toggle>
+              </ToggleGroup>
+            ) : null}
+          </div>
         </div>
       </header>
       {pinBar}
+      {props.mode === "tree" ? (
+        <BoardTreeBar
+          tree={tree}
+          cards={treeModuleIds(columns)}
+          starred={starred.length}
+          onReview={starReview.show}
+        />
+      ) : null}
       <div className="flex min-h-0 flex-1 flex-col @container/board lg:flex-row">
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           <TackDropSurface tasks={board.tasks} className="min-h-0 min-w-0 flex-1 overflow-auto p-4">
@@ -804,6 +890,8 @@ function BoardScreen(props: {
                 board={board}
                 mode={props.mode}
                 filter={props.filter}
+                tree={tree}
+                columns={columns}
                 serviceName={serviceName}
                 actions={actions}
               />
@@ -811,12 +899,12 @@ function BoardScreen(props: {
           </TackDropSurface>
           <TackCorner
             at="board"
-            panelOpen={panelOpen}
+            panelOpen={phone || panelOpen}
             active={index.tasks.filter((task) => task.status !== "done").length}
             blocked={panel.blocked.length}
           />
         </div>
-        {panelOpen ? (
+        {(phone ? sheet : panelOpen) ? (
           <aside
             data-board-panel
             aria-label={gt("Board panel")}
@@ -858,7 +946,15 @@ function BoardScreen(props: {
           covered={modalTask !== null}
         />
       ) : null}
+      {phone ? (
+        <BoardPhoneBar
+          sheet={sheet}
+          onSheet={setSheet}
+          waiting={panel.needsYou.length + panel.finished.length}
+        />
+      ) : null}
       {modal}
+      {starReviewDialog}
     </div>
   );
   if (props.assistantProjectId === null || tackPlace === "float") return page;
@@ -891,11 +987,76 @@ function BoardScreen(props: {
   );
 }
 
+/** The view toggles, in the order the masthead lists them. */
+const BOARD_VIEW_ORDER: ReadonlyArray<BoardViewMode> = [
+  "tree",
+  "1",
+  "2",
+  "3",
+  "svc",
+  "register",
+  "goals",
+];
+
+/**
+ * The phone's way around a board: the board itself, where things stand, and Tack. The last two
+ * open the side panel as a sheet over the board.
+ */
+function BoardPhoneBar(props: {
+  readonly sheet: boolean;
+  readonly onSheet: (open: boolean) => void;
+  /** Chats that need the person or finished unseen. */
+  readonly waiting: number;
+}) {
+  const gt = useGT();
+  const tack = useTackBoard();
+  const at = !props.sheet ? "board" : tack?.tab === "tack" ? "tack" : "stand";
+  const open = (tab: "stand" | "tack") => {
+    tack?.setTab(tab);
+    props.onSheet(true);
+  };
+  return (
+    <nav data-board-phone-bar aria-label={gt("Board panel")}>
+      <button
+        type="button"
+        aria-current={at === "board" ? "page" : undefined}
+        onClick={() => props.onSheet(false)}
+      >
+        <SquareKanbanIcon />
+        <T context="the Project Board">Board</T>
+      </button>
+      <button
+        type="button"
+        aria-current={at === "stand" ? "page" : undefined}
+        onClick={() => open("stand")}
+      >
+        <span className="relative">
+          <BellIcon />
+          {props.waiting > 0 ? <b data-board-phone-count>{props.waiting}</b> : null}
+        </span>
+        {gt("Where things stand")}
+      </button>
+      {tack !== null ? (
+        <button
+          type="button"
+          aria-current={at === "tack" ? "page" : undefined}
+          onClick={() => open("tack")}
+        >
+          <MessageCircleIcon />
+          {gt("Tack")}
+        </button>
+      ) : null}
+    </nav>
+  );
+}
+
 function BoardArea(props: {
   readonly index: BoardIndex;
   readonly board: BoardView;
   readonly mode: BoardViewMode;
   readonly filter: BoardFilter;
+  readonly tree: BoardTree;
+  readonly columns: ReadonlyArray<TreeColumn>;
   readonly serviceName: (id: string) => string;
   readonly actions: BoardNoteActions;
 }) {
@@ -913,7 +1074,7 @@ function BoardArea(props: {
         />
       );
     return (
-      <div className="flex items-start gap-4">
+      <div data-board-columns className="flex items-start gap-4">
         {columns.map((column) => (
           <section
             key={column.service?.id ?? ""}
@@ -939,8 +1100,7 @@ function BoardArea(props: {
     );
   }
   if (props.mode === "tree") {
-    const roots = treeRoots(index, filter);
-    if (roots.length === 0)
+    if (props.columns.length === 0)
       return (
         <BoardEmpty
           title={index.tasks.length === 0 ? gt("No tasks yet") : gt("No tasks here")}
@@ -952,23 +1112,13 @@ function BoardArea(props: {
         />
       );
     return (
-      <div className="flex items-start gap-4">
-        {roots.map((root) => (
-          <section key={root.id} className="grid w-80 shrink-0 grid-cols-[minmax(0,1fr)] gap-3">
-            <BoardNote
-              index={index}
-              task={root}
-              serviceName={props.serviceName}
-              actions={props.actions}
-            />
-            {index.kidsOf(root.id).map((module) => (
-              <div key={module.id} data-board-module className="ms-3">
-                <BoardModuleNote index={index} task={module} actions={props.actions} />
-              </div>
-            ))}
-          </section>
-        ))}
-      </div>
+      <BoardTreeColumns
+        index={index}
+        columns={props.columns}
+        tree={props.tree}
+        serviceName={props.serviceName}
+        actions={props.actions}
+      />
     );
   }
   const level = Number(props.mode);

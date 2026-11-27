@@ -99,7 +99,7 @@ it.effect("records a thread's turns, answers and changed files on its board task
     const threadIssues = Layer.mock(ThreadIssueService.ThreadIssueService)({
       link: (input) =>
         Effect.sync(() => {
-          issues = [...issues, issueLink(input.ref.key)];
+          issues = [...issues, { ...issueLink(input.ref.key), url: input.url }];
           return { alreadyLinked: false };
         }),
       unlink: (input) =>
@@ -304,6 +304,30 @@ it.effect("records a thread's turns, answers and changed files on its board task
       issues = [issueLink("refunds")];
       yield* reactor.handle(event("thread.issue-synced", { issues }));
       expect((yield* session())?.taskId).toBe("refunds");
+
+      // A step the chat ticks on another task puts that task on the thread too, behind the one
+      // in hand; removing it there takes the chat off that task and leaves its link alone.
+      yield* Effect.promise(async () => {
+        await chat.createTask({ title: "Ledger", parentId: "refunds" });
+        await chat.savePlan({ taskId: "ledger", markdown: "- [x] L1 Post the entry" });
+      });
+      yield* reactor.handle(
+        event("run.updated", {
+          id: RunId.make("run:board-reactor:4"),
+          threadId,
+          status: "running",
+          userMessageId: promptId,
+        }),
+      );
+      expect(issues.map((link) => [link.key, link.url])).toEqual([
+        ["refunds", "t3board://nefx/refunds?level=1&hand=1"],
+        ["ledger", "t3board://nefx/ledger?level=2"],
+      ]);
+      issues = issues.filter((link) => link.key !== "ledger");
+      yield* reactor.handle(event("thread.issue-synced", { issues }));
+      expect((yield* Effect.promise(() => store.loadTask("nefx", "ledger")))?.sessions).toEqual([]);
+      expect((yield* session())?.taskId).toBe("refunds");
+      expect(issues.map((link) => link.key)).toEqual(["refunds"]);
 
       yield* reactor.handle(event("thread.archived", {}));
       expect((yield* session())?.status).toBe("ended");

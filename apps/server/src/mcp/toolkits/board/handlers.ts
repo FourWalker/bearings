@@ -113,6 +113,7 @@ const handlers = {
   board_master_plan: writes("board_master_plan"),
   board_doc: writes("board_doc"),
   board_release: writes("board_release"),
+  board_slot: writes("board_slot"),
   board_link_task: writes("board_link_task"),
   board_move: writes("board_move"),
   board_find: reads("board_find"),

@@ -1,6 +1,6 @@
 # Handoff: Project Board next features
 
-State (2026-11-24, night run). One living file: rewrite in place, never append.
+State (2026-11-26). One living file: rewrite in place, never append.
 
 **Objective.** Finish the features in [NEXT-FEATURES.md](NEXT-FEATURES.md) so the owner has a usable
 release for NEFX work. Read that brief and [PROGRESS.md](PROGRESS.md) first.
@@ -15,6 +15,7 @@ Read it with `node apps/server/src/bin.ts board find --board t3-board "<words>"`
 the detail; update the board task after it.
 
 **Built and committed** (tests, typecheck, lint pass per package; PROGRESS says what ran live).
+
 - Core: T3 profiles, ranked search, done evidence, Goal Mode inline (`4746e7a` to `2f5e9f5`).
 - Live-run fixes: checks and files recorded in the same turn, small Goal gaps (`9c403c0`, `90c5189`).
 - A paused Goal releases its modules; new items need a parent (`72b8081`).
@@ -102,6 +103,37 @@ the detail; update the board task after it.
 - **Outputs** (`ffd3944`): `addOutputs` in `chat.ts` lists document files a thread writes and up to three
   links of its final answer as task docs of kind "Output" (newest 20; a removed one is kept off
   by `outputsDropped`). Tests only; not watched with a real thread.
+- **Tree deck, order, filters, stars** (`e6d3fd25da`, seen running on the copied NEFX board): the
+  Tree view's cards are shut to one line and open in place (`BoardDeck` in `BoardNotes.tsx`); the bar
+  and columns are `BoardTree.tsx`, the rules `boardTree.logic.ts` (+ test). Order, Show done and open
+  cards per board in `t3.board.tree`; the name and Starred filters last while the board is open.
+  `task.json` gains `lastActionAt`, `doneAt` (`stampProgress` in `edit.ts`: the last tick or status
+  done, cleared on untick or reopen; the last tick does not change the status) and `starredAt` (edit
+  op `star`, people only: no agent tool). A star goes first and stays in view when done. The star
+  review opens the first time a board opens each day (`useStarReview`, `t3.board.stars.review`);
+  its switch is Settings, Tack, "Starred items", and "Review stars" in the bar opens it by hand.
+  Feature cards are open until shut (`shut` in the same prefs); Shut all and Open all act on
+  modules (owner, 2026-11-25). Plotter draws the shut card's stamp itself (`data-board-peek-stamp`).
+  Design: `concepts/tree-deck-concept.html`. Not seen: the Clay Post theme with shut
+  cards, the star in an open task's header, the Settings switch. Not built: mobile, the other views'
+  bar, sorting the columns. Starring bumps `updatedAt`, so the column moves left on its own.
+- **Worked-on chats and the thread's board tasks** (seen running on the Dev Board copy): a chat
+  keeps one linked task (in hand); a plan step it ticks on any task lists it there too, without
+  moving the link (`markWorked` in `edit.ts`, `ticked` on the task's `sessions` ref; a person's tick
+  in the app maps nothing). The task's Threads list shows those chats after the linked ones
+  (`worked` on the board view, `chatsForView`); status and "needs you" still count a chat on its
+  linked task only. `BoardReactor.mirrorToThread` writes the task in hand and up to five worked-on
+  tasks as the thread's issue links; the link's URL carries level and in-hand
+  (`t3board://b/t?level=2&hand=1`, `boardTaskUrl`), so no contract field was added. The sidebar's
+  thread hover card lists up to three (`boardThreadLinks.logic.ts`). Removing a worked-on issue in
+  T3 takes the chat off that task. The hover card is a paper card in Plotter and Clay Post
+  (`[data-slot="tooltip-popup"].dropdown-glass`). Not seen: Plotter night, mobile, the Threads
+  list label with a real tick.
+- **Checks, reviews, CLI writes** (`19c9c7a08a`, `27bce128f6`, `4553bf3ba4`): `boardChecks.ts` reads
+  check results from Claude commands too (no exit code there; `echo "rc $?"` is read from the
+  output); replayed over the owner's stored commands, not yet seen live. `board_update review`
+  records a read of finished work. `t3 board add|update`. Other names can be removed in the task's
+  side column (not seen in a browser). Not recorded: checks run through Claude's PowerShell tool.
 - **New board and workspace binding** (2026-11-25, seen running on the Dev Board): a board binds to
   folders; the T3 project is looked up from the folder and never stored (project ids are per
   install, `boards.json` is shared). `BoardCreateDialog.tsx` (picker card, Switch board menu,
@@ -132,12 +164,64 @@ the detail; update the board task after it.
 - **Goals screen chat** (`fd7f86b`): instructions box at start; "Discuss first" opens the thread
   without starting the Goal and shows a chat panel with Start now; a Chat toggle on every Goal card
   (`GoalChat`, messages followed only while open); each finished task's full result.
-- Windows build: the owner's install `Outputs/T3-Project-Board-Frozen-Windows-x64` holds
-  `8b8baaec9b` (New board and workspace binding) since 2026-11-25 18:10, swapped in on the owner's say-so; ask before the next
-  swap. The app must be closed first: its exe locks the folder.
-  Older installs sit there as
-  `win-unpacked.backup-20261125-181035` (ffd3944), `-121607` (e47a57c), `-103704` (19695a4), `-003448` (1b8d6a0), `-20261124-203554` (02f758c), `-143000`
-  (3e74c49), `-090747` (22ad144) and `-082118` (fd7f86b). `Outputs/Board-rebuild-d3e1aed94b`, `-c5028dba08` and `-98d0dec660` were
+- **Decision types** (`2a1645cc2f`, `1fc5352608`; seen on the Dev Board): a decision's `type` is
+  blocker, mandatory (untyped ones; a recommendation reads optional), optional or feature
+  (`decisionType` in `store.ts`). Open blocker and mandatory decisions refuse an agent's done
+  (`heldFromDone` in `chat.ts`; a person's edit in the app is not held). Skip is a drop whose
+  verdict says "Skipped by the person"; Reopen undoes it. A Goal's model never settles a blocker,
+  and `nextGoalTask` leaves its tasks out. Web: type select and Skip on the decision card, badges
+  count blocker and mandatory, the Pin bar says Blocked only for a blocker and shows the rest as a
+  count. Tool list grew 374 bytes (`agentContextBudget.json`).
+- **Goals the person controls** (same commits; seen with a seeded Goal, no real thread): Pause and
+  End go through `BoardService.stopGoal` (edit op `stopGoal`), which closes the Goal file and
+  interrupts its threads. `ended` is final: resume is refused, its tasks are free for a new Goal,
+  it lists under Finished. An answer on a Goal card is recorded as the person's verdict in the
+  register. Auto mode's rules now say what can't be undone is never the model's to settle.
+- **Tack access** (`1fc5352608`): Settings, Tack, "What Tack may do": Board Tack asks, Task Tack
+  has full access by default (`t3.board.assistant.access`), read at send time so existing threads
+  follow. Ask mode in a task always asks.
+- **Board-scoped sidebar** (`1fc5352608`): opening a board sets the sidebar's own project scope to
+  the board's projects (`BoardSidebarScope.tsx`, `boardSidebar.logic.ts`); a header button keeps
+  "every thread" per board (`t3.board.sidebar.all`).
+- **Phone and upright tablet** (`e3cd614749`, seen at 375, 800 and 1280px in five themes, not on a
+  device): under 1024px `board-phone.css` folds the chrome into scrolling rows, snaps the columns
+  one feature at a time, and turns the side panel into a sheet opened from `BoardPhoneBar`. Tack is
+  the Panel host there; in an open task it is a row. Preview with screens and the native app
+  proposal: `.t3/previews/mobile-layout-preview.html` (untracked).
+- **Repo state of a feature or module, and merge mode** (`31b7bea7a3`, `f59086f04b`; seen on the
+  Dev Board 2026-11-28, merge mode set from Board settings): the Handoff tab of a feature or module lists its tasks by repo and branch
+  (`repoTreeOf` in `view.ts`, derived, nothing stored). A board has a merge mode (`Board.merge`:
+  `request` or `direct`, plus a target branch; Board settings, "Merging finished work"); a feature
+  or module sets its own or follows (`Task.merge`, `mergeOf` in `store.ts`; the task's Merging
+  card). A checkpoint records `target` and `aheadOfTarget` on each repo state (`aheadOf` in
+  `nodeIO.ts`: the lower count against the local and the `origin` branch, so it is as fresh as
+  the last fetch). `board_update mergeRequest` records the request's link on the module. Threads
+  get one "Merging:" line; it says how, not when. The feature overview no longer hides ticked
+  must-dos and to-dos. Model-facing text changed, no eval run. Not built: a per-repo target.
+- **Slots: which build is where** (`ca954cae9b`, `f96f7d5a58`, `9f05339494`; seen on the Dev Board
+  2026-11-28, set from the CLI and from Board settings): a board has slots (`Board.slots`: name, version, repo, commit, note, date). `setSlot`
+  in `edit.ts` points one at a build and marks the finished tasks whose done commits are in that
+  build's history (`Task.inSlots`; `Task.landedIn` is the first such build, so backfill the oldest
+  build first). A done record with uncommitted changes in that repo is never held. So it is as fresh
+  as the last time the slot was set, and a build with no commit claims no task. Three ways in: the
+  `board_slot` tool, `t3 board slot <name> --version <v> [--ref <commit>]` (HEAD of the directory
+  by default; `t3 board slots` lists them), and Board settings, "Builds and slots". A bug records
+  `Task.foundIn` (`board_update foundIn`, or the task's Builds card). Model-facing text changed,
+  no eval run. One repo per slot. Mobile has no board view, so nothing was built there. No slot
+  is set on any real board yet.
+- Releases: `0.1.11-board.6` (tag `v0.1.11-board.6`, `fb90d1c918`) is the first numbered release;
+  `.4` and `.5` were earlier transfer builds, so the next is `.7`. Bump the four package.json
+  versions, commit, tag, build into `Outputs/Board-<version>`, then set the slot.
+- Windows build: the owner's install `Outputs/T3-Project-Board-Frozen-Windows-x64` gets
+  `0.1.11-board.6` on 2026-11-28 by a detached script that closes the app, swaps and restarts it
+  (transcript `.local-run/logs/release-slots-on-the-board/swap-board6.log`; it also moves the
+  Bearings `frozen` slot). Before that it held `f6fc50bb21` (0.1.11-board.2), now the newest
+  `win-unpacked.backup-20261128-*`. Ask before the next swap. The app must be closed first: its exe
+  locks the folder. Its board data folder is a junction to `~/.claude-board`. Older installs sit
+  there as `win-unpacked.backup-20261126-104212` (161ba9d207),
+  `-20261125-210142` (8b8baaec9b), `-181035` (ffd3944), `-121607` (e47a57c), `-103704` (19695a4),
+  `-003448` (1b8d6a0), `-20261124-203554` (02f758c), `-143000` (3e74c49), `-090747` (22ad144) and
+  `-082118` (fd7f86b). `Outputs/Board-rebuild-d3e1aed94b`, `-c5028dba08` and `-98d0dec660` were
   built and never installed. Not launched by me.
 
 **Verified live this run.** Tack's avatar and look menu on the Dev Board. The Goals screen on the
@@ -149,11 +233,11 @@ wasteful moves are measured in [TOKEN-BENCHMARK.md](TOKEN-BENCHMARK.md) (script:
 `.t3/token-benchmark/usage.py`). NEFX side: `C:\nfx\NEFX Tasks handover\DEMO-TEST-HANDOFF.md`.
 
 **Not built.**
+
 - Goals screen: no model picker (the Goal thread uses the project's default model; start from the
-  CLI to choose one, see Commands). An answer typed on a Goal card is a message to the thread; to
-  record a person's verdict, decide the filed decision in the task's Decisions tab. Pause and
-  resume are messages to the thread. Launched from the UI on the Dev Board (Discuss first, an
-  answer, Start now, finished); pause, resume and an Ask-mode answer are untried.
+  CLI to choose one, see Commands). Resume is a message to the thread. Launched from the UI on the
+  Dev Board (Discuss first, an answer, Start now, finished); resume and an Ask-mode answer on a
+  real Goal are untried.
 - Tack: web only; no settings-page entry (look menu only); no unprompted visits (a task newly
   blocked, a Goal finished: the concept's events) and no auto-open when Tack waits for an
   approval while its bubble is shut (the bell rings at home). Tack in a task
@@ -167,17 +251,15 @@ wasteful moves are measured in [TOKEN-BENCHMARK.md](TOKEN-BENCHMARK.md) (script:
   a note) leaves Tack at home; the concept's pointing hand and pen-drawn bubble are not drawn;
   `board_show` from any agent, not only Tack, sends Tack to the note in walk mode (the intent
   carries no thread id); no instant matcher for "open X", no model picker, no allowlist.
-- Voice beyond the composer microphone. Mobile does not act on `board_show`, has no Goals view and
-  no avatar. Other names cannot be listed or removed in the web board.
+- Voice beyond the composer microphone. The native mobile app has no board at all. Other names cannot be listed or removed in the web board.
 
 **Not verified.** Model-behaviour evals: the repo has no `.env` with API keys, and `evals/` has no
-board cases, so none ran. The Claude mod's copy of board-core is not synced
-(`tools/sync-board-core.mjs` lives in the mod's repo, which is not on this machine's
-`C:\Claude-Works`). Parallel Goal groups live. `WorktreeMcpService.test.ts` has one failing Windows
+board cases, so none ran. Parallel Goal groups live. `WorktreeMcpService.test.ts` has one failing Windows
 path test, not confirmed as pre-existing. `node scripts/i18n-check.ts` cannot run `gt generate` on
 Windows; new keys were taken from `vp run i18n:generate` output and added to all ten catalogs by hand.
 
 **Decisions and why.**
+
 - Goal Mode replaces Dispatch, Batch and Orchestra; a Goal points at tasks and keeps no status copy.
 - A Goal is driven only by its thread. The Goals screen therefore starts that thread and talks to
   it, and never writes the Goal file the executor is also writing.
@@ -187,6 +269,14 @@ Windows; new keys were taken from `vp run i18n:generate` output and added to all
   effects: sleep after four idle loops on the closed pill, hold still after a minute of sleep.
 - No authored tags: other names only, saved after a missed search and the person's yes.
 - Assistant writes need the person's yes in that turn; it starts supervised.
+- Decision skip reuses the dropped status, and Pause and End reuse the `editBoard` RPC: no new
+  status, RPC or permission to carry through server, web and mobile.
+- No `board_goal` end action, CLI end or palette entry: ending is final and the person's, and a
+  model action would add tool text to every thread.
+- The sidebar filter is the sidebar's existing project scope, driven by the board; no hidden-thread
+  count (it would subscribe the board page to every thread update).
+- One compact layout under 1024px for phones and an upright tablet, CSS first; a tablet on its side
+  keeps the desktop board. Native board: design only, recommended not to build yet.
 - Tack lives on the board, not as an "Ask Tack" button (owner, 2026-11-24): Roamer and Panel host
   both built and selectable, Floating kept as the way back. Concepts in `docs/board/concepts/`.
 - Plotter's options stay user settings, as the owner asked: speed, old ink, motion, hops, wobble.
@@ -207,42 +297,15 @@ run. A parent step that names a task is ticked only when the thread ticks it; th
 marker still auto-syncs. The NEFX board was corrected by one-off scripts (steps, feature last
 action, five decisions filed); task files as they were before are in `.t3/nefx-tasks-backup-20261124`.
 
-**Next step.** Pin bar (owner, 2026-11-25): pin one task or module; a bar under the board's
-header on every board view shows plan ticks, a peek at the agent's activity and when its chat
-needs approval, an answer, a decision, is blocked or stopped. Read from thread events and board
-files only, never reported by the model. Look follows the theme, not Tack's skin. Concept
-`concepts/pin-bar-concept.html`: liked by the owner. The step in hand has a standing slot (a
-pinned task: its step; a pinned module: the task being done, unless a chat works the module
-itself, whose step then wins). A "Catch my eye" option (Off, By theme, By Tack) moves the bar
-when the pinned item needs the person: `concepts/pin-attention-concept.html` (art embedded by
-`build-tack-reference.mjs`). By Tack means Sub Tacks (owner, 2026-11-25): Tack never leaves its
-spot; it releases a small Sub Tack (release animation per skin, none for the return) that stands
-on top of the bar above the state chip and makes the fuss. Settled with the owner: Claude (and
-the other pixel skins) pops a scale-2 sprite out of Tack's head, which patrols the bar and
-stomps the chip under a "!" sign; Plotter's Sub Tack is the Bird (`CANDIDATES.bird` strokes in
-the concept page), released subtly: the Plotter changes to its quill-and-note drawing (`write` clip) and sketches
-the bird inside that note, in place of the script lines, stroke by stroke; the bird then grows
-and glides to the bar (no separate canvas, and no pen dot or dotted trail for Sub Tacks: those
-are Tack's own crossing); its fuss is a hop and wing beat while the pen rules under the
-bar, rings and rays the stamp; the bird is drawn and flies facing left and turns right on
-landing. **Built and seen running** on the Dev Board (`9cee587`, `e47a57c`): the bar on the
-tree and Goals views, pin from a task header, the Plotter release (quill, bird to the bar, pen
-marks) and the Claude one (pop, patrol, "!"), and by theme in Plotter. Checked with the dev-only
-switch `localStorage["t3.board.pin.demo"] = "approval"` (any state name), not with a real chat
-that needs the person. Files:
-`boardPin.logic.ts` (+ test), `BoardPinBar.tsx` (bar, peek, `BoardPinToggle` in the task header,
-`useBoardPin` in local storage `t3.board.pin`, catch setting `t3.board.pin.catch`, `PinSubTack`),
-`apps/web/src/board-pin.css`, release signal in `TackAvatar`/`TackPlotter`/`BoardTack`
-(`releaseTack`, `TACK_RELEASED`, `PLOTTER_SUB_BIRD`, `data-tack-self`). Typecheck, lint and board
-tests pass; the bar's 28 strings are in all ten catalogs. Left: the swell (non-Plotter themes)
-and the peek panel were not looked at live; 66 strings of earlier board features (notices, Tack
-in a task) are still missing from the catalogs (`vp run i18n:generate` lists them); no pin
-entry in a note's menu or Tack's look menu; the emoji skin has no Sub Tack; web and desktop
-only. An older dev server (pid 40504, port 13773, web 5733) was already running on this `.t3`
-and was used for the check; it predates the server fix `d5a44e3`, so that fix is still unseen live. Then: on a real Goal, exercise pause, resume and an Ask-mode answer from the Goals screen,
-and watch whether the thread uses `step` and `open` unprompted; add an eval case if it does not.
+**Next step.** On the owner's Legion Y700 (Android Chrome): try the compact board (swipe, the
+sheet, the keyboard over Tack's box) and fix what the device shows. Then, with a real provider: a
+Goal paused, resumed and ended from the Goals screen while its thread runs; Task Tack in Run with
+full access; a chat that stays working through background work. Still open: an eval for the changed
+model-facing text (no API keys here), the 66 older board strings missing from the catalogs, the
+Pin bar's swell and peek never looked at live.
 
 **Commands and traps (Windows).**
+
 - `~/.t3/userdata` is the owner's real T3 data. Always pass `--home-dir` / `--base-dir <clone>\.t3`.
 - Dev on the Dev Board copy: `T3_BOARD_HOME=<clone>/.t3/claude-board node_modules/.bin/vp.cmd run dev
   --home-dir <clone>/.t3`. Without `T3_BOARD_HOME` the dev server reads the real boards in
@@ -268,5 +331,9 @@ and watch whether the thread uses `step` and `open` unprompted; add an eval case
 - Build (needs `node_modules/.bin` on PATH for `vp`): `T3CODE_DESKTOP_REUSE_RESOURCE_MONITOR=1 node
   scripts/build-desktop-artifact.ts --platform win --target dir --arch x64 --output-dir <folder>`
   (about 5 minutes). Install: rename the install's `win-unpacked` to a dated backup, copy the new one in.
+  Then record it from the repo: `node apps/server/src/bin.ts board slot next --version <v>` after a
+  build, `... board slot frozen --version <v> --ref <built commit>` after an install. Without
+  `--ref` the slot takes HEAD of the current directory; for a build that is not a commit (FOTN's
+  test map), run it from a folder outside any repo with `--board <id>`.
 
 **Resume.** "Read docs/board/HANDOFF.md and continue from Next step."

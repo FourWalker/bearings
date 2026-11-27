@@ -47,12 +47,19 @@ import {
   subtreeOf,
   tagsOf,
 } from "./board.logic";
-import { attentionDot, BoardDotMark, BoardModuleNote, type BoardNoteActions } from "./BoardNotes";
+import {
+  attentionDot,
+  BoardDotMark,
+  BoardModuleNote,
+  type BoardNoteActions,
+  BoardStar,
+} from "./BoardNotes";
 import {
   AddRow,
   BoardEditProvider,
   ChoiceSelect,
   DecisionAdder,
+  DecisionTypeSelect,
   DecisionTextEditor,
   DocAdder,
   EditableText,
@@ -61,6 +68,7 @@ import {
   ItemRow,
   LinkAdder,
   MarkdownEditor,
+  MergeModeForm,
   MoveMenu,
   VerdictControls,
   WorkspaceControls,
@@ -69,6 +77,7 @@ import {
 import { BoardTaskTack } from "./BoardTaskTack";
 import { PlotterCardDraw } from "./PlotterCardDraw";
 import { useTaskTackSize } from "./useTaskChat";
+import { useMediaQuery } from "~/hooks/useMediaQuery";
 
 /**
  * Project Board fork: the board app's task views. A master task opens as a page with its
@@ -116,8 +125,11 @@ export function BoardTaskView(props: BoardTaskViewProps) {
   const openDecisions = openDecisionCount(index, task);
   // Tack in the task: the threads it can load, and the one it shows. A thread that waits for an
   // answer or is working is shown when the task opens; after that the person chooses.
-  const [tackSize, setTackSize] = useTaskTackSize();
+  const [storedTackSize, setTackSize] = useTaskTackSize();
+  // A phone or an upright tablet has no room for a column beside the task: Tack is a row at its foot.
+  const tackSize = useMediaQuery("max-lg") ? "line" : storedTackSize;
   const tackChats = chatsForView(index, task, master)
+    .filter((entry) => entry.worked === undefined)
     .map(({ chat }) => chat)
     .filter((chat) => chat.threadId !== null);
   const [tackThread, setTackThread] = useState<ThreadId | null>(
@@ -134,7 +146,12 @@ export function BoardTaskView(props: BoardTaskViewProps) {
   const tabs: ReadonlyArray<readonly [Tab, string]> = [
     ...(master
       ? [["overview", gt("Overview")] as const]
-      : [["threads", gt("Threads ({count})", { count: task.chats.length })] as const]),
+      : [
+          [
+            "threads",
+            gt("Threads ({count})", { count: chatsForView(index, task, false).length }),
+          ] as const,
+        ]),
     ["plan", gt("Plan & Docs")],
     ["handoff", gt("Handoff")],
     ...(!master && (task.level < 3 || kids.length > 0)
@@ -289,8 +306,8 @@ function TaskHeader(props: BoardTaskViewProps & { readonly detail: BoardTaskDeta
           </Badge>
         ) : null}
       </div>
-      <div className="flex items-start gap-2">
-        <div className="min-w-0 flex-1">
+      <div className="flex items-start gap-2 max-md:flex-wrap">
+        <div className="min-w-0 flex-1 max-md:basis-full">
           <EditableText
             value={task.title}
             label={gt("Title")}
@@ -348,6 +365,10 @@ function TaskHeader(props: BoardTaskViewProps & { readonly detail: BoardTaskDeta
                 : gt("done")}
           </Badge>
         )}
+        <BoardStar
+          task={task}
+          onStar={canEdit ? (_, on) => void edit({ op: "star", on }) : undefined}
+        />
         <BoardPinToggle boardId={props.board.id} taskId={task.id} />
         {task.level > 1 ? (
           <Button
@@ -486,13 +507,12 @@ function OverviewTab(props: BoardTaskViewProps & { readonly onTab: (tab: Tab) =>
   const openDecisions = openDecisionCount(index, task);
   const items = (kind: "mandatory" | "todo") =>
     tree.flatMap((owner) =>
-      owner.items
-        .filter((item) => item.kind === kind && !item.done)
-        .map((item) => ({ item, owner })),
+      owner.items.filter((item) => item.kind === kind).map((item) => ({ item, owner })),
     );
   const { edit } = useBoardEdit();
   const itemList = (kind: "mandatory" | "todo") => {
-    const list = items(kind);
+    // Ticked items stay listed after the open ones: ticking is not removing.
+    const list = items(kind).toSorted((a, b) => Number(a.item.done) - Number(b.item.done));
     return list.length === 0 ? (
       <Muted>
         <T>None</T>
@@ -706,7 +726,7 @@ function ThreadsTab(
           </Muted>
         </Card>
       ) : (
-        chats.map(({ chat, task: owner }) => {
+        chats.map(({ chat, task: owner, worked }) => {
           const more = extra.get(chat.sessionId);
           const wants = index.attention.get(chat.sessionId);
           return (
@@ -724,6 +744,11 @@ function ThreadsTab(
                     </button>
                   ) : null}
                 </span>
+                {worked !== undefined ? (
+                  <Badge variant="outline">
+                    {gt("Worked on it · ticked {step}", { step: worked.step })}
+                  </Badge>
+                ) : null}
                 <Badge
                   variant={
                     wants?.kind === "needs"
@@ -1051,6 +1076,50 @@ function DocRow(props: { readonly doc: BoardTaskDetail["docs"][number] }) {
   );
 }
 
+function RepoBadges(props: {
+  readonly repo: {
+    readonly upstream: string | null;
+    readonly ahead: number | null;
+    readonly dirty: number;
+    readonly target?: string | null | undefined;
+    readonly aheadOfTarget?: number | null | undefined;
+  };
+}) {
+  const gt = useGT();
+  const { repo } = props;
+  return (
+    <>
+      <Badge variant={!repo.upstream || repo.ahead ? "warning" : "success"}>
+        {!repo.upstream
+          ? gt("not pushed")
+          : repo.ahead
+            ? gt("{count} not pushed", { count: repo.ahead })
+            : gt("pushed")}
+      </Badge>
+      <Badge variant={repo.dirty ? "warning" : "success"}>
+        {repo.dirty ? gt("{count} uncommitted", { count: repo.dirty }) : gt("clean")}
+      </Badge>
+      {repo.target ? (
+        <Badge
+          variant={
+            repo.aheadOfTarget === 0
+              ? "success"
+              : typeof repo.aheadOfTarget === "number"
+                ? "warning"
+                : "outline"
+          }
+        >
+          {repo.aheadOfTarget === 0
+            ? gt("merged into {branch}", { branch: repo.target })
+            : typeof repo.aheadOfTarget === "number"
+              ? gt("{count} not in {branch}", { count: repo.aheadOfTarget, branch: repo.target })
+              : gt("no branch {branch} here", { branch: repo.target })}
+        </Badge>
+      ) : null}
+    </>
+  );
+}
+
 function HandoffTab(props: BoardTaskViewProps & { readonly detail: BoardTaskDetail }) {
   const gt = useGT();
   const { detail } = props;
@@ -1111,16 +1180,57 @@ function HandoffTab(props: BoardTaskViewProps & { readonly detail: BoardTaskDeta
               <span className="font-mono text-muted-foreground text-xs">
                 {repo.branch} @ {repo.head}
               </span>
-              <Badge variant={!repo.upstream || repo.ahead ? "warning" : "success"}>
-                {!repo.upstream
-                  ? gt("not pushed")
-                  : repo.ahead
-                    ? gt("{count} not pushed", { count: repo.ahead })
-                    : gt("pushed")}
-              </Badge>
-              <Badge variant={repo.dirty ? "warning" : "success"}>
-                {repo.dirty ? gt("{count} uncommitted", { count: repo.dirty }) : gt("clean")}
-              </Badge>
+              <RepoBadges repo={repo} />
+            </div>
+          ))}
+        </Card>
+      ) : null}
+      {detail.repoTree && detail.repoTree.length > 0 ? (
+        <Card title={gt("Repo state of its tasks")}>
+          {detail.repoTree.map((group) => (
+            <div key={`${group.name}:${group.branch}`} className="grid gap-1">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <b>{group.name}</b>
+                <span className="font-mono text-muted-foreground text-xs">
+                  {group.branch} @ {group.head}
+                </span>
+                {group.state ? <RepoBadges repo={group.state} /> : null}
+                <span className="text-muted-foreground text-xs">
+                  {formatRelativeTimeLabel(iso(group.at))}
+                </span>
+              </div>
+              <ul className="grid gap-0.5 ps-3">
+                {group.tasks.map((entry) => {
+                  const target = props.index.byId.get(entry.id);
+                  return (
+                    <li key={entry.id} className="flex flex-wrap items-baseline gap-2 text-sm">
+                      <button
+                        type="button"
+                        className={cn(
+                          "wrap-anywhere text-start hover:underline",
+                          entry.done && "text-muted-foreground",
+                        )}
+                        disabled={!target}
+                        onClick={() => target && props.actions.onOpenTask(target)}
+                      >
+                        {entry.title}
+                      </button>
+                      {entry.head !== group.head ? (
+                        <span className="font-mono text-muted-foreground text-xs">
+                          {gt("recorded at {head}", { head: entry.head })}
+                        </span>
+                      ) : null}
+                      {(props.board.slots ?? [])
+                        .filter((slot) => entry.inSlots?.includes(slot.id))
+                        .map((slot) => (
+                          <Badge key={slot.id} variant="success">
+                            {gt("in {slot}", { slot: slot.name })}
+                          </Badge>
+                        ))}
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
           ))}
         </Card>
@@ -1271,7 +1381,8 @@ function DecisionCard(
             ? gt("L{level} recommendation", { level: d.level })
             : gt("L{level} decision", { level: d.level })}
         </Badge>
-        <b className="min-w-0 flex-1 text-sm">{d.title}</b>
+        <b className="min-w-48 flex-1 text-sm">{d.title}</b>
+        <DecisionTypeSelect decisionId={d.id} type={d.type} />
         <Badge variant={d.status === "decided" ? "success" : "outline"}>
           {d.status === "open"
             ? gt("open")
@@ -1355,7 +1466,7 @@ function DecisionCard(
       ) : d.r !== null && d.status === "decided" ? (
         <ImplementedForm decisionId={d.id} />
       ) : null}
-      <VerdictControls decisionId={d.id} status={d.status} />
+      <VerdictControls decisionId={d.id} status={d.status} type={d.type} />
       <DecisionTextEditor decision={d} />
     </Card>
   );
@@ -1541,6 +1652,9 @@ function SideColumn(
       ) : null}
       <BugsCard {...props} />
       <ServicesCard {...props} />
+      <MergeCard {...props} />
+      <BuildCard {...props} />
+      <OtherNamesCard names={props.detail?.aliases ?? []} />
       <Card title={gt("Linked tasks")}>
         <LinkedTasks {...props} />
       </Card>
@@ -1647,6 +1761,148 @@ function ItemList(props: {
   );
 }
 
+/** The board's slots with the build in each, and the build this item landed in or was found in. */
+function BuildCard(props: BoardTaskViewProps) {
+  const gt = useGT();
+  const { task, board } = props;
+  const { canEdit, edit } = useBoardEdit();
+  const slots = board.slots ?? [];
+  const landedIn = task.landedIn ?? null;
+  const foundIn = task.foundIn ?? null;
+  if (slots.length === 0 && landedIn === null && foundIn === null && !(task.bug && canEdit))
+    return null;
+  return (
+    <Card title={gt("Builds")}>
+      {landedIn !== null ? (
+        <p className="text-sm">{gt("Landed in {version}", { version: landedIn })}</p>
+      ) : null}
+      {foundIn !== null ? (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="min-w-0 flex-1">{gt("Found in {version}", { version: foundIn })}</span>
+          {canEdit ? (
+            <Button
+              variant="ghost-muted"
+              size="icon-xs"
+              aria-label={gt("Remove")}
+              onClick={() => void edit({ op: "setBuild", foundIn: "" })}
+            >
+              <XIcon />
+            </Button>
+          ) : null}
+        </div>
+      ) : task.bug ? (
+        <AddRow
+          button={gt("Add")}
+          placeholder={gt("Build the bug was found in")}
+          onAdd={(version) => edit({ op: "setBuild", foundIn: version })}
+        />
+      ) : null}
+      {slots.map((slot) => (
+        <div key={slot.id} className="flex flex-wrap items-center gap-2 text-sm">
+          <Badge variant={task.inSlots?.includes(slot.id) ? "success" : "outline"}>
+            {slot.name}
+          </Badge>
+          <span className="wrap-anywhere min-w-0">
+            {slot.version || gt("empty")}
+            {slot.ref ? (
+              <span className="ms-1 font-mono text-muted-foreground text-xs">@ {slot.ref}</span>
+            ) : null}
+          </span>
+        </div>
+      ))}
+      {slots.length > 0 && task.status === "done" ? (
+        <Muted>
+          {task.inSlots?.length ? (
+            <T>Green slots hold this work.</T>
+          ) : (
+            <T>No slot's build is known to hold this work.</T>
+          )}
+        </Muted>
+      ) : null}
+    </Card>
+  );
+}
+
+/** How the item's finished work reaches its target branch, and the merge request carrying it. */
+function MergeCard(props: BoardTaskViewProps) {
+  const gt = useGT();
+  const { task, board } = props;
+  const { canEdit, edit } = useBoardEdit();
+  const merge = task.merge ?? null;
+  const own = merge?.from?.id === task.id;
+  // A task has no mode or request of its own: both belong to its module or feature.
+  const holder =
+    task.level === 3 && task.parentId !== null ? props.index.byId.get(task.parentId) : task;
+  const request = holder?.mergeRequest ?? null;
+  if (merge === null && request === null && (!canEdit || task.level === 3)) return null;
+  // What the item would follow without a mode of its own.
+  const parent = task.parentId === null ? undefined : props.index.byId.get(task.parentId);
+  const inherited = parent?.merge ?? board.merge ?? null;
+  const said = (value: NonNullable<typeof inherited>) =>
+    value.mode === "request"
+      ? gt("Review first, into {branch}", { branch: value.target })
+      : gt("Merge directly to {branch}", { branch: value.target });
+  return (
+    <Card title={gt("Merging")}>
+      {merge === null ? (
+        <Muted>
+          <T>No merge mode set on the board.</T>
+        </Muted>
+      ) : (
+        <p className="text-sm">
+          {said(merge)}
+          <span className="ms-1 text-muted-foreground text-xs">
+            {own
+              ? gt("· set here")
+              : merge.from
+                ? gt("· from {task}", { task: merge.from.title })
+                : gt("· the board's mode")}
+          </span>
+        </p>
+      )}
+      {canEdit && task.level !== 3 ? (
+        <MergeModeForm
+          key={`${merge?.mode}:${merge?.target}:${own}`}
+          value={own && merge ? { mode: merge.mode, target: merge.target } : null}
+          unset={
+            inherited ? gt("Follow: {mode}", { mode: said(inherited) }) : gt("Follow the board")
+          }
+          suggested={inherited?.target ?? "main"}
+          onSave={(next) => edit({ op: "setMerge", merge: next })}
+        />
+      ) : null}
+      {request !== null ? (
+        <div className="flex items-center gap-2 text-sm">
+          <a
+            className="wrap-anywhere min-w-0 flex-1 hover:underline"
+            href={request}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {gt("Merge request ↗")}
+          </a>
+          {canEdit && holder ? (
+            <Button
+              variant="ghost-muted"
+              size="icon-xs"
+              aria-label={gt("Remove")}
+              onClick={() => void edit({ op: "setMergeRequest", url: "" }, holder.id)}
+            >
+              <XIcon />
+            </Button>
+          ) : null}
+        </div>
+      ) : merge?.mode === "request" && holder ? (
+        <AddRow
+          button={gt("Add")}
+          placeholder={gt("Merge request link")}
+          onAdd={(url) => edit({ op: "setMergeRequest", url }, holder.id)}
+        />
+      ) : null}
+    </Card>
+  );
+}
+
 function ServicesCard(props: BoardTaskViewProps) {
   const gt = useGT();
   const { task, board } = props;
@@ -1697,6 +1953,33 @@ function ServicesCard(props: BoardTaskViewProps) {
           </MenuPopup>
         </Menu>
       ) : null}
+    </Card>
+  );
+}
+
+/** Other names are learned from missed searches; here they can be seen and dropped. */
+function OtherNamesCard(props: { readonly names: ReadonlyArray<string> }) {
+  const gt = useGT();
+  const { canEdit, edit } = useBoardEdit();
+  if (props.names.length === 0) return null;
+  return (
+    <Card title={gt("Other names")}>
+      <div className="flex flex-wrap gap-1">
+        {props.names.map((name) => (
+          <Badge key={name} variant="outline">
+            {name}
+            {canEdit ? (
+              <button
+                type="button"
+                aria-label={gt("Remove other name {name}", { name })}
+                onClick={() => void edit({ op: "removeAlias", alias: name })}
+              >
+                <XIcon className="size-3" />
+              </button>
+            ) : null}
+          </Badge>
+        ))}
+      </div>
     </Card>
   );
 }

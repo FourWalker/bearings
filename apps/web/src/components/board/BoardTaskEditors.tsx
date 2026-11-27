@@ -1,4 +1,10 @@
-import type { BoardTask, BoardTaskEdit, EnvironmentId } from "@t3tools/contracts";
+import type {
+  BoardDecisionType,
+  BoardMergeMode,
+  BoardTask,
+  BoardTaskEdit,
+  EnvironmentId,
+} from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { T, useGT } from "gt-react";
 import { PlusIcon, XIcon } from "lucide-react";
@@ -111,6 +117,64 @@ export function ChoiceSelect<V extends string>(props: {
         </SelectPopup>
       </Select>
     </div>
+  );
+}
+
+/**
+ * Picks how finished work reaches its target branch. `unset` names the choice that stores
+ * nothing: no mode on a board, the parent's mode on a feature or module.
+ */
+export function MergeModeForm(props: {
+  readonly value: BoardMergeMode | null;
+  readonly unset: string;
+  /** The branch offered when a mode is first picked. */
+  readonly suggested: string;
+  readonly onSave: (merge: BoardMergeMode | null) => Promise<boolean>;
+}) {
+  const gt = useGT();
+  const [mode, setMode] = useState<BoardMergeMode["mode"] | "unset">(props.value?.mode ?? "unset");
+  const [target, setTarget] = useState(props.value?.target ?? props.suggested);
+  const changed =
+    mode !== (props.value?.mode ?? "unset") ||
+    (mode !== "unset" && target.trim() !== props.value?.target);
+  return (
+    <form
+      className="flex flex-wrap items-center gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void props.onSave(mode === "unset" ? null : { mode, target: target.trim() });
+      }}
+    >
+      <ChoiceSelect
+        value={mode}
+        label={gt("Merge mode")}
+        choices={[
+          ["unset", props.unset],
+          ["request", gt("Review first")],
+          ["direct", gt("Merge directly")],
+        ]}
+        onChange={setMode}
+      />
+      {mode === "unset" ? null : (
+        <div className="w-40">
+          <Input
+            size="sm"
+            placeholder={gt("Target branch")}
+            aria-label={gt("Target branch")}
+            value={target}
+            onChange={(event) => setTarget(event.target.value)}
+          />
+        </div>
+      )}
+      <Button
+        type="submit"
+        variant="outline"
+        size="xs"
+        disabled={!changed || (mode !== "unset" && !target.trim())}
+      >
+        <T>Save</T>
+      </Button>
+    </form>
   );
 }
 
@@ -447,6 +511,36 @@ export function LinkAdder(props: {
 }
 
 /** Files a new decision at the level it affects. */
+const useDecisionTypes = (): ReadonlyArray<readonly [BoardDecisionType, string]> => {
+  const gt = useGT();
+  return [
+    ["blocker", gt("Blocker")],
+    ["mandatory", gt("Mandatory")],
+    ["optional", gt("Optional")],
+    ["feature", gt("Feature")],
+  ];
+};
+
+/** What an open decision holds up; the person changes it here. */
+export function DecisionTypeSelect(props: {
+  readonly decisionId: string;
+  readonly type: BoardDecisionType;
+}) {
+  const gt = useGT();
+  const { canEdit, edit } = useBoardEdit();
+  const types = useDecisionTypes();
+  return (
+    <ChoiceSelect
+      value={props.type}
+      label={gt("Decision type")}
+      width="sm"
+      disabled={!canEdit}
+      choices={types}
+      onChange={(type) => void edit({ op: "updateDecision", decisionId: props.decisionId, type })}
+    />
+  );
+}
+
 export function DecisionAdder(props: {
   readonly levels: ReadonlyArray<readonly [1 | 2 | 3, string]>;
   readonly registers: ReadonlyArray<{ readonly id: string; readonly topic: string }>;
@@ -463,6 +557,8 @@ export function DecisionAdder(props: {
   const [register, setRegister] = useState("");
   const [first] = props.levels;
   const [level, setLevel] = useState<string>(String(first?.[0] ?? 3));
+  const [type, setType] = useState<BoardDecisionType>("mandatory");
+  const types = useDecisionTypes();
   if (!canEdit) return null;
   return (
     <form
@@ -480,6 +576,7 @@ export function DecisionAdder(props: {
             .map((r) => r.trim())
             .filter(Boolean),
           level: Number(level) as 1 | 2 | 3,
+          type,
           ...(recommendation
             ? { recommendation: { area, lldCheck, register: register || null } }
             : {}),
@@ -573,6 +670,13 @@ export function DecisionAdder(props: {
           choices={props.levels.map(([l, label]) => [String(l), label] as const)}
           onChange={setLevel}
         />
+        <ChoiceSelect
+          value={type}
+          label={gt("Decision type")}
+          width="sm"
+          choices={types}
+          onChange={setType}
+        />
         <Button type="submit" size="xs" disabled={!title.trim()}>
           <T>Add decision</T>
         </Button>
@@ -585,6 +689,7 @@ export function DecisionAdder(props: {
 export function VerdictControls(props: {
   readonly decisionId: string;
   readonly status: "open" | "decided" | "dropped";
+  readonly type: BoardDecisionType;
 }) {
   const gt = useGT();
   const { canEdit, edit } = useBoardEdit();
@@ -629,6 +734,18 @@ export function VerdictControls(props: {
       <Button type="submit" size="xs" disabled={!verdict.trim()}>
         <T>Decide</T>
       </Button>
+      {props.type === "blocker" ? null : (
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          onClick={() =>
+            void edit({ op: "setDecision", decisionId: props.decisionId, action: "skip", verdict })
+          }
+        >
+          <T>Skip</T>
+        </Button>
+      )}
       <Button
         type="button"
         variant="outline"

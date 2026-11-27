@@ -5,7 +5,7 @@
  *
  * @module board-core/goal
  */
-import type { BoardStore } from "./store.ts";
+import { type BoardStore, decisionType } from "./store.ts";
 import { safeFileName } from "./text.ts";
 import type { Task, TaskStatus } from "./types.ts";
 
@@ -44,7 +44,8 @@ export interface Goal {
   decisions: GoalDecision[];
   /** auto: the executor settles decisions itself and records how; ask: it queues them. */
   mode: "auto" | "ask";
-  status: "running" | "paused" | "done";
+  /** ended: closed for good by the person with tasks left; it can't be resumed. */
+  status: "running" | "paused" | "done" | "ended";
   pausedReason?: string | undefined;
   /** The thread running it now; null while paused or done. */
   executor: string | null;
@@ -83,6 +84,49 @@ export async function listGoals(store: BoardStore, boardId: string): Promise<Goa
   } catch {
     return [];
   }
+}
+
+/** A Goal that still holds its tasks: running or paused. */
+export const goalOpen = (goal: Pick<Goal, "status">): boolean =>
+  goal.status === "running" || goal.status === "paused";
+
+/**
+ * The person stops a Goal from the app, without its thread's help. Its tasks keep their steps and
+ * handoffs: a Goal only points at them.
+ */
+export function closeGoal(goal: Goal, to: "paused" | "ended", reason: string): void {
+  goal.status = to;
+  goal.pausedReason = reason;
+  goal.executor = null;
+  // A stopped child thread reports nothing: its group goes back to the executor's order.
+  for (const group of goal.groups) {
+    group.delegated = false;
+    delete group.worker;
+  }
+}
+
+/** Goal tasks an open blocker decision holds, on the task or on a parent of it. */
+export function blockedGoalTasks(goal: Goal, all: ReadonlyArray<Task>): Set<string> {
+  const byId = new Map(all.map((task) => [task.id, task]));
+  const blockers = all.flatMap((task) =>
+    (task.decisions ?? [])
+      .filter((decision) => decision.status === "open" && decisionType(decision) === "blocker")
+      .map((decision) => ({ id: decision.id, on: decision.raisedFrom?.id ?? task.id })),
+  );
+  const held = new Set(blockers.map((blocker) => blocker.on));
+  const open = new Set(blockers.map((blocker) => blocker.id));
+  for (const decision of goal.decisions)
+    if (decision.decisionId && open.has(decision.decisionId))
+      for (const id of decision.taskIds) held.add(id);
+  const blocked = new Set<string>();
+  for (const id of goal.groups.flatMap((group) => group.taskIds))
+    for (
+      let at = byId.get(id), depth = 0;
+      at && depth < 4;
+      at = byId.get(at.parentId ?? ""), depth++
+    )
+      if (held.has(at.id)) blocked.add(id);
+  return blocked;
 }
 
 /** The tasks a scope stands for: each id's open tasks that have no subtasks of their own. */
@@ -182,16 +226,20 @@ export function goalDrift(goal: Goal, all: ReadonlyArray<Task>): GoalDrift {
 const done = (group: GoalGroup, byId: ReadonlyMap<string, Task>) =>
   group.taskIds.every((id) => byId.get(id)?.status === "done");
 
-/** The next task to work: the first open one in the first group whose dependencies are finished. */
+/**
+ * The next task to work: the first open one in the first group whose dependencies are finished,
+ * leaving out tasks a blocker decision holds for the person.
+ */
 export function nextGoalTask(goal: Goal, all: ReadonlyArray<Task>): Task | null {
   const byId = new Map(all.map((task) => [task.id, task]));
+  const blocked = blockedGoalTasks(goal, all);
   const finished = new Set(goal.groups.filter((group) => done(group, byId)).map((g) => g.id));
   for (const group of goal.groups) {
     if (group.delegated) continue;
     if (finished.has(group.id) || !group.dependsOn.every((id) => finished.has(id))) continue;
     for (const id of group.taskIds) {
       const task = byId.get(id);
-      if (task && task.status !== "done") return task;
+      if (task && task.status !== "done" && !blocked.has(id)) return task;
     }
   }
   return null;
@@ -224,6 +272,7 @@ export function goalLedger(goal: Goal, all: ReadonlyArray<Task>): string {
   });
   const settled = goal.decisions.filter((decision) => decision.settled);
   const open = goal.decisions.filter((decision) => !decision.settled);
+  const blocked = [...blockedGoalTasks(goal, all)].filter((id) => byId.get(id)?.status !== "done");
   return [
     `### Goal: ${goal.title} (id ${goal.id}, ${goal.status}${goal.pausedReason ? `: ${goal.pausedReason}` : ""}, ${goal.mode === "auto" ? "Auto mode" : "asks before deciding"})`,
     `Groups:\n${groups.join("\n")}`,
@@ -240,7 +289,9 @@ export function goalLedger(goal: Goal, all: ReadonlyArray<Task>): string {
         ? 'Every task is done. Run the full checks, call board_goal {action: "finish"}, then report to the person.'
         : goal.groups.some((group) => group.delegated)
           ? 'No task is ready for this thread: child threads hold the open groups. End your turn; you are woken when one finishes, then read board_goal {action: "status"}.'
-          : "No task is ready: the remaining groups wait on others. Pause with the reason.",
+          : blocked.length > 0
+            ? `No task is ready: ${blocked.join(", ")} wait on a blocker decision that is the person's. Pause with that reason.`
+            : "No task is ready: the remaining groups wait on others. Pause with the reason.",
   ]
     .filter(Boolean)
     .join("\n");

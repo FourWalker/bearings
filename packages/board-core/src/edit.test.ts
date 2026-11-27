@@ -12,6 +12,7 @@ import {
   createTask,
   editBoard,
   editTask,
+  setSlot,
 } from "./edit.ts";
 import { noGit } from "./io.ts";
 import { nodeIO } from "./nodeIO.ts";
@@ -199,6 +200,58 @@ describe("editTask", () => {
     await edit("retries", { op: "update", status: "active" });
     expect((await task("retries")).doneEvidence).toBeUndefined();
     expect(nextStep(await plan("billing"))?.id).toBe("A1");
+
+    // With several copies and no owner, the copy all its files are in is the one it was done in.
+    const copies = ["one", "two"].map((label) => ({ path: `${norm(tmp)}/${label}`, label }));
+    await store.saveRegistry({
+      version: 1,
+      boards: [{ id: "nefx", name: "NEFX", createdAt: 0, roots: copies }],
+    });
+    const finish = async (files: string[]) => {
+      await store.saveTask("nefx", { ...(await task("retries")), status: "active", files });
+      await editTask(store, "nefx", "retries", { op: "update", status: "done" }, actor, git);
+      return (await task("retries")).doneEvidence;
+    };
+    const inTwo = `${norm(tmp)}/two/a.ts`;
+    expect((await finish([inTwo]))?.repos[0]?.repo).toBe(`${norm(tmp)}/two`);
+    expect(await finish([inTwo, `${norm(tmp)}/one/a.ts`])).toMatchObject({
+      repos: [],
+      files: [inTwo, `${norm(tmp)}/one/a.ts`],
+    });
+  });
+
+  it("stamps the last action on a tick, the done time on the last tick, and a star", async () => {
+    await createTask(store, "nefx", { title: "Billing" }, actor);
+    await edit("billing", { op: "savePlan", markdown: "- [ ] A1 Retries\n- [ ] A2 Verify" });
+    await edit("billing", { op: "createChild", title: "Retries", fromStep: "A1" });
+    await edit("billing", { op: "toggleStep", step: "A2" });
+    const ticked = await task("billing");
+    expect(ticked.lastActionAt).toBeGreaterThan(ticked.createdAt);
+    expect(ticked.doneAt).toBeUndefined();
+
+    // The subtask finishing ticks the parent's last step: both get their done time.
+    await edit("retries", { op: "update", status: "done" });
+    const finished = await task("retries");
+    expect(finished.doneAt).toBe(finished.lastActionAt);
+    const parentDone = (await task("billing")).doneAt;
+    expect(parentDone).toBeGreaterThan(ticked.lastActionAt ?? 0);
+    expect((await task("billing")).status).toBe("active");
+
+    await edit("retries", { op: "update", status: "active" });
+    expect((await task("retries")).doneAt).toBeUndefined();
+    expect((await task("billing")).doneAt).toBeUndefined();
+    // A title edit is bookkeeping, not an action.
+    const before = (await task("retries")).lastActionAt;
+    await edit("retries", { op: "update", title: "Retry handling" });
+    expect((await task("retries")).lastActionAt).toBe(before);
+
+    await edit("retries", { op: "star", on: true });
+    const starredAt = (await task("retries")).starredAt;
+    expect(starredAt).toBeGreaterThan(0);
+    await edit("retries", { op: "star", on: true });
+    expect((await task("retries")).starredAt).toBe(starredAt);
+    await edit("retries", { op: "star", on: false });
+    expect((await task("retries")).starredAt).toBeUndefined();
   });
 
   it("maps documents, links tasks from either side, and files and settles decisions", async () => {
@@ -426,5 +479,91 @@ describe("editBoard", () => {
     await expect(
       editBoard(store, "nope", { op: "setBoardMode", on: false }),
     ).rejects.toBeInstanceOf(BoardEditError);
+  });
+});
+
+describe("setSlot", () => {
+  it("marks the finished tasks a slot's build holds, and where each first landed", async () => {
+    const state =
+      (head: string, dirty = 0) =>
+      async (dir: string) => ({
+        repo: dir,
+        name: "nfx",
+        branch: "main",
+        head,
+        upstream: null,
+        ahead: null,
+        behind: null,
+        dirty,
+        lastCommitAt: 0,
+        at: 0,
+      });
+    // History is old → mid → new; a build at `ref` holds every commit up to it.
+    const order = ["old", "mid", "new"];
+    const git = (head: string, dirty = 0) => ({
+      ...noGit,
+      state: state(head, dirty),
+      commit: async (_dir: string, ref: string) =>
+        ref === "HEAD" ? head : order.includes(ref) ? ref : null,
+      contains: async (_dir: string, commit: string, ref: string) =>
+        order.indexOf(commit) <= order.indexOf(ref),
+    });
+    await createTask(store, "nefx", { title: "Billing" }, actor);
+    await createTask(store, "nefx", { title: "Early", parentId: "billing" }, actor);
+    await createTask(store, "nefx", { title: "Late", parentId: "billing" }, actor);
+    await createTask(store, "nefx", { title: "Unsaved", parentId: "billing" }, actor);
+    await editTask(store, "nefx", "early", { op: "update", status: "done" }, actor, git("old"));
+    await editTask(store, "nefx", "late", { op: "update", status: "done" }, actor, git("new"));
+    // Finished with its work uncommitted: the recorded commit does not hold it.
+    await editTask(
+      store,
+      "nefx",
+      "unsaved",
+      { op: "update", status: "done" },
+      actor,
+      git("old", 2),
+    );
+
+    const before = (await task("early")).updatedAt;
+    const frozen = await setSlot(
+      store,
+      "nefx",
+      { slot: "Frozen", version: "1.0", dir: tmp },
+      actor,
+      git("mid"),
+    );
+    expect(frozen.message).toContain("1.0 @ mid (nfx): 1 finished task(s)");
+    expect(await task("early")).toMatchObject({
+      landedIn: "1.0",
+      inSlots: ["frozen"],
+      updatedAt: before,
+    });
+    expect((await task("late")).inSlots).toBeUndefined();
+
+    await editBoard(
+      store,
+      "nefx",
+      { op: "setSlot", slot: "next", version: "1.1", ref: "new" },
+      git("new"),
+    );
+    expect(await task("early")).toMatchObject({ landedIn: "1.0", inSlots: ["frozen", "next"] });
+    expect(await task("late")).toMatchObject({ landedIn: "1.1", inSlots: ["next"] });
+    expect((await task("unsaved")).inSlots).toBeUndefined();
+
+    // A build with no commit on record claims no task; an unknown commit is refused.
+    await setSlot(store, "nefx", { slot: "frozen", version: "0.9" }, actor, git("mid"));
+    expect((await task("early")).inSlots).toEqual(["next"]);
+    await expect(
+      setSlot(store, "nefx", { slot: "next", version: "1.2", ref: "gone" }, actor, git("new")),
+    ).rejects.toThrow('No commit "gone"');
+
+    // 1.1 corrected to a build without the late work: it did not land there after all.
+    await setSlot(store, "nefx", { slot: "next", version: "1.1", ref: "mid" }, actor, git("new"));
+    expect((await task("late")).landedIn).toBeUndefined();
+    expect((await task("early")).landedIn).toBe("1.0");
+
+    await editBoard(store, "nefx", { op: "removeSlot", id: "frozen" });
+    const slots = (await store.loadRegistry()).boards[0]?.slots;
+    expect(slots).toMatchObject([{ id: "next", version: "1.1", repo: "nfx", ref: "mid" }]);
   });
 });

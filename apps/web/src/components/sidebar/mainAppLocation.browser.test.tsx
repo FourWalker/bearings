@@ -11,6 +11,7 @@ import {
 import {
   startMainAppLocationTracking,
   useCloseAppModal,
+  useNavigateToBoard,
   useNavigateToMainApp,
 } from "./mainAppLocation";
 
@@ -31,8 +32,12 @@ const citation: AssistantCitation = {
 function ReturnControls() {
   const closeAppModal = useCloseAppModal();
   const navigateToMainApp = useNavigateToMainApp();
+  const navigateToBoard = useNavigateToBoard();
   return (
     <>
+      <button type="button" onClick={() => void navigateToBoard()}>
+        Back to board
+      </button>
       <button type="button" onClick={() => void closeAppModal()}>
         Close modal
       </button>
@@ -86,6 +91,18 @@ describe("main app return location", () => {
       closingUsage: THREAD_PATH,
       sidebarBack: THREAD_PATH,
     });
+  });
+
+  it("returns from a thread to the board that was last shown", async () => {
+    await using screen = await render(<ReturnControls />, { router: THREAD_PATH });
+    const router = screen.router!;
+    using _tracking = { [Symbol.dispose]: startMainAppLocationTracking(router) };
+
+    await settled(router, router.navigate({ href: "/board?board=board-one" }));
+    const shown = router.state.location.href;
+    await settled(router, router.navigate({ href: THREAD_PATH }));
+    await userEvent.click(screen.getByRole("button", { name: "Back to board" }));
+    await vi.waitFor(() => expect(router.state.location.href).toBe(shown));
   });
 
   it("leaves no stop on Settings for history back after it closes", async () => {

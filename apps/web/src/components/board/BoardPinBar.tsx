@@ -189,7 +189,7 @@ export function BoardPinBar(props: {
   const chip: Record<PinWhy, string> = {
     approval: gt("Needs approval"),
     question: gt("Asks you"),
-    decision: gt("Decision open"),
+    decision: gt("Blocked"),
     blocked: gt("Blocked"),
     stopped: gt("Stopped"),
     working: gt("Working"),
@@ -211,7 +211,8 @@ export function BoardPinBar(props: {
   const open = () => {
     setQuiet(notice);
     if (view.why === "blocked" && view.blocker !== null) props.onOpenTask(view.blocker);
-    else props.onOpenTask(task, view.why === "decision" ? "decisions" : "threads");
+    else if (view.why === "decision") props.onOpenTask(view.decisionOn ?? task, "decisions");
+    else props.onOpenTask(task, "threads");
   };
   const top = rows[0];
   const line =
@@ -320,6 +321,15 @@ export function BoardPinBar(props: {
           <span className="min-w-0 truncate font-mono text-muted-foreground text-xs">{line}</span>
         </div>
         <div data-board-pin-acts className="flex items-center gap-1">
+          {view.decisions > 0 ? (
+            <Button
+              variant="ghost-muted"
+              size="xs"
+              onClick={() => props.onOpenTask(task, "decisions")}
+            >
+              {gt("{count} decisions", { count: view.decisions })}
+            </Button>
+          ) : null}
           <Button variant={pinNeedsYou(view.why) ? "default" : "outline"} size="xs" onClick={open}>
             {act}
           </Button>
