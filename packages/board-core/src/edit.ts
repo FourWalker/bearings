@@ -1256,10 +1256,10 @@ export async function setSlot(
   const inBuild = new Map<string, boolean>();
   let held = 0;
   for (const task of await store.listTasks(boardId)) {
-    const heads = built
-      ? (task.doneEvidence?.repos.filter((r) => r.name === built.repo).map((r) => r.head) ?? [])
-      : [];
-    let holds = heads.length > 0;
+    const done = built ? (task.doneEvidence?.repos.filter((r) => r.name === built.repo) ?? []) : [];
+    const heads = done.map((r) => r.head);
+    // Uncommitted work at done time is not in the recorded commit, as its evidence line says.
+    let holds = heads.length > 0 && done.every((r) => r.dirty === 0);
     for (const head of heads) {
       if (built && !inBuild.has(head))
         inBuild.set(
@@ -1270,13 +1270,15 @@ export async function setSlot(
     }
     const was = task.inSlots?.includes(id) ?? false;
     const lands = holds && !task.landedIn;
+    const unlands = !holds && !!version && task.landedIn === version;
     if (holds) held++;
-    if (holds === was && !lands) continue;
+    if (holds === was && !lands && !unlands) continue;
     const rest = (task.inSlots ?? []).filter((x) => x !== id);
     if (holds) rest.push(id);
     if (rest.length) task.inSlots = rest;
     else delete task.inSlots;
     if (lands) task.landedIn = version;
+    if (unlands) delete task.landedIn;
     // Not saveTask: a new build is not work on the task, and must not reorder the board.
     await store.writeJson(`${store.taskDir(boardId, task.id)}/task.json`, task);
   }
