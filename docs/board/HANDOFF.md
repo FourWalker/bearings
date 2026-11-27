@@ -188,8 +188,8 @@ the detail; update the board task after it.
   one feature at a time, and turns the side panel into a sheet opened from `BoardPhoneBar`. Tack is
   the Panel host there; in an open task it is a row. Preview with screens and the native app
   proposal: `.t3/previews/mobile-layout-preview.html` (untracked).
-- **Repo state of a feature or module, and merge mode** (`31b7bea7a3`, `f59086f04b`; tests only,
-  not seen in a browser): the Handoff tab of a feature or module lists its tasks by repo and branch
+- **Repo state of a feature or module, and merge mode** (`31b7bea7a3`, `f59086f04b`; seen on the
+  Dev Board 2026-11-28, merge mode set from Board settings): the Handoff tab of a feature or module lists its tasks by repo and branch
   (`repoTreeOf` in `view.ts`, derived, nothing stored). A board has a merge mode (`Board.merge`:
   `request` or `direct`, plus a target branch; Board settings, "Merging finished work"); a feature
   or module sets its own or follows (`Task.merge`, `mergeOf` in `store.ts`; the task's Merging
@@ -198,11 +198,12 @@ the detail; update the board task after it.
   the last fetch). `board_update mergeRequest` records the request's link on the module. Threads
   get one "Merging:" line; it says how, not when. The feature overview no longer hides ticked
   must-dos and to-dos. Model-facing text changed, no eval run. Not built: a per-repo target.
-- **Slots: which build is where** (`ca954cae9b`, `f96f7d5a58`; tests and a CLI run, not seen in a
-  browser): a board has slots (`Board.slots`: name, version, repo, commit, note, date). `setSlot`
+- **Slots: which build is where** (`ca954cae9b`, `f96f7d5a58`, `9f05339494`; seen on the Dev Board
+  2026-11-28, set from the CLI and from Board settings): a board has slots (`Board.slots`: name, version, repo, commit, note, date). `setSlot`
   in `edit.ts` points one at a build and marks the finished tasks whose done commits are in that
-  build's history (`Task.inSlots`; `Task.landedIn` is the first such build). So it is as fresh as
-  the last time the slot was set, and a build with no commit claims no task. Three ways in: the
+  build's history (`Task.inSlots`; `Task.landedIn` is the first such build, so backfill the oldest
+  build first). A done record with uncommitted changes in that repo is never held. So it is as fresh
+  as the last time the slot was set, and a build with no commit claims no task. Three ways in: the
   `board_slot` tool, `t3 board slot <name> --version <v> [--ref <commit>]` (HEAD of the directory
   by default; `t3 board slots` lists them), and Board settings, "Builds and slots". A bug records
   `Task.foundIn` (`board_update foundIn`, or the task's Builds card). Model-facing text changed,
