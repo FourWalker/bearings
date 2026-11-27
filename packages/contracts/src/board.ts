@@ -314,6 +314,35 @@ export const BoardTaskDetail = Schema.Struct({
       at: Schema.Number,
     }),
   ),
+  /** A feature's or module's tasks, by the repo and branch each was last recorded on. */
+  repoTree: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        name: Schema.String,
+        branch: Schema.String,
+        head: Schema.String,
+        /** Null when only a finished task's evidence names the branch: its push state is unknown. */
+        state: Schema.NullOr(
+          Schema.Struct({
+            upstream: Schema.NullOr(Schema.String),
+            ahead: Schema.NullOr(Schema.Number),
+            behind: Schema.NullOr(Schema.Number),
+            dirty: Schema.Number,
+          }),
+        ),
+        at: Schema.Number,
+        tasks: Schema.Array(
+          Schema.Struct({
+            id: Schema.String,
+            title: Schema.String,
+            head: Schema.String,
+            done: Schema.Boolean,
+            at: Schema.Number,
+          }),
+        ),
+      }),
+    ),
+  ),
   /** Root first, with each parent's objective line. */
   parents: Schema.Array(
     Schema.Struct({

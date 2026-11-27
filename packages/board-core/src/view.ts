@@ -459,6 +459,8 @@ export interface BoardTaskDetail {
   readonly repoState: ReadonlyArray<
     Pick<RepoState, "name" | "branch" | "head" | "upstream" | "ahead" | "behind" | "dirty" | "at">
   >;
+  /** A feature's or module's tasks below it, by the repo and branch they were last recorded on. */
+  readonly repoTree: ReadonlyArray<RepoGroup>;
   /** Root first: each parent's objective line, as chats on this task see it. */
   readonly parents: ReadonlyArray<{
     readonly id: string;
@@ -474,6 +476,78 @@ export interface BoardTaskDetail {
     readonly branch: string;
     readonly subfolder: string;
   }>;
+}
+
+export interface RepoGroup {
+  readonly name: string;
+  readonly branch: string;
+  /** The newest commit recorded on the branch by any of its tasks. */
+  readonly head: string;
+  /** Push and clean state at the newest checkpoint; null when only done evidence names the branch. */
+  readonly state: Pick<RepoState, "upstream" | "ahead" | "behind" | "dirty"> | null;
+  readonly at: number;
+  readonly tasks: ReadonlyArray<{
+    readonly id: string;
+    readonly title: string;
+    readonly head: string;
+    readonly done: boolean;
+    readonly at: number;
+  }>;
+}
+
+/** Groups tasks by the repo and branch each was last recorded on, the newest record first. */
+export function repoTreeOf(tasks: ReadonlyArray<Task>): RepoGroup[] {
+  const groups = new Map<string, { -readonly [K in keyof RepoGroup]: RepoGroup[K] }>();
+  for (const task of tasks) {
+    const recorded = task.repoState?.length
+      ? task.repoState.map((r) => ({ ...r, state: r }))
+      : (task.doneEvidence?.repos ?? []).map((r) => ({
+          ...r,
+          at: task.doneEvidence?.at ?? 0,
+          state: null,
+        }));
+    for (const r of recorded) {
+      const key = `${r.name}
+${r.branch}`;
+      const entry = {
+        id: task.id,
+        title: task.title,
+        head: r.head,
+        done: task.status === "done",
+        at: r.at,
+      };
+      const group = groups.get(key);
+      const state = r.state
+        ? {
+            upstream: r.state.upstream,
+            ahead: r.state.ahead,
+            behind: r.state.behind,
+            dirty: r.state.dirty,
+          }
+        : null;
+      if (!group) {
+        groups.set(key, {
+          name: r.name,
+          branch: r.branch,
+          head: r.head,
+          state,
+          at: r.at,
+          tasks: [entry],
+        });
+        continue;
+      }
+      group.tasks = [...group.tasks, entry];
+      if (r.at > group.at) {
+        group.head = r.head;
+        group.at = r.at;
+      }
+      // A checkpoint's push state outranks done evidence, which records none.
+      if (state && (r.at >= group.at || !group.state)) group.state = state;
+    }
+  }
+  return [...groups.values()]
+    .map((group) => ({ ...group, tasks: group.tasks.toSorted((a, b) => b.at - a.at) }))
+    .toSorted((a, b) => b.at - a.at);
 }
 
 const stripHeader = (md: string) => md.replace(/^<!--[\s\S]*?-->\s*/, "");
@@ -521,9 +595,8 @@ export async function readTaskDetail(
     store.stepNotes(boardId, task.id),
     Promise.all(rootFirst.map((a) => store.readText(store.livingPath(boardId, a.id)))),
     store.listSessions(boardId),
-    levelOf(task) === 1 ? store.listTasks(boardId) : Promise.resolve([] as Task[]),
+    levelOf(task) === 3 ? Promise.resolve([] as Task[]) : store.listTasks(boardId),
   ]);
-  // A master task's chats are every chat in its tree.
   const tree = new Set([task.id]);
   for (let grew = true; grew;) {
     grew = false;
@@ -607,14 +680,21 @@ export async function readTaskDetail(
       dirty: r.dirty,
       at: r.at,
     })),
+    repoTree: repoTreeOf(all.filter((x) => x.id !== task.id && tree.has(x.id))),
     parents: rootFirst.map((a, i) => ({
       id: a.id,
       title: a.title,
       level: levelOf(a),
       objective: parentHandoffs[i] ? objectiveLine(parentHandoffs[i]) : a.description,
     })),
+    // A master task's chats are every chat in its tree; a module's are its own.
     chats: sessions
-      .filter((x) => !x.supersededBy && x.taskId !== null && tree.has(x.taskId))
+      .filter(
+        (x) =>
+          !x.supersededBy &&
+          x.taskId !== null &&
+          (levelOf(task) === 1 ? tree.has(x.taskId) : x.taskId === task.id),
+      )
       .map((x) => ({
         sessionId: x.sessionId,
         lastPrompt: x.lastPrompt,

@@ -506,13 +506,12 @@ function OverviewTab(props: BoardTaskViewProps & { readonly onTab: (tab: Tab) =>
   const openDecisions = openDecisionCount(index, task);
   const items = (kind: "mandatory" | "todo") =>
     tree.flatMap((owner) =>
-      owner.items
-        .filter((item) => item.kind === kind && !item.done)
-        .map((item) => ({ item, owner })),
+      owner.items.filter((item) => item.kind === kind).map((item) => ({ item, owner })),
     );
   const { edit } = useBoardEdit();
   const itemList = (kind: "mandatory" | "todo") => {
-    const list = items(kind);
+    // Ticked items stay listed after the open ones: ticking is not removing.
+    const list = items(kind).toSorted((a, b) => Number(a.item.done) - Number(b.item.done));
     return list.length === 0 ? (
       <Muted>
         <T>None</T>
@@ -1076,6 +1075,31 @@ function DocRow(props: { readonly doc: BoardTaskDetail["docs"][number] }) {
   );
 }
 
+function RepoBadges(props: {
+  readonly repo: {
+    readonly upstream: string | null;
+    readonly ahead: number | null;
+    readonly dirty: number;
+  };
+}) {
+  const gt = useGT();
+  const { repo } = props;
+  return (
+    <>
+      <Badge variant={!repo.upstream || repo.ahead ? "warning" : "success"}>
+        {!repo.upstream
+          ? gt("not pushed")
+          : repo.ahead
+            ? gt("{count} not pushed", { count: repo.ahead })
+            : gt("pushed")}
+      </Badge>
+      <Badge variant={repo.dirty ? "warning" : "success"}>
+        {repo.dirty ? gt("{count} uncommitted", { count: repo.dirty }) : gt("clean")}
+      </Badge>
+    </>
+  );
+}
+
 function HandoffTab(props: BoardTaskViewProps & { readonly detail: BoardTaskDetail }) {
   const gt = useGT();
   const { detail } = props;
@@ -1136,16 +1160,50 @@ function HandoffTab(props: BoardTaskViewProps & { readonly detail: BoardTaskDeta
               <span className="font-mono text-muted-foreground text-xs">
                 {repo.branch} @ {repo.head}
               </span>
-              <Badge variant={!repo.upstream || repo.ahead ? "warning" : "success"}>
-                {!repo.upstream
-                  ? gt("not pushed")
-                  : repo.ahead
-                    ? gt("{count} not pushed", { count: repo.ahead })
-                    : gt("pushed")}
-              </Badge>
-              <Badge variant={repo.dirty ? "warning" : "success"}>
-                {repo.dirty ? gt("{count} uncommitted", { count: repo.dirty }) : gt("clean")}
-              </Badge>
+              <RepoBadges repo={repo} />
+            </div>
+          ))}
+        </Card>
+      ) : null}
+      {detail.repoTree && detail.repoTree.length > 0 ? (
+        <Card title={gt("Repo state of its tasks")}>
+          {detail.repoTree.map((group) => (
+            <div key={`${group.name}:${group.branch}`} className="grid gap-1">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <b>{group.name}</b>
+                <span className="font-mono text-muted-foreground text-xs">
+                  {group.branch} @ {group.head}
+                </span>
+                {group.state ? <RepoBadges repo={group.state} /> : null}
+                <span className="text-muted-foreground text-xs">
+                  {formatRelativeTimeLabel(iso(group.at))}
+                </span>
+              </div>
+              <ul className="grid gap-0.5 ps-3">
+                {group.tasks.map((entry) => {
+                  const target = props.index.byId.get(entry.id);
+                  return (
+                    <li key={entry.id} className="flex flex-wrap items-baseline gap-2 text-sm">
+                      <button
+                        type="button"
+                        className={cn(
+                          "wrap-anywhere text-start hover:underline",
+                          entry.done && "text-muted-foreground",
+                        )}
+                        disabled={!target}
+                        onClick={() => target && props.actions.onOpenTask(target)}
+                      >
+                        {entry.title}
+                      </button>
+                      {entry.head !== group.head ? (
+                        <span className="font-mono text-muted-foreground text-xs">
+                          {gt("recorded at {head}", { head: entry.head })}
+                        </span>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
           ))}
         </Card>
