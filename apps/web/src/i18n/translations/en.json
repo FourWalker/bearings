@@ -13673,5 +13673,12 @@
   "95435f0b59cb2193": "Audio preview",
   "4a12506938295127": "Enter the {field} first.",
   "5807c08e225c6b3d": "Download",
-  "0d50b5bfe7151ece": "Could not download file"
+  "0d50b5bfe7151ece": "Could not download file",
+  "dc089775123c7171": "Board",
+  "0c53fef866977e24": "Board",
+  "1507c172b39682ff": "Where this task sits",
+  "4ded92a72c7dd795": "Board tasks",
+  "c96513eae7da8fd0": "Show chats at work on every board, not only the projects this list is filtered to",
+  "26b5a4cfdeaeb78d": "+{count} elsewhere",
+  "75c14da44f6ad0bb": "All boards"
 }

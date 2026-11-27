@@ -13660,5 +13660,12 @@
   "95435f0b59cb2193": "Vista previa de audio",
   "4a12506938295127": "Introduce primero {field}.",
   "5807c08e225c6b3d": "Descargar",
-  "0d50b5bfe7151ece": "No se pudo descargar el archivo"
+  "0d50b5bfe7151ece": "No se pudo descargar el archivo",
+  "dc089775123c7171": "Tablero",
+  "0c53fef866977e24": "Tablero",
+  "1507c172b39682ff": "Dónde está esta tarea",
+  "4ded92a72c7dd795": "Tareas del tablero",
+  "c96513eae7da8fd0": "Mostrar los chats que trabajan en cualquier tablero, no solo en los proyectos filtrados en esta lista",
+  "26b5a4cfdeaeb78d": "+{count} en otros sitios",
+  "75c14da44f6ad0bb": "Todos los tableros"
 }

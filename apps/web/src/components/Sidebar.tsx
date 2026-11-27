@@ -290,6 +290,7 @@ import {
   SidebarDragBoundary,
   SidebarSectionHeader,
   SidebarSectionPlaceholder,
+  SidebarWorkingScopeSwitch,
 } from "./sidebar/SidebarListMarkers";
 
 function sameSidebarProviderEntries(
@@ -353,6 +354,7 @@ const REVEAL_ROW_CLASS_NAME =
 const SETTLED_SHELF_EXPANDED_KEY = "t3code:sidebar:settled-expanded";
 const SNOOZED_SHELF_EXPANDED_KEY = "t3code:sidebar:snoozed-expanded";
 const WORKING_SHELF_EXPANDED_KEY = "t3code:sidebar:working-expanded";
+const WORKING_EVERYWHERE_KEY = "t3code:sidebar:working-everywhere";
 
 const inboxReturns = createInboxReturnTracker();
 
@@ -376,6 +378,8 @@ interface SidebarThreadPartitionInput {
   readonly connectedEnvironmentIds: readonly EnvironmentId[];
   readonly optimisticDrop: SidebarOptimisticDrop | null;
   readonly workingShelfEnabled: boolean;
+  /** Project Board fork: the Working shelf also lists threads outside the sidebar's scope. */
+  readonly workingEverywhere: boolean;
   /** Boring mode: folders list active threads by the user's latest message. */
   readonly sortActiveBySend: boolean;
   // Snooze wakes, the queued-turn grace and the Working shelf's exit grace depend
@@ -485,6 +489,11 @@ function useSidebarThreads(input: {
   );
   const [workingShelfExpanded, setWorkingShelfExpanded] = useLocalStorage(
     WORKING_SHELF_EXPANDED_KEY,
+    true,
+    Schema.Boolean,
+  );
+  const [workingEverywhere, setWorkingEverywhere] = useLocalStorage(
+    WORKING_EVERYWHERE_KEY,
     false,
     Schema.Boolean,
   );
@@ -510,6 +519,7 @@ function useSidebarThreads(input: {
     connectedEnvironmentIds,
     optimisticDrop,
     workingShelfEnabled,
+    workingEverywhere,
     sortActiveBySend: folderGroups !== null,
     clockKey: `${nowMinute}:${snoozeWakeClock}:${inboxReturnsVersion}`,
   });
@@ -576,11 +586,11 @@ function useSidebarThreads(input: {
           };
         });
   const orderedThreads = [
+    ...visibleWorkingThreads,
     ...pinnedThreads,
     ...(projectFolders === null
       ? activeThreads
       : projectFolders.flatMap((folder) => folder.threads)),
-    ...visibleWorkingThreads,
     ...visibleSnoozedThreads,
     ...renderedSettledThreads,
   ];
@@ -599,9 +609,9 @@ function useSidebarThreads(input: {
     threads,
     workingShelfEnabled,
     searchableThreads: [
+      ...workingThreads,
       ...pinnedThreads,
       ...activeThreads,
-      ...workingThreads,
       ...snoozedThreads,
       ...settledThreads,
     ],
@@ -620,6 +630,9 @@ function useSidebarThreads(input: {
     toggleSnoozedShelf: () => setSnoozedShelfExpanded((value) => !value),
     workingShelfExpanded,
     toggleWorkingShelf: () => setWorkingShelfExpanded((value) => !value),
+    workingEverywhere,
+    workingScoped: scopedProjectKeys !== null,
+    toggleWorkingEverywhere: () => setWorkingEverywhere((value) => !value),
     projectFolders,
     toggleProjectFolder: (group: SidebarProjectSnapshot) => {
       const keys = sidebarFolderExpansionKeys(group);
@@ -717,6 +730,19 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
       ).push(thread);
     }
   }
+  // Project Board fork: threads at work outside the sidebar's scope, listed when asked for.
+  const workingElsewhere: EnvironmentThreadShell[] = [];
+  if (workingShelfEnabled && scopedProjectKeys !== null) {
+    const listed = new Set(visible.map(threadShellKey));
+    for (const thread of filterSidebarV2VisibleThreads(threads, null, delegatedUnderParent)) {
+      if (listed.has(threadShellKey(thread)) || !inboxObservation.isWorking(thread)) continue;
+      const configLoaded = serverConfigs.has(thread.environmentId);
+      if (configLoaded && effectiveSnoozed(thread, { now: preciseNow })) continue;
+      if (configLoaded && thread.settledOverride === "settled") continue;
+      workingElsewhere.push(thread);
+    }
+    if (input.workingEverywhere) working.push(...workingElsewhere);
+  }
   // Availability gates dragging only; sorting must stay consistent across clients.
   const sortedPinned = sortPinnedThreadsForSidebar(pinned);
   const sortedActive = sortActiveBySend
@@ -744,6 +770,7 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
             getId: (thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
           }),
     workingThreads: sortWorkingThreadsBySend(working),
+    workingElsewhereCount: workingElsewhere.length,
     snoozedThreads: snoozed.toSorted(
       (left, right) =>
         firstValidTimestampMs(left.snoozedUntil ?? null) -
@@ -1376,6 +1403,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     toggleSnoozedShelf,
     workingShelfExpanded,
     toggleWorkingShelf,
+    workingEverywhere,
+    workingScoped,
+    toggleWorkingEverywhere,
+    workingElsewhereCount,
     projectFolders,
     toggleProjectFolder,
     toggleProjectFolderShowAll,
@@ -2030,23 +2061,26 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       pinnedThreads.length +
         activeThreads.length +
         workingThreads.length +
+        workingElsewhereCount +
         snoozedThreads.length +
         settledCount ===
         0
     ) {
       return [];
     }
-    const items: SidebarListItem[] = [{ kind: "marker", marker: "pinned-header" }];
+    // Project Board fork: Working leads the list; a pinned thread at work stays under Pinned.
+    const items: SidebarListItem[] = [];
+    if (workingThreads.length > 0 || workingElsewhereCount > 0) {
+      items.push({ kind: "marker", marker: "working-header" });
+      items.push(...rowsOf(visibleWorkingThreads, "working"));
+    }
+    items.push({ kind: "marker", marker: "pinned-header" });
     const pinnedRows = rowsOf(pinnedThreads, "pinned");
     items.push(...pinnedRows);
     items.push({ kind: "marker", marker: "pinned-divider" });
     const activeRows = rowsOf(activeThreads, "active");
     items.push({ kind: "marker", marker: "active-placeholder" });
     items.push(...activeRows);
-    if (workingThreads.length > 0) {
-      items.push({ kind: "marker", marker: "working-header" });
-      items.push(...rowsOf(visibleWorkingThreads, "working"));
-    }
     if (snoozedThreads.length > 0) {
       items.push({ kind: "marker", marker: "snoozed-header" });
       items.push(...rowsOf(visibleSnoozedThreads, "snoozed"));
@@ -3765,13 +3799,21 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                             <SidebarSectionHeader
                               key="working-shelf-header"
                               marker="working-header"
-                              className="mt-auto"
                               label={gt("Working", { $context: "sidebar section" })}
                               count={workingThreads.length}
                               toggle={{
                                 expanded: workingShelfExpanded,
                                 onToggle: toggleWorkingShelf,
                               }}
+                              trailing={
+                                workingScoped ? (
+                                  <SidebarWorkingScopeSwitch
+                                    everywhere={workingEverywhere}
+                                    elsewhere={workingElsewhereCount}
+                                    onToggle={toggleWorkingEverywhere}
+                                  />
+                                ) : null
+                              }
                             />,
                           );
                           break;
@@ -3780,7 +3822,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                             <SidebarSectionHeader
                               key="snoozed-shelf-header"
                               marker="snoozed-header"
-                              className={cn(workingThreads.length === 0 && "mt-auto")}
+                              className="mt-auto"
                               label={gt("Snoozed", { $context: "sidebar section" })}
                               count={snoozedThreads.length}
                               toggle={{
@@ -3795,9 +3837,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                             <SidebarSectionHeader
                               key="settled-shelf-header"
                               marker="settled-header"
-                              className={cn(
-                                workingThreads.length + snoozedThreads.length === 0 && "mt-auto",
-                              )}
+                              className={cn(snoozedThreads.length === 0 && "mt-auto")}
                               label={gt("Settled", { $context: "sidebar section" })}
                               count={settledCount}
                               dragging={from !== null}

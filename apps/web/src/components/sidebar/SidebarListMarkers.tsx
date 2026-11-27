@@ -1,4 +1,7 @@
+import { useGT } from "gt-react";
 import { CollapsibleSectionHeader } from "../ui/collapsible-section-header";
+import { Switch } from "../ui/switch";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { type ReactNode, useLayoutEffect } from "react";
@@ -119,6 +122,8 @@ export function SidebarSectionHeader(props: {
   dragging?: boolean;
   isDropTarget?: boolean;
   toggle: { expanded: boolean; onToggle: () => void };
+  /** Beside the header button, not inside it: a control of its own. */
+  trailing?: ReactNode;
 }) {
   const shelf =
     props.marker === "working-header"
@@ -130,7 +135,7 @@ export function SidebarSectionHeader(props: {
     <SortableSidebarMarker
       marker={props.marker}
       data-testid={`sidebar-${props.marker}`}
-      className={cn("relative mx-0.5 h-8", props.className)}
+      className={cn("relative mx-0.5 flex h-8 items-center gap-1", props.className)}
     >
       <CollapsibleSectionHeader
         data-sidebar-row={`shelf:${shelf}`}
@@ -142,6 +147,46 @@ export function SidebarSectionHeader(props: {
       >
         {props.label}
       </CollapsibleSectionHeader>
+      {props.trailing}
     </SortableSidebarMarker>
+  );
+}
+
+/** Project Board fork: the Working shelf lists chats at work on every board, or only in scope. */
+export function SidebarWorkingScopeSwitch(props: {
+  everywhere: boolean;
+  /** Chats at work outside the sidebar's scope. */
+  elsewhere: number;
+  onToggle: () => void;
+}) {
+  const gt = useGT();
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <label
+            data-sidebar-working-scope
+            className="flex shrink-0 cursor-pointer items-center gap-1.5 pe-1.5 text-2xs text-sidebar-foreground/70 hover:text-sidebar-foreground"
+          />
+        }
+      >
+        {!props.everywhere && props.elsewhere > 0 ? (
+          <span className="tabular-nums">
+            {gt("+{count} elsewhere", { count: props.elsewhere })}
+          </span>
+        ) : (
+          <span>{gt("All boards")}</span>
+        )}
+        <Switch
+          size="sm"
+          checked={props.everywhere}
+          onCheckedChange={props.onToggle}
+          aria-label={gt("All boards")}
+        />
+      </TooltipTrigger>
+      <TooltipPopup>
+        {gt("Show chats at work on every board, not only the projects this list is filtered to")}
+      </TooltipPopup>
+    </Tooltip>
   );
 }

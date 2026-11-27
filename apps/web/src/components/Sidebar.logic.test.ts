@@ -1206,6 +1206,31 @@ describe("Working shelf (beta)", () => {
       expect(resolveSidebarDropVerb("active", "working")).toBeNull();
     });
 
+    it("reads Pinned and Active below a Working shelf at the top of the list", () => {
+      const workingFirst: readonly SidebarListItem[] = [
+        marker("working-header"),
+        row("w1", "working"),
+        marker("pinned-header"),
+        row("p1", "pinned"),
+        marker("pinned-divider"),
+        row("a1", "active"),
+        row("a2", "active"),
+        marker("settled-header"),
+        row("s1", "settled"),
+      ];
+      expect(resolveSidebarDropTarget(workingFirst, "a1", "w1")).toBeNull();
+      expect(resolveSidebarDropTarget(workingFirst, "a2", "p1")).toEqual({
+        section: "pinned",
+        pinnedOrder: ["a2", "p1"],
+        activeOrder: ["a1"],
+      });
+      expect(resolveSidebarDropTarget(workingFirst, "p1", "a2")).toEqual({
+        section: "active",
+        pinnedOrder: [],
+        activeOrder: ["a1", "a2", "p1"],
+      });
+    });
+
     it.each([
       ["pinned", "p1"],
       ["active", "a2"],

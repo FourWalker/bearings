@@ -13665,5 +13665,12 @@
   "95435f0b59cb2193": "Aperçu audio",
   "4a12506938295127": "Saisissez d’abord {field}.",
   "5807c08e225c6b3d": "Télécharger",
-  "0d50b5bfe7151ece": "Impossible de télécharger le fichier"
+  "0d50b5bfe7151ece": "Impossible de télécharger le fichier",
+  "dc089775123c7171": "Tableau",
+  "0c53fef866977e24": "Tableau",
+  "1507c172b39682ff": "Où se situe cette tâche",
+  "4ded92a72c7dd795": "Tâches du tableau",
+  "c96513eae7da8fd0": "Afficher les chats au travail sur tous les tableaux, pas seulement dans les projets filtrés dans cette liste",
+  "26b5a4cfdeaeb78d": "+{count} ailleurs",
+  "75c14da44f6ad0bb": "Tous les tableaux"
 }

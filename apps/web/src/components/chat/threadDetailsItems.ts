@@ -3,6 +3,8 @@ import { msg } from "gt-react";
 
 // Ids are stored in client settings, so never rename one.
 export const THREAD_DETAILS_ITEMS = [
+  // Project Board fork: the board feature, module and task the thread is on.
+  { id: "board", label: msg("Board tasks"), defaultVisible: true },
   { id: "environment", label: msg("Environment and worktree"), defaultVisible: true },
   { id: "openIn", label: msg("Open in editor"), defaultVisible: true },
   { id: "scripts", label: msg("Project scripts"), defaultVisible: true },
