@@ -188,6 +188,16 @@ the detail; update the board task after it.
   one feature at a time, and turns the side panel into a sheet opened from `BoardPhoneBar`. Tack is
   the Panel host there; in an open task it is a row. Preview with screens and the native app
   proposal: `.t3/previews/mobile-layout-preview.html` (untracked).
+- **Repo state of a feature or module, and merge mode** (`31b7bea7a3`, `f59086f04b`; tests only,
+  not seen in a browser): the Handoff tab of a feature or module lists its tasks by repo and branch
+  (`repoTreeOf` in `view.ts`, derived, nothing stored). A board has a merge mode (`Board.merge`:
+  `request` or `direct`, plus a target branch; Board settings, "Merging finished work"); a feature
+  or module sets its own or follows (`Task.merge`, `mergeOf` in `store.ts`; the task's Merging
+  card). A checkpoint records `target` and `aheadOfTarget` on each repo state (`aheadOf` in
+  `nodeIO.ts`: the lower count against the local and the `origin` branch, so it is as fresh as
+  the last fetch). `board_update mergeRequest` records the request's link on the module. Threads
+  get one "Merging:" line; it says how, not when. The feature overview no longer hides ticked
+  must-dos and to-dos. Model-facing text changed, no eval run. Not built: a per-repo target, slots.
 - Windows build: the owner's install `Outputs/T3-Project-Board-Frozen-Windows-x64` holds
   `f6fc50bb21` (decision types, Goal controls, compact layout) since 2026-11-26 10:42, swapped in
   on the owner's say-so; ask before the next swap. The app must be closed first: its exe locks the
