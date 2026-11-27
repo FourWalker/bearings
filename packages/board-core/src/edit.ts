@@ -139,6 +139,12 @@ export type TaskEdit =
   | { readonly op: "setMerge"; readonly merge: MergeMode | null }
   /** The open merge request for a feature's or module's work; "" clears it. */
   | { readonly op: "setMergeRequest"; readonly url: string }
+  /** The build the work landed in, and for a bug the build it was found in; "" clears one. */
+  | {
+      readonly op: "setBuild";
+      readonly landedIn?: string | undefined;
+      readonly foundIn?: string | undefined;
+    }
   | { readonly op: "reclaim" };
 
 export interface EditResult {
@@ -857,6 +863,15 @@ export async function editTask(
       await store.saveTask(boardId, task);
       return { message: "Saved." };
     }
+    case "setBuild": {
+      for (const key of ["landedIn", "foundIn"] as const) {
+        const version = edit[key]?.trim();
+        if (version) task[key] = version;
+        else if (version === "") delete task[key];
+      }
+      await store.saveTask(boardId, task);
+      return { message: "Saved." };
+    }
     case "star":
       if (edit.on) task.starredAt ??= now;
       else delete task.starredAt;
@@ -1092,6 +1107,8 @@ export type BoardSettingsEdit =
   | { readonly op: "setBoardMode"; readonly on: boolean }
   /** The board's merge mode, which features and modules follow unless they set their own. */
   | { readonly op: "setMerge"; readonly merge: MergeMode | null }
+  | ({ readonly op: "setSlot" } & Omit<SlotBuild, "dir">)
+  | { readonly op: "removeSlot"; readonly id: string }
   | {
       readonly op: "saveRegisters";
       readonly registers: ReadonlyArray<{
@@ -1175,12 +1192,109 @@ export async function createBoard(
   return board;
 }
 
-/** Applies one change to the board's settings in `boards.json`. */
+/** A build put in a slot. An empty `version` empties the slot. */
+export interface SlotBuild {
+  /** The slot's name; a new name makes a new slot. */
+  readonly slot: string;
+  readonly version: string;
+  /** The commit the build was made from. Without it and with `dir`, HEAD there. */
+  readonly ref?: string | undefined;
+  /** The checkout the build was made in. Without it `ref` is looked up in the board's workspaces. */
+  readonly dir?: string | undefined;
+  readonly note?: string | undefined;
+}
+
+/**
+ * Points a slot at a build, then marks which finished tasks that build holds: those whose done
+ * commits in the build's repo are all in its history. A task's first such build is where it landed.
+ */
+export async function setSlot(
+  store: BoardStore,
+  boardId: string,
+  input: SlotBuild,
+  actor: EditActor,
+  git?: BoardGit,
+): Promise<EditResult> {
+  const reg = await store.loadRegistry();
+  const board = reg.boards.find((b) => b.id === boardId);
+  if (!board) throw new BoardEditError("No such board.");
+  const id = slug(input.slot);
+  if (!id) throw new BoardEditError("Name the slot.");
+  const version = input.version.trim();
+  const asked = input.ref?.trim() ?? "";
+  if (!version && asked) throw new BoardEditError("A build needs a version.");
+  let built: { dir: string; repo: string; ref: string } | undefined;
+  if (version && git?.commit && (asked || input.dir)) {
+    for (const dir of input.dir ? [input.dir] : board.roots.map((r) => r.path)) {
+      const ref = await git.commit(dir, asked || "HEAD").catch(() => null);
+      if (!ref) continue;
+      built = { dir, ref, repo: (await git.state(dir).catch(() => null))?.name ?? base(dir) };
+      break;
+    }
+    if (!built && asked)
+      throw new BoardEditError(
+        `No commit "${asked}" in ${input.dir ?? "this board's workspaces"}.`,
+      );
+  }
+  const slots = (board.slots ??= []);
+  let slot = slots.find((x) => x.id === id);
+  if (!slot) {
+    slot = { id, name: input.slot.trim(), version, note: "", at: 0 };
+    slots.push(slot);
+  }
+  slot.version = version;
+  slot.note = input.note?.trim() ?? "";
+  slot.at = store.clock.now();
+  slot.by = actor.by;
+  if (built) Object.assign(slot, { repo: built.repo, ref: built.ref });
+  else {
+    delete slot.repo;
+    delete slot.ref;
+  }
+  await store.saveRegistry(reg);
+
+  const inBuild = new Map<string, boolean>();
+  let held = 0;
+  for (const task of await store.listTasks(boardId)) {
+    const heads = built
+      ? (task.doneEvidence?.repos.filter((r) => r.name === built.repo).map((r) => r.head) ?? [])
+      : [];
+    let holds = heads.length > 0;
+    for (const head of heads) {
+      if (built && !inBuild.has(head))
+        inBuild.set(
+          head,
+          (await git?.contains?.(built.dir, head, built.ref).catch(() => null)) === true,
+        );
+      holds &&= inBuild.get(head) === true;
+    }
+    const was = task.inSlots?.includes(id) ?? false;
+    const lands = holds && !task.landedIn;
+    if (holds) held++;
+    if (holds === was && !lands) continue;
+    const rest = (task.inSlots ?? []).filter((x) => x !== id);
+    if (holds) rest.push(id);
+    if (rest.length) task.inSlots = rest;
+    else delete task.inSlots;
+    if (lands) task.landedIn = version;
+    await store.saveTask(boardId, task);
+  }
+  if (!version) return { message: `Slot "${slot.name}" is empty.` };
+  return {
+    message: built
+      ? `Slot "${slot.name}" holds ${version} @ ${built.ref} (${built.repo}): ${held} finished task(s) are in it.`
+      : `Slot "${slot.name}" holds ${version}. No commit is recorded for it, so the board cannot say which tasks it holds.`,
+  };
+}
+
+/** Applies one change to the board's settings in `boards.json`. `git` resolves a slot's commit. */
 export async function editBoard(
   store: BoardStore,
   boardId: string,
   edit: BoardSettingsEdit,
+  git?: BoardGit,
 ): Promise<EditResult> {
+  if (edit.op === "setSlot") return setSlot(store, boardId, edit, { by: "t3-app" }, git);
   const reg = await store.loadRegistry();
   const board = reg.boards.find((b) => b.id === boardId);
   if (!board) throw new BoardEditError("No such board.");
@@ -1242,6 +1356,13 @@ export async function editBoard(
         board.merge = merge;
       }
       break;
+    case "removeSlot": {
+      const rest = (board.slots ?? []).filter((x) => x.id !== edit.id);
+      if (rest.length === (board.slots ?? []).length) throw new BoardEditError("No such slot.");
+      if (rest.length) board.slots = rest;
+      else delete board.slots;
+      break;
+    }
     case "saveRegisters":
       board.registers = edit.registers
         .map((x) => ({ id: slug(x.id || x.topic), topic: x.topic.trim(), url: x.url.trim() }))

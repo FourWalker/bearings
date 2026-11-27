@@ -15,6 +15,7 @@ import {
   moveTask,
   promoteTask,
   setSessionTask,
+  setSlot,
   setTaskLink,
   settleDecision,
   dropWorked,
@@ -139,6 +140,25 @@ const str = (v: unknown, fallback = ""): string =>
 
 export const repoLine = (r: RepoState): string =>
   `${r.name} · ${r.branch} @ ${r.head} · ${!r.upstream ? "not pushed (no upstream)" : r.ahead ? `${r.ahead} commit(s) not pushed` : "pushed"}${r.behind ? `, ${r.behind} behind` : ""} · ${r.dirty ? `${r.dirty} uncommitted` : "clean"}${r.target ? ` · ${r.aheadOfTarget === null || r.aheadOfTarget === undefined ? `no branch ${r.target} here` : r.aheadOfTarget ? `${r.aheadOfTarget} commit(s) not in ${r.target}` : `merged into ${r.target}`}` : ""}`;
+
+/** The build a task's work is in, and for a bug the build it was found in; "" when neither is known. */
+export const buildLine = (board: Board | null, t: Task): string => {
+  const slots = (board?.slots ?? []).filter((slot) => t.inSlots?.includes(slot.id));
+  return [
+    t.foundIn && `Found in build ${t.foundIn}.`,
+    t.landedIn &&
+      `Landed in build ${t.landedIn}${slots.length ? `; in the build of ${slots.map((slot) => `"${slot.name}"`).join(", ")}` : ""}.`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+};
+
+/** Each slot and the build in it, one per line. */
+export const slotLines = (board: Board | null): string[] =>
+  (board?.slots ?? []).map(
+    (slot) =>
+      `- ${slot.name}: ${slot.version ? `${slot.version}${slot.ref ? ` @ ${slot.ref}${slot.repo ? ` (${slot.repo})` : ""}` : ""}, set ${stamp(slot.at)}${slot.note ? ` – ${slot.note}` : ""}` : "empty"}`,
+  );
 
 /** How a task's finished work reaches its target branch, as its thread is told. */
 export const mergeLine = (board: Board | null, chain: ReadonlyArray<Task>): string => {
@@ -776,6 +796,10 @@ export class BoardChat {
     }
     const merging = mergeLine(this.board, [t, ...anc]);
     if (merging) lines.push(merging);
+    const build = buildLine(this.board, t);
+    if (build) lines.push(build);
+    const slots = slotLines(this.board);
+    if (slots.length) lines.push("Build slots (which build is where):", ...slots);
     if (t.repoState?.length)
       lines.push(
         "Repo state at the last checkpoint:",
@@ -1034,6 +1058,7 @@ ${this.related}`
       anc.length > 0 && `Under: ${anc.map((a) => a.title).join(" › ")}`,
       owner && `Owner: workspace ${owner.label}${owner.state === "soft" ? " (soft-released)" : ""}`,
       mergeLine(this.board, [t, ...anc]),
+      buildLine(this.board, t),
       next
         ? `Next action: ${next.id} – ${next.text} (step ${progress.done + 1} of ${progress.total}). The plan's checklist is authoritative if the handoff below disagrees.`
         : plan
@@ -1920,6 +1945,10 @@ ${this.related}`
     if (Array.isArray(a.services)) t.services = [...new Set(a.services.map(String))];
     if (a.mainService !== undefined) t.mainService = a.mainService ? str(a.mainService) : null;
     if (a.kind === "feature" || a.kind === "backlog") t.kind = a.kind;
+    if (typeof a.foundIn === "string") {
+      if (a.foundIn.trim()) t.foundIn = a.foundIn.trim();
+      else delete t.foundIn;
+    }
     if (typeof a.mergeRequest === "string") {
       const url = a.mergeRequest.trim();
       if (url && !/^https?:\/\/\S+$/.test(url))
@@ -2360,6 +2389,33 @@ ${this.related}`
     );
   }
 
+  /** Points a slot at a build made in this chat's checkout. */
+  async setSlot(a: Record<string, unknown>): Promise<BoardReply> {
+    if (!this.board || !this.sess) return reply("This chat is on no board.");
+    try {
+      const { message } = await setSlot(
+        this.store,
+        this.boardId,
+        {
+          slot: str(a.slot),
+          version: str(a.version),
+          ref: a.ref === undefined ? undefined : str(a.ref),
+          dir: this.sess.cwd,
+          note: a.note === undefined ? undefined : str(a.note),
+        },
+        this.actor(),
+        this.git,
+      );
+      const fresh = (await this.store.loadRegistry()).boards.find((b) => b.id === this.boardId);
+      this.board.slots = fresh?.slots;
+      await this.rebuildContext();
+      return reply(message);
+    } catch (error) {
+      if (error instanceof BoardEditError) return reply(error.message);
+      throw error;
+    }
+  }
+
   async moveTask(a: Record<string, unknown>): Promise<BoardReply> {
     const t = await this.requireTask(a);
     if (typeof t === "string") return reply(t);
@@ -2579,6 +2635,8 @@ ${this.related}`
         return this.mapDoc(args);
       case "board_release":
         return this.releaseOwnership(args);
+      case "board_slot":
+        return this.setSlot(args);
       case "board_link_task":
         return this.linkTasks(args);
       case "board_move":

@@ -108,10 +108,11 @@ export async function openBoardFile(store: BoardStore, contents: string) {
       }
     }
   }
-  const { merge, ...kept } = settings;
+  const { merge, slots, ...kept } = settings;
   const board: Board = {
     ...kept,
     ...(merge ? { merge: { ...merge } } : {}),
+    ...(slots?.length ? { slots: slots.map((slot) => ({ ...slot })) } : {}),
     id,
     createdAt,
     roots: settings.roots.map((root) => ({ ...root })),

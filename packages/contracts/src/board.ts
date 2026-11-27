@@ -79,6 +79,21 @@ export const BoardMergeMode = Schema.Struct({
 });
 export type BoardMergeMode = typeof BoardMergeMode.Type;
 
+/** A named place a build lives (frozen, next, demo) and the build in it now. */
+export const BoardSlot = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  /** "" while the slot holds no build. */
+  version: Schema.String,
+  /** The repo and commit the build was made from, when known. */
+  repo: Schema.optional(Schema.String),
+  ref: Schema.optional(Schema.String),
+  note: Schema.String,
+  at: Schema.Number,
+  by: Schema.optional(Schema.String),
+});
+export type BoardSlot = typeof BoardSlot.Type;
+
 const RepoStanding = {
   upstream: Schema.NullOr(Schema.String),
   ahead: Schema.NullOr(Schema.Number),
@@ -155,6 +170,11 @@ export const BoardTask = Schema.Struct({
     ),
   ),
   mergeRequest: Schema.optional(Schema.NullOr(Schema.String)),
+  /** The first build that held its finished work, and for a bug the build it was found in. */
+  landedIn: Schema.optional(Schema.NullOr(Schema.String)),
+  foundIn: Schema.optional(Schema.NullOr(Schema.String)),
+  /** Ids of the slots whose build holds its finished work. */
+  inSlots: Schema.optional(Schema.Array(Schema.String)),
 });
 export type BoardTask = typeof BoardTask.Type;
 
@@ -206,6 +226,7 @@ export const BoardView = Schema.Struct({
   name: Schema.String,
   boardMode: Schema.Boolean,
   merge: Schema.optional(Schema.NullOr(BoardMergeMode)),
+  slots: Schema.optional(Schema.Array(BoardSlot)),
   registers: Schema.optional(
     Schema.Array(
       Schema.Struct({
@@ -356,6 +377,7 @@ export const BoardTaskDetail = Schema.Struct({
             head: Schema.String,
             done: Schema.Boolean,
             at: Schema.Number,
+            inSlots: Schema.optional(Schema.Array(Schema.String)),
           }),
         ),
       }),
@@ -488,6 +510,12 @@ export const BoardTaskEdit = Schema.Union([
   Schema.Struct({ op: Schema.Literal("setMerge"), merge: Schema.NullOr(BoardMergeMode) }),
   /** The open merge request for a feature's or module's work; "" clears it. */
   Schema.Struct({ op: Schema.Literal("setMergeRequest"), url: Schema.String }),
+  /** The build the work landed in, and for a bug the build it was found in; "" clears one. */
+  Schema.Struct({
+    op: Schema.Literal("setBuild"),
+    landedIn: Schema.optional(Schema.String),
+    foundIn: Schema.optional(Schema.String),
+  }),
   Schema.Struct({ op: Schema.Literal("reclaim") }),
 ]);
 export type BoardTaskEdit = typeof BoardTaskEdit.Type;
@@ -520,6 +548,15 @@ export const BoardSettingsEdit = Schema.Union([
   Schema.Struct({ op: Schema.Literal("saveRules"), rules: Schema.String }),
   Schema.Struct({ op: Schema.Literal("setBoardMode"), on: Schema.Boolean }),
   Schema.Struct({ op: Schema.Literal("setMerge"), merge: Schema.NullOr(BoardMergeMode) }),
+  /** Puts a build in a slot (a new name makes the slot); `ref` is looked up in the workspaces. */
+  Schema.Struct({
+    op: Schema.Literal("setSlot"),
+    slot: Schema.String,
+    version: Schema.String,
+    ref: Schema.optional(Schema.String),
+    note: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({ op: Schema.Literal("removeSlot"), id: Schema.String }),
   /** Stops a Goal without its thread's help: paused can resume, ended is final. */
   Schema.Struct({
     op: Schema.Literal("stopGoal"),
@@ -562,6 +599,7 @@ export const BoardSettings = Schema.Struct({
   rules: Schema.String,
   boardMode: Schema.Boolean,
   merge: Schema.optional(Schema.NullOr(BoardMergeMode)),
+  slots: Schema.optional(Schema.Array(BoardSlot)),
   registers: Schema.Array(
     Schema.Struct({ id: Schema.String, topic: Schema.String, url: Schema.String }),
   ),

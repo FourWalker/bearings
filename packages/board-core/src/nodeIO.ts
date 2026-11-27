@@ -136,6 +136,12 @@ export const nodeGit: BoardGit = {
     const known = counts.filter((count) => count !== null);
     return known.length ? Math.min(...known) : null;
   },
+  commit: (dir, ref) =>
+    git(dir, ["rev-parse", "--short", "--verify", "--quiet", `${ref}^{commit}`]),
+  contains: async (dir, commit, ref) =>
+    (await gitOk(dir, ["cat-file", "-e", `${commit}^{commit}`]))
+      ? gitOk(dir, ["merge-base", "--is-ancestor", commit, ref])
+      : null,
   state: async (dir): Promise<RepoState | null> => {
     const top = await git(dir, ["rev-parse", "--show-toplevel"]);
     if (!top) return null;

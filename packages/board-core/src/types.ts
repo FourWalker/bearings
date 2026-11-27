@@ -86,6 +86,20 @@ export interface MergeMode {
   target: string;
 }
 
+/** A named place a build lives (frozen, next, demo) and the build in it now. */
+export interface Slot {
+  id: string;
+  name: string;
+  /** "" while the slot holds no build. */
+  version: string;
+  /** The repo (by name) and commit the build was made from, when known. */
+  repo?: string | undefined;
+  ref?: string | undefined;
+  note: string;
+  at: number;
+  by?: string | undefined;
+}
+
 export interface Owner {
   root: string;
   label: string;
@@ -208,6 +222,12 @@ export interface Task {
   merge?: MergeMode | undefined;
   /** Features and modules: the open merge request for their work. */
   mergeRequest?: string | undefined;
+  /** The first build whose commit held this task's finished work. */
+  landedIn?: string | undefined;
+  /** A bug: the build it was found in. */
+  foundIn?: string | undefined;
+  /** Slots whose build holds this task's finished work, as of when each slot was last set. */
+  inSlots?: string[] | undefined;
 }
 
 export interface Service {
@@ -231,6 +251,7 @@ export interface Board {
   registers?: { id: string; topic: string; url: string }[] | undefined;
   rules?: string | undefined;
   merge?: MergeMode | undefined;
+  slots?: Slot[] | undefined;
 }
 
 export interface Registry {

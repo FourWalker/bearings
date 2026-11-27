@@ -17,6 +17,8 @@ import {
   nextStep,
   planProgress,
   readBoardSummaries,
+  setSlot,
+  slotLines,
 } from "@t3tools/board-core";
 import { defaultBoardHome, nodeGit, nodeIO } from "@t3tools/board-core/node";
 import { boardTaskUrl } from "@t3tools/issue-tracker-board/shared/boardIssue";
@@ -374,9 +376,64 @@ const boardUpdateCommand = Command.make("update", {
   ),
 );
 
+const boardSlotCommand = Command.make("slot", {
+  board: boardFlag,
+  slot: Argument.String("slot").pipe(
+    Argument.withDescription(
+      'The slot\'s name, e.g. "frozen" or "next". A new name makes the slot.',
+    ),
+  ),
+  version: Flag.String("version").pipe(
+    Flag.withDescription('The version of the build now in the slot; "" empties it.'),
+  ),
+  ref: Flag.String("ref").pipe(
+    Flag.withDescription("The commit the build was made from. Defaults to HEAD of this directory."),
+    Flag.optional,
+  ),
+  note: Flag.String("note").pipe(Flag.optional),
+}).pipe(
+  Command.withDescription(
+    "Record which build is in a slot, from a build or install script. Finished tasks the build holds are marked as landed in it.",
+  ),
+  Command.withHandler((flags) =>
+    Effect.gen(function* () {
+      const { store, boardId } = yield* openBoard(flags.board);
+      const cwd = yield* HostProcess.WorkingDirectory;
+      const { message } = yield* write(() =>
+        setSlot(
+          store,
+          boardId,
+          {
+            slot: flags.slot,
+            version: flags.version,
+            ref: Option.getOrUndefined(flags.ref),
+            dir: cwd,
+            note: Option.getOrUndefined(flags.note),
+          },
+          CLI_ACTOR,
+          nodeGit,
+        ),
+      );
+      yield* Console.log(message);
+    }).pipe(reportBoardErrors),
+  ),
+);
+
+const boardSlotsCommand = Command.make("slots", { board: boardFlag }).pipe(
+  Command.withDescription("List the board's slots and the build in each."),
+  Command.withHandler((flags) =>
+    Effect.gen(function* () {
+      const { store, boardId } = yield* openBoard(flags.board);
+      const registry = yield* read(() => store.loadRegistry());
+      const lines = slotLines(registry.boards.find((board) => board.id === boardId) ?? null);
+      yield* Console.log(lines.length > 0 ? lines.join("\n") : "No slots yet.");
+    }).pipe(reportBoardErrors),
+  ),
+);
+
 export const boardCommand = Command.make("board").pipe(
   Command.withDescription(
-    "The Project Board: list or create boards, add, find, show and update tasks.",
+    "The Project Board: list or create boards, add, find, show and update tasks, and record builds.",
   ),
   Command.withSubcommands([
     boardListCommand,
@@ -386,5 +443,7 @@ export const boardCommand = Command.make("board").pipe(
     boardFindCommand,
     boardShowCommand,
     boardLinkCommand,
+    boardSlotCommand,
+    boardSlotsCommand,
   ]),
 );

@@ -322,6 +322,7 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
       rules: board.rules ?? "",
       boardMode: !!board.boardMode,
       merge: board.merge ?? null,
+      slots: board.slots ?? [],
       registers: (board.registers ?? []).map((r) => ({ id: r.id, topic: r.topic, url: r.url })),
     } satisfies BoardSettings;
   });
@@ -426,7 +427,7 @@ export const make = Effect.fn("BoardService.make")(function* (store: BoardStore,
     const result = yield* editLock.withLock(
       "$registry",
       Effect.tryPromise({
-        try: () => editBoardSettings(store, input.boardId, edit),
+        try: () => editBoardSettings(store, input.boardId, edit, git),
         catch: editFailed,
       }),
     );

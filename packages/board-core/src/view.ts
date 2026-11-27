@@ -23,6 +23,7 @@ import type {
   Item,
   Level,
   MergeMode,
+  Slot,
   Owner,
   RepoState,
   Session,
@@ -135,6 +136,11 @@ export interface BoardViewTask {
     | null;
   /** A feature's or module's own open merge request. */
   readonly mergeRequest: string | null;
+  /** The first build that held its finished work, and for a bug the build it was found in. */
+  readonly landedIn: string | null;
+  readonly foundIn: string | null;
+  /** Ids of the slots whose build holds its finished work. */
+  readonly inSlots: ReadonlyArray<string>;
 }
 
 export interface BoardViewGoal {
@@ -185,6 +191,8 @@ export interface BoardView {
   readonly boardMode: boolean;
   /** The board's own merge mode. */
   readonly merge: MergeMode | null;
+  /** Where builds live, and the build in each. */
+  readonly slots: ReadonlyArray<Slot>;
   readonly registers: ReadonlyArray<{
     readonly id: string;
     readonly topic: string;
@@ -406,6 +414,9 @@ export async function readBoardView(
         doneNote: t.status === "done" ? (t.doneNote ?? null) : null,
         merge: mergeFor(t),
         mergeRequest: t.mergeRequest ?? null,
+        landedIn: t.landedIn ?? null,
+        foundIn: t.foundIn ?? null,
+        inSlots: (t.inSlots ?? []).filter((id) => board.slots?.some((slot) => slot.id === id)),
       };
     }),
   );
@@ -414,6 +425,7 @@ export async function readBoardView(
     name: board.name,
     boardMode: !!board.boardMode,
     merge: board.merge ?? null,
+    slots: board.slots ?? [],
     registers: board.registers ?? [],
     services: (board.services ?? []).map((s) => ({ id: s.id, name: s.name, match: s.match })),
     workspaces: board.roots.map((r) => ({ label: r.label, root: norm(r.path) })),
@@ -534,6 +546,8 @@ export interface RepoGroup {
     readonly head: string;
     readonly done: boolean;
     readonly at: number;
+    /** Ids of the slots whose build holds the task's finished work. */
+    readonly inSlots: ReadonlyArray<string>;
   }>;
 }
 
@@ -557,6 +571,7 @@ ${r.branch}`;
         head: r.head,
         done: task.status === "done",
         at: r.at,
+        inSlots: task.inSlots ?? [],
       };
       const group = groups.get(key);
       const state = r.state ? standingOf(r.state) : null;

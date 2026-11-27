@@ -307,6 +307,19 @@ export const SCHEMA = {
       includeDone: { type: "boolean" },
     },
   },
+  slot: {
+    type: "object",
+    properties: {
+      slot: { type: "string", description: 'The slot\'s name, e.g. "frozen" or "next".' },
+      version: { type: "string", description: 'The build\'s version; "" empties the slot.' },
+      ref: {
+        type: "string",
+        description: "The commit the build was made from. Defaults to HEAD of this checkout.",
+      },
+      note: { type: "string" },
+    },
+    required: ["slot", "version"],
+  },
   release: {
     type: "object",
     properties: {
@@ -396,6 +409,10 @@ export const SCHEMA = {
       },
       mainService: { type: "string" },
       kind: { type: "string", enum: ["feature", "backlog"] },
+      foundIn: {
+        type: "string",
+        description: 'A bug task: the build version the bug was found in; "" clears it.',
+      },
       mergeRequest: {
         type: "string",
         description: 'Link of the merge request opened for this module\'s work; "" clears it.',
@@ -514,6 +531,12 @@ export const BOARD_TOOLS: ReadonlyArray<BoardToolDefinition> = [
     description:
       "Soft-release, reclaim or drop this workspace's ownership of the linked task's module or master task.",
     inputSchema: SCHEMA.release,
+  },
+  {
+    name: "board_slot",
+    description:
+      "Record which build is in a slot (a named place a build lives, e.g. the person's install). Call it right after you built or installed that build at the person's ask, never to plan one. Finished tasks whose commits the build holds are marked as landed in it.",
+    inputSchema: SCHEMA.slot,
   },
   {
     name: "board_link_task",

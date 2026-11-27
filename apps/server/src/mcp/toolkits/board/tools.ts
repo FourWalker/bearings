@@ -130,6 +130,10 @@ export const BoardToolkit = Toolkit.make(
     McpSchema.EnabledWhen,
     McpInvocationContext.hiddenFromOutsideClients,
   ),
+  Tool.make("board_slot", definition("board_slot")).annotate(
+    McpSchema.EnabledWhen,
+    McpInvocationContext.hiddenFromOutsideClients,
+  ),
   Tool.make("board_link_task", definition("board_link_task")).annotate(
     McpSchema.EnabledWhen,
     McpInvocationContext.hiddenFromOutsideClients,
