@@ -524,6 +524,23 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/general",
     searchTerms: [msg("hide fold running monitoring threads inbox sidebar shelf")],
   },
+  // Project Board fork: compact chat rows and where their details show.
+  {
+    id: "sidebar-row-style",
+    title: msg("Chat rows"),
+    to: "/settings/general",
+    searchTerms: [msg("compact classic one line card sidebar thread rows density")],
+  },
+  {
+    id: "sidebar-row-details",
+    title: msg("Row details"),
+    to: "/settings/general",
+    searchTerms: [
+      msg(
+        "show hide hover card project icon machine provider model pull request issue diff terminal branch worktree board time all boards",
+      ),
+    ],
+  },
   {
     id: "boring-sidebar",
     title: msg("Boring sidebar (group by project)"),

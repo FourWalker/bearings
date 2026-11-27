@@ -144,6 +144,14 @@ import { useThreadHasUnsentDraft } from "../../composerDraftStore";
 import { ThreadDetailsIssueRows } from "../chat/ThreadDetailsIssueRows";
 import { IssueGlyph, issueStatePresentation } from "../issue/issuePresentation";
 import { useThreadIntentPrefetch } from "./useThreadIntentPrefetch";
+import { useClientSettings } from "../../hooks/useSettings";
+import { SidebarCompactRowBody } from "./SidebarCompactRow";
+import {
+  resolveSidebarRowPlacements,
+  shownInRow,
+  sidebarRowToneOf,
+  type SidebarRowPlacements,
+} from "./sidebarRowDetails";
 
 // The fields thread rows show. Provider status pushes refresh `checkedAt`,
 // status and auth on every provider; leaving those out keeps each
@@ -293,6 +301,7 @@ function SidebarThreadTooltip({
   branchMismatch,
   terminalStatus,
   terminalProcessCount,
+  placements,
 }: {
   thread: SidebarThreadSummary;
   project: ProjectFaviconProject | null;
@@ -310,35 +319,39 @@ function SidebarThreadTooltip({
   } | null;
   terminalStatus: TerminalStatusIndicator | null;
   terminalProcessCount: number;
+  /** Project Board fork: a compact row's choices; details set to Hidden leave the card too. */
+  placements?: SidebarRowPlacements | undefined;
 }) {
-  const driverKind = providerEntry?.driverKind ?? null;
+  const shows = (id: keyof SidebarRowPlacements) => placements?.[id] !== "hidden";
+  const driverKind = shows("provider") ? (providerEntry?.driverKind ?? null) : null;
   const worktreePath = thread.worktreePath?.trim();
-  const previousProviderNames = thread.providerInstanceHistory
+  const previousProviderNames = (shows("provider") ? thread.providerInstanceHistory : [])
     .filter((instanceId) => instanceId !== modelInstanceId)
     .map((instanceId) => providerEntryByInstanceId.get(instanceId)?.displayName ?? instanceId);
   const supportsMultiplePullRequests = useSupportsMultiplePullRequests(thread.environmentId);
   const gt = useGT();
   const m = useMessages();
-  const board = boardLinesOf(thread.issues);
+  const board = shows("board") ? boardLinesOf(thread.issues) : { lines: [], more: 0 };
+  const branch = shows("branch") ? thread.branch : null;
   return (
     <>
       <ThreadHoverCard
         title={thread.title}
         footer={
-          supportsMultiplePullRequests && thread.pullRequests.length > 0 ? (
+          supportsMultiplePullRequests && shows("pullRequest") && thread.pullRequests.length > 0 ? (
             <div className="border-t border-border/60 pt-2 pl-0.5 text-xs text-muted-foreground">
               <ThreadPullRequestsMiniList pullRequests={thread.pullRequests} />
             </div>
           ) : null
         }
       >
-        {projectDisplayName ? (
+        {projectDisplayName && shows("project") ? (
           <div className="flex min-w-0 items-center gap-2">
             {project ? <ProjectFavicon project={project} className="size-3 shrink-0" /> : null}
             <div className="min-w-0 truncate text-foreground/75">{projectDisplayName}</div>
           </div>
         ) : null}
-        {environmentLabel ? (
+        {environmentLabel && shows("environment") ? (
           <div className="flex min-w-0 items-center gap-2">
             <EnvironmentMachineIcon
               kind={environmentMachine}
@@ -347,19 +360,19 @@ function SidebarThreadTooltip({
             <div className="min-w-0 truncate text-foreground/75">{environmentLabel}</div>
           </div>
         ) : null}
-        {thread.branch ? (
+        {branch ? (
           <div className="flex min-w-0 items-center gap-2">
             <GitBranchIcon className="size-3 shrink-0 stroke-muted-foreground" />
-            <MiddleTruncate value={thread.branch} className="flex" />
+            <MiddleTruncate value={branch} className="flex" />
           </div>
         ) : null}
-        {worktreePath ? (
+        {worktreePath && shows("branch") ? (
           <div className="flex min-w-0 items-center gap-2">
             <FolderGit2Icon className="size-3 shrink-0 stroke-muted-foreground" />
             <MiddleTruncate value={formatWorktreePathForDisplay(worktreePath)} className="flex" />
           </div>
         ) : null}
-        {branchMismatch ? (
+        {branchMismatch && shows("branch") ? (
           <div className="flex min-w-0 items-start gap-2 text-warning">
             <CircleAlertIcon aria-hidden className="mt-0.5 size-3 shrink-0 stroke-current" />
             <div className="min-w-0 flex-1 wrap-break-word">
@@ -399,7 +412,7 @@ function SidebarThreadTooltip({
             </div>
           </div>
         ) : null}
-        {terminalStatus ? (
+        {terminalStatus && shows("terminal") ? (
           <div className="flex min-w-0 items-center gap-2">
             <TerminalIcon
               aria-hidden
@@ -656,6 +669,8 @@ type SidebarThreadRowProps = {
   // Read at click time; a prop would re-render every row on entering or leaving a thread route.
   readOpensPullRequestsInRightPanel: () => boolean;
   jumpLabel: string | null;
+  /** Project Board fork: the Working shelf's All boards switch is on. */
+  allBoards: boolean;
   environmentLabel: string | null;
   environmentMachine: EnvironmentMachineKind;
   project: EnvironmentProject | null;
@@ -759,6 +774,11 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   } = props;
   const threadRef = scopeThreadRef(thread.environmentId, thread.id);
   const threadKey = scopedThreadKey(threadRef);
+  // Project Board fork: the one-line rows, unless Settings → Sidebar asks for the classic cards.
+  const compact = useClientSettings(
+    (settings) => variant === "card" && settings.sidebarRowStyle === "compact",
+  );
+  const placements = useClientSettings(resolveSidebarRowPlacements);
   const canOperateThread = useEnvironmentScope(thread.environmentId, AuthOrchestrationOperateScope);
   const canTriageThread = !useEnvironmentScopeDenied(
     thread.environmentId,
@@ -942,6 +962,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       branchMismatch={branchMismatch}
       terminalStatus={terminalStatus}
       terminalProcessCount={terminalProcessCount}
+      placements={compact ? placements : undefined}
     />
   );
 
@@ -1570,6 +1591,238 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
             {props.sweepAction !== null ? dragDestination : null}
           </div>
           {multiline ? metaLine : null}
+        </ThreadHoverCardTrigger>
+      </li>
+    );
+  }
+
+  if (compact) {
+    const tone = sidebarRowToneOf(status, isUnread);
+    const inRow = (id: keyof SidebarRowPlacements) => shownInRow(placements[id], props.allBoards);
+    const inHand = inRow("board")
+      ? (() => {
+          const lines = boardLinesOf(thread.issues).lines;
+          return lines.find((line) => line.inHand) ?? lines[0] ?? null;
+        })()
+      : null;
+    const metaItems = [
+      inRow("environment") && props.environmentLabel !== null ? (
+        <span key="environment" className="flex min-w-0 items-center gap-1">
+          <EnvironmentMachineIcon
+            aria-hidden
+            kind={props.environmentMachine}
+            className="size-3 shrink-0 text-icon-muted"
+          />
+          <span className="min-w-0 truncate">{props.environmentLabel}</span>
+        </span>
+      ) : null,
+      inRow("branch") && thread.branch ? (
+        <span key="branch" className="flex min-w-0 items-center gap-1">
+          <GitBranchIcon aria-hidden className="size-3 shrink-0 text-icon-muted" />
+          <span className="min-w-0 truncate">{thread.branch}</span>
+        </span>
+      ) : null,
+      inHand !== null ? (
+        <span key="board" className="flex min-w-0 items-center gap-1">
+          <SquareKanbanIcon aria-hidden className="size-3 shrink-0 text-icon-muted" />
+          <span className="min-w-0 truncate">{inHand.title}</span>
+        </span>
+      ) : null,
+      inRow("terminal") && runningTerminalIds.length > 0 ? (
+        <span key="terminal" className="contents">
+          {terminalStatusIcon}
+        </span>
+      ) : null,
+      inRow("pullRequest") && prBadge !== null ? (
+        <span key="pr" className="contents">
+          {prBadge}
+        </span>
+      ) : null,
+      inRow("issue") && issueBadge !== null ? (
+        <span key="issue" className="contents">
+          {issueBadge}
+        </span>
+      ) : null,
+      inRow("diff") && diff !== null ? (
+        <span key="diff" className="shrink-0 font-mono">
+          <span className="text-diff-addition-foreground">+{formatDiffCount(diff.insertions)}</span>{" "}
+          <span className="text-diff-deletion-foreground">−{formatDiffCount(diff.deletions)}</span>
+        </span>
+      ) : null,
+      inRow("provider") ? (
+        <span key="provider" aria-hidden className="ml-auto inline-flex shrink-0 items-center">
+          <SidebarProviderStack
+            thread={thread}
+            providerEntryByInstanceId={props.providerEntryByInstanceId}
+          />
+        </span>
+      ) : null,
+    ].filter((item) => item !== null);
+    const showsTime = placements.time === "row";
+    const chip = pendingSync ? (
+      <PendingSyncLabel />
+    ) : topStatus === null ? null : isWokeStatus ? (
+      <button
+        type="button"
+        aria-label={gt("Dismiss Woke notification")}
+        onClick={handleAcknowledgeWokeClick}
+        className="pointer-events-auto inline-flex cursor-pointer items-center gap-1 rounded-sm font-medium outline-none hover:underline"
+      >
+        <span role="status">{topStatus.label}</span>
+      </button>
+    ) : (
+      <span className="inline-flex items-center gap-1 font-medium">
+        {topStatus.label}
+        {showsTime && (status === "preparing" || status === "working") ? (
+          <span aria-hidden className="font-normal">
+            <WorkingDuration
+              environmentId={thread.environmentId}
+              startedAt={resolveWorkingStartedAt(thread)}
+            />
+          </span>
+        ) : null}
+      </span>
+    );
+    const controls =
+      props.settlementSupported || showSnoozeButton || hasUnsentDraft ? (
+        <span
+          className={cn(
+            "pointer-events-none absolute inset-y-0 right-0 flex items-stretch opacity-0 has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:static has-[:focus-visible]:opacity-100 group-any-hover/sidebar-row:pointer-events-auto group-any-hover/sidebar-row:static group-any-hover/sidebar-row:opacity-100",
+            snoozeMenuOpen && "pointer-events-auto static opacity-100",
+          )}
+        >
+          {hasUnsentDraft ? (
+            <SharedTooltipTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label={gt("Discard draft")}
+                  onClick={handleDiscardDraftClick}
+                  className="inline-flex cursor-pointer items-center rounded-md bg-transparent px-1 text-xs text-muted-foreground hover:text-foreground"
+                />
+              }
+              label={
+                <>
+                  <T>Discard draft</T>
+                </>
+              }
+            >
+              <XIcon className="size-3.5" />
+            </SharedTooltipTrigger>
+          ) : null}
+          {showSnoozeButton ? (
+            <SnoozeMenuButton
+              open={snoozeMenuOpen}
+              onOpenChange={setSnoozeMenuOpen}
+              onSnooze={handleSnoozePreset}
+              timestampFormat={props.timestampFormat}
+              environmentId={thread.environmentId}
+            />
+          ) : null}
+          {props.settlementSupported ? (
+            <SharedTooltipTrigger
+              side="right"
+              render={
+                <button
+                  type="button"
+                  aria-label={gt("Settle thread")}
+                  onClick={handleSettleClick}
+                  onPointerDown={handleActionPointerDown}
+                  className="-mr-1 inline-flex cursor-pointer items-center rounded-md bg-transparent px-1 text-xs text-muted-foreground hover:text-foreground"
+                />
+              }
+              label={
+                <>
+                  <T>Settle thread</T>
+                </>
+              }
+            >
+              <CheckIcon className="size-3.5" />
+            </SharedTooltipTrigger>
+          ) : null}
+        </span>
+      ) : null;
+    return (
+      <li
+        data-thread-item={threadKey}
+        {...sortableRootProps}
+        {...(fileDropHandlers ?? {})}
+        className={cn(
+          "list-none py-px [content-visibility:auto] [contain-intrinsic-size:auto_34px]",
+          metaItems.length > 0 && "[contain-intrinsic-size:auto_52px]",
+          sortable?.isDragging && "relative z-20",
+        )}
+      >
+        <ThreadHoverCardTrigger
+          card={detailsTooltip}
+          disabled={isRenaming || snoozeMenuOpen || sortable?.isDragging}
+          render={
+            <div
+              ref={rowRef}
+              role="button"
+              tabIndex={0}
+              data-sidebar-row={threadKey}
+              data-sidebar-parent={props.navigationParent}
+              aria-label={accessibility.label}
+              aria-current={accessibility.current}
+              data-testid="sidebar-row-card"
+              data-row-style="compact"
+              data-row-tone={tone}
+              data-row-state={props.isActive ? "active" : isSelected ? "selected" : undefined}
+              aria-busy={isRegeneratingTitle || undefined}
+              className={cn(rowSurfaceClassName, "px-2 py-0.5")}
+              onClick={handleClick}
+              onPointerEnter={intentPrefetch.onPointerEnter}
+              onPointerLeave={intentPrefetch.onPointerLeave}
+              onPointerDown={intentPrefetch.onPointerDown}
+              onDoubleClick={handleDoubleClick}
+              onKeyDown={handleKeyDown}
+              onContextMenu={handleContextMenu}
+            />
+          }
+        >
+          <SidebarCompactRowBody
+            tone={tone}
+            isActive={props.isActive}
+            leading={
+              <>
+                {inRow("project") && props.project ? (
+                  <ProjectFavicon project={props.project} className="size-3.5 shrink-0" />
+                ) : null}
+                {draftIndicator}
+              </>
+            }
+            title={
+              <>
+                {title}
+                {isRegeneratingTitle ? (
+                  <span role="status" className="sr-only">
+                    <T>Regenerating title</T>
+                  </span>
+                ) : null}
+              </>
+            }
+            afterTitle={pinIndicator}
+            chip={chip}
+            time={
+              showsTime ? (
+                <RelativeTimeLabel timestamp={resolveThreadActivityTimestamp(thread)} />
+              ) : null
+            }
+            controls={controls}
+            hideTrailing={props.sweepAction !== null}
+            trailingClassName={jumpHintLabel ? JUMP_HINT_SLOT_CLASS_NAME : undefined}
+            dragDestination={sortable?.isDragging ? dragDestination : null}
+            jumpHint={jumpHintLabel ? <JumpHintBadge label={jumpHintLabel} /> : null}
+            meta={
+              metaItems.length > 0 ? (
+                <div className="-mt-0.5 mb-0.5 flex h-4.5 min-w-0 items-center gap-1.5 ps-4 text-2xs text-secondary-label">
+                  {metaItems}
+                </div>
+              ) : null
+            }
+            accessory={props.sweepAction !== null ? dragDestination : null}
+          />
         </ThreadHoverCardTrigger>
       </li>
     );

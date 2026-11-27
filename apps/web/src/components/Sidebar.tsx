@@ -292,6 +292,7 @@ import {
   SidebarSectionPlaceholder,
   SidebarWorkingScopeSwitch,
 } from "./sidebar/SidebarListMarkers";
+import { useSidebarRowMotionAttributes } from "./sidebar/SidebarCompactRow";
 
 function sameSidebarProviderEntries(
   left: ReadonlyMap<string, SidebarProviderEntry>,
@@ -1056,6 +1057,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   });
   const boringSidebarEnabled = useClientSettings((settings) => settings.boringSidebarEnabled);
   const folderRowsMultiline = useClientSettings((settings) => settings.boringSidebarMultilineRows);
+  // Project Board fork: compact rows keep a Pinned header in view; the list carries the motion choice.
+  const compactRows = useClientSettings((settings) => settings.sidebarRowStyle === "compact");
+  const rowMotion = useSidebarRowMotionAttributes();
   const newThreadContext = useHandleNewThread();
   // Row callbacks capture only the handler; the rest of the context changes with the route.
   const { handleNewThread } = newThreadContext;
@@ -3559,6 +3563,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
               <SortableContext items={sortableIds} strategy={sidebarSortingStrategy}>
                 <ul
                   ref={attachTreeRef}
+                  {...rowMotion}
                   // Presentation flattens VoiceOver's list interaction boundary while preserving descendant
                   // controls.
                   role="presentation"
@@ -3644,6 +3649,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                           isRouteThread={routeThreadKey === threadKey}
                           readOpensPullRequestsInRightPanel={readOpensPullRequestsInRightPanel}
                           jumpLabel={showJumpHints ? (jumpLabelByKey.get(threadKey) ?? null) : null}
+                          allBoards={workingScoped && workingEverywhere}
                           environmentLabel={environmentLabelById.get(thread.environmentId) ?? null}
                           environmentMachine={
                             environmentMachineById.get(thread.environmentId) ?? "server"
@@ -3761,6 +3767,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                               marker="pinned-header"
                               label={gt("Pinned", { $context: "sidebar section" })}
                               visible={from !== null}
+                              persistent={compactRows && pinnedThreads.length > 0}
                               isDropTarget={dragTargetSection === "pinned"}
                             />,
                           );
@@ -3772,6 +3779,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                               marker="pinned-divider"
                               label={gt("Active", { $context: "sidebar section" })}
                               visible={from !== null}
+                              persistent={compactRows && pinnedThreads.length > 0}
                               isDropTarget={dragTargetSection === "active"}
                             />,
                           );

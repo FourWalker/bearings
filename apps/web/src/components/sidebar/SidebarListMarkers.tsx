@@ -82,8 +82,43 @@ export function SidebarDragBoundary(props: {
   marker: "pinned-header" | "pinned-divider";
   label: string;
   visible: boolean;
+  /** Project Board fork: compact rows keep the Pinned header and its divider in view. */
+  persistent?: boolean;
   isDropTarget: boolean;
 }) {
+  const header = props.marker === "pinned-header";
+  if (props.persistent) {
+    return (
+      <SortableSidebarMarker
+        marker={props.marker}
+        data-testid={`sidebar-${props.marker}`}
+        className={cn("pointer-events-none relative mx-0.5", header ? "h-7" : "h-3")}
+      >
+        <div
+          data-sidebar-pinned-rule={header ? "header" : "divider"}
+          className="absolute inset-x-2 top-1/2 flex h-4 -translate-y-1/2 items-center gap-2"
+        >
+          {header || props.visible ? (
+            <span
+              className={cn(
+                "shrink-0 text-xs font-medium",
+                props.isDropTarget ? "text-primary" : "text-sidebar-muted-foreground",
+              )}
+            >
+              {props.label}
+            </span>
+          ) : null}
+          <span
+            aria-hidden
+            className={cn(
+              "h-px flex-1",
+              props.isDropTarget ? "bg-primary/50" : "bg-sidebar-border/70",
+            )}
+          />
+        </div>
+      </SortableSidebarMarker>
+    );
+  }
   return (
     <SortableSidebarMarker
       marker={props.marker}
@@ -143,9 +178,19 @@ export function SidebarSectionHeader(props: {
         expanded={props.toggle.expanded}
         tone={props.isDropTarget ? "accent" : props.dragging ? "emphasized" : "muted"}
         data-testid={`sidebar-${shelf}-shelf-toggle`}
-        accessory={<span className="font-normal tabular-nums">{props.count}</span>}
+        accessory={
+          // Keyed so a new count can play its arrival (Project Board fork).
+          <span key={props.count} data-shelf-count className="font-normal tabular-nums">
+            {props.count}
+          </span>
+        }
       >
         {props.label}
+        {shelf === "working" ? (
+          <svg data-shelf-mark viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden>
+            <path d="M0 3C8 0 12 6 20 3S32 0 40 3S52 6 60 3S72 0 80 3S92 6 100 3" pathLength={1} />
+          </svg>
+        ) : null}
       </CollapsibleSectionHeader>
       {props.trailing}
     </SortableSidebarMarker>

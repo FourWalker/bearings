@@ -80,6 +80,12 @@ export const SidebarThreadSortOrder = Schema.Literals(["updated_at", "created_at
 export type SidebarThreadSortOrder = typeof SidebarThreadSortOrder.Type;
 const DEFAULT_SIDEBAR_THREAD_SORT_ORDER: SidebarThreadSortOrder = "updated_at";
 
+export const SidebarRowStyle = Schema.Literals(["compact", "classic"]);
+export type SidebarRowStyle = typeof SidebarRowStyle.Type;
+// "allBoards": in the row only while the Working shelf's All boards switch is on.
+export const SidebarRowDetailPlacement = Schema.Literals(["row", "allBoards", "card", "hidden"]);
+export type SidebarRowDetailPlacement = typeof SidebarRowDetailPlacement.Type;
+
 export const SidebarProjectGroupingMode = Schema.Literals([
   "repository",
   "repository_path",
@@ -576,6 +582,12 @@ export const ClientSettingsSchema = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
   sidebarWorkingShelfEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  // Project Board fork: the one-line chat rows, or upstream's three-line cards.
+  sidebarRowStyle: SidebarRowStyle.pipe(Schema.withDecodingDefault(Effect.succeed("compact"))),
+  // Sparse overrides: where each chat-row detail shows. Missing ids use the client's default.
+  sidebarRowDetails: Schema.Record(Schema.String, SidebarRowDetailPlacement).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
   sidebarProjectGroupingMode: SidebarProjectGroupingMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_PROJECT_GROUPING_MODE)),
   ),
@@ -2200,6 +2212,8 @@ export const ClientSettingsPatch = Schema.Struct({
   threadDetailsUsageEnabled: Schema.optionalKey(Schema.Boolean),
   threadDetailsItems: Schema.optionalKey(Schema.Record(Schema.String, Schema.Boolean)),
   sidebarWorkingShelfEnabled: Schema.optionalKey(Schema.Boolean),
+  sidebarRowStyle: Schema.optionalKey(SidebarRowStyle),
+  sidebarRowDetails: Schema.optionalKey(Schema.Record(Schema.String, SidebarRowDetailPlacement)),
   sidebarProjectGroupingMode: Schema.optionalKey(SidebarProjectGroupingMode),
   sidebarProjectGroupingOverrides: Schema.optionalKey(
     Schema.Record(TrimmedNonEmptyString, SidebarProjectGroupingMode),

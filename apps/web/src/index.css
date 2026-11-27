@@ -6,6 +6,7 @@
 @import "./plotter.css";
 @import "./tack-plotter.css";
 @import "./board-pin.css";
+@import "./sidebar-rows.css";
 @import "./board-phone.css";
 
 @custom-variant dark (&:is(.dark, .dark *));
