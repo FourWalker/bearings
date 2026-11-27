@@ -209,10 +209,16 @@ the detail; update the board task after it.
   `Task.foundIn` (`board_update foundIn`, or the task's Builds card). Model-facing text changed,
   no eval run. One repo per slot. Mobile has no board view, so nothing was built there. No slot
   is set on any real board yet.
-- Windows build: the owner's install `Outputs/T3-Project-Board-Frozen-Windows-x64` holds
-  `f6fc50bb21` (decision types, Goal controls, compact layout) since 2026-11-26 10:42, swapped in
-  on the owner's say-so; ask before the next swap. The app must be closed first: its exe locks the
-  folder. Older installs sit there as `win-unpacked.backup-20261126-104212` (161ba9d207),
+- Releases: `0.1.11-board.6` (tag `v0.1.11-board.6`, `fb90d1c918`) is the first numbered release;
+  `.4` and `.5` were earlier transfer builds, so the next is `.7`. Bump the four package.json
+  versions, commit, tag, build into `Outputs/Board-<version>`, then set the slot.
+- Windows build: the owner's install `Outputs/T3-Project-Board-Frozen-Windows-x64` gets
+  `0.1.11-board.6` on 2026-11-28 by a detached script that closes the app, swaps and restarts it
+  (transcript `.local-run/logs/release-slots-on-the-board/swap-board6.log`; it also moves the
+  Bearings `frozen` slot). Before that it held `f6fc50bb21` (0.1.11-board.2), now the newest
+  `win-unpacked.backup-20261128-*`. Ask before the next swap. The app must be closed first: its exe
+  locks the folder. Its board data folder is a junction to `~/.claude-board`. Older installs sit
+  there as `win-unpacked.backup-20261126-104212` (161ba9d207),
   `-20261125-210142` (8b8baaec9b), `-181035` (ffd3944), `-121607` (e47a57c), `-103704` (19695a4),
   `-003448` (1b8d6a0), `-20261124-203554` (02f758c), `-143000` (3e74c49), `-090747` (22ad144) and
   `-082118` (fd7f86b). `Outputs/Board-rebuild-d3e1aed94b`, `-c5028dba08` and `-98d0dec660` were
@@ -326,6 +332,8 @@ Pin bar's swell and peek never looked at live.
   scripts/build-desktop-artifact.ts --platform win --target dir --arch x64 --output-dir <folder>`
   (about 5 minutes). Install: rename the install's `win-unpacked` to a dated backup, copy the new one in.
   Then record it from the repo: `node apps/server/src/bin.ts board slot next --version <v>` after a
-  build, `... board slot frozen --version <v> --ref <built commit>` after an install.
+  build, `... board slot frozen --version <v> --ref <built commit>` after an install. Without
+  `--ref` the slot takes HEAD of the current directory; for a build that is not a commit (FOTN's
+  test map), run it from a folder outside any repo with `--board <id>`.
 
 **Resume.** "Read docs/board/HANDOFF.md and continue from Next step."
