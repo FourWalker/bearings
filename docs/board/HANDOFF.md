@@ -197,7 +197,17 @@ the detail; update the board task after it.
   `nodeIO.ts`: the lower count against the local and the `origin` branch, so it is as fresh as
   the last fetch). `board_update mergeRequest` records the request's link on the module. Threads
   get one "Merging:" line; it says how, not when. The feature overview no longer hides ticked
-  must-dos and to-dos. Model-facing text changed, no eval run. Not built: a per-repo target, slots.
+  must-dos and to-dos. Model-facing text changed, no eval run. Not built: a per-repo target.
+- **Slots: which build is where** (`ca954cae9b`, `f96f7d5a58`; tests and a CLI run, not seen in a
+  browser): a board has slots (`Board.slots`: name, version, repo, commit, note, date). `setSlot`
+  in `edit.ts` points one at a build and marks the finished tasks whose done commits are in that
+  build's history (`Task.inSlots`; `Task.landedIn` is the first such build). So it is as fresh as
+  the last time the slot was set, and a build with no commit claims no task. Three ways in: the
+  `board_slot` tool, `t3 board slot <name> --version <v> [--ref <commit>]` (HEAD of the directory
+  by default; `t3 board slots` lists them), and Board settings, "Builds and slots". A bug records
+  `Task.foundIn` (`board_update foundIn`, or the task's Builds card). Model-facing text changed,
+  no eval run. One repo per slot. Mobile has no board view, so nothing was built there. No slot
+  is set on any real board yet.
 - Windows build: the owner's install `Outputs/T3-Project-Board-Frozen-Windows-x64` holds
   `f6fc50bb21` (decision types, Goal controls, compact layout) since 2026-11-26 10:42, swapped in
   on the owner's say-so; ask before the next swap. The app must be closed first: its exe locks the
@@ -314,5 +324,7 @@ Pin bar's swell and peek never looked at live.
 - Build (needs `node_modules/.bin` on PATH for `vp`): `T3CODE_DESKTOP_REUSE_RESOURCE_MONITOR=1 node
   scripts/build-desktop-artifact.ts --platform win --target dir --arch x64 --output-dir <folder>`
   (about 5 minutes). Install: rename the install's `win-unpacked` to a dated backup, copy the new one in.
+  Then record it from the repo: `node apps/server/src/bin.ts board slot next --version <v>` after a
+  build, `... board slot frozen --version <v> --ref <built commit>` after an install.
 
 **Resume.** "Read docs/board/HANDOFF.md and continue from Next step."
