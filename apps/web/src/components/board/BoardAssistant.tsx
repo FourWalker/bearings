@@ -471,7 +471,7 @@ export function TackLookMenu(props: {
 }
 
 /** What Tack says before the first question, with a few to start from. */
-export function AssistantWelcome(props: { readonly onAsk: (question: string) => void }) {
+function AssistantWelcome(props: { readonly onAsk: (question: string) => void }) {
   const gt = useGT();
   const starters = [
     gt("What is in progress?"),

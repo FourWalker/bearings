@@ -60,7 +60,7 @@ export function useTackPlace() {
   return useLocalStorage<TackPlace, TackPlace>("t3.board.assistant.place", "roam", PlaceSchema);
 }
 
-export const TACK_SHOW_MODES = ["walk", "open"] as const;
+const TACK_SHOW_MODES = ["walk", "open"] as const;
 export type TackShowMode = (typeof TACK_SHOW_MODES)[number];
 const ShowSchema = Schema.Literals(TACK_SHOW_MODES);
 

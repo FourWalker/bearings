@@ -38,7 +38,7 @@ export interface TreeColumn {
 }
 
 /** How far along an item is, 0 to 1: its tasks when it has any, else its own plan. */
-export function completionOf(index: BoardIndex, task: BoardTask): number {
+function completionOf(index: BoardIndex, task: BoardTask): number {
   if (task.status === "done") return 1;
   const kids = index.kidsOf(task.id);
   if (kids.length > 0) return kids.filter((kid) => kid.status === "done").length / kids.length;

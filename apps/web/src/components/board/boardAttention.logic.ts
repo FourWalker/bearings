@@ -15,7 +15,7 @@ type ThreadStatus = Parameters<typeof resolveSidebarRowStatus>[0];
  * Project Board fork: what a thread wants from the person, read exactly as the sidebar reads it,
  * so a note and the thread's sidebar row never disagree.
  */
-export function chatAttentionOf(thread: ThreadStatus): BoardChatAttention | null {
+function chatAttentionOf(thread: ThreadStatus): BoardChatAttention | null {
   const status = resolveSidebarRowStatus(thread);
   if (status === "approval") return { kind: "needs", why: "approval" };
   // A guest waiting on the owner is a question to the person too.

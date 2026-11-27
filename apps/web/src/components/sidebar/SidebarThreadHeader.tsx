@@ -1,5 +1,5 @@
 import { useGT } from "gt-react";
-import { FolderPlusIcon, SearchIcon, SquarePenIcon, XIcon } from "lucide-react";
+import { SearchIcon, SquarePenIcon, XIcon } from "lucide-react";
 import {
   type ComponentProps,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -11,12 +11,11 @@ import {
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
 import { SidebarInput, SidebarMenuButton } from "../ui/sidebar";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { SharedTooltipTrigger } from "../ui/shared-tooltip";
 
 export interface SidebarThreadHeaderProps {
   hasProjects: boolean;
   projectScope: ReactNode;
-  onNewProject: () => void;
   onNewThread: (event: ReactMouseEvent) => void;
   newThreadDisabled: boolean;
   newThreadShortcutLabel: string | null | undefined;
@@ -35,7 +34,6 @@ export interface SidebarThreadHeaderProps {
 export function SidebarThreadHeader({
   hasProjects,
   projectScope,
-  onNewProject,
   onNewThread,
   newThreadDisabled,
   newThreadShortcutLabel,
@@ -99,35 +97,22 @@ export function SidebarThreadHeader({
             </Button>
           ) : null}
         </div>
-        <div className="flex shrink-0 items-center">
-          {hasProjects ? (
-            <>
-              {projectScope}
-              <SidebarHeaderIconButton label={gt("Add project")} onClick={onNewProject}>
-                <FolderPlusIcon />
-              </SidebarHeaderIconButton>
-            </>
-          ) : null}
-        </div>
+        <div className="flex shrink-0 items-center">{hasProjects ? projectScope : null}</div>
       </div>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              data-sidebar-new-chat
-              variant="outline"
-              size="sm"
-              className="w-full"
-              disabled={newThreadDisabled}
-              onClick={onNewThread}
-            />
-          }
-        >
-          <SquarePenIcon />
-          <span>{gt("New chat")}</span>
-        </TooltipTrigger>
-        <TooltipPopup side="right">
-          {showNewThreadInProjectHint ? (
+      <SharedTooltipTrigger
+        side="right"
+        render={
+          <Button
+            data-sidebar-new-chat
+            variant="outline"
+            size="sm"
+            className="w-full"
+            disabled={newThreadDisabled}
+            onClick={onNewThread}
+          />
+        }
+        label={
+          showNewThreadInProjectHint ? (
             <span className="flex flex-col gap-0.5">
               <span>{newThreadLabel}</span>
               <span className="text-muted-foreground">
@@ -140,9 +125,12 @@ export function SidebarThreadHeader({
             </span>
           ) : (
             newThreadLabel
-          )}
-        </TooltipPopup>
-      </Tooltip>
+          )
+        }
+      >
+        <SquarePenIcon />
+        <span>{gt("New chat")}</span>
+      </SharedTooltipTrigger>
       {/* Shown by themes that label the list, as Clay Post does. */}
       <span data-sidebar-section-label className="hidden">
         {gt("Threads")}
@@ -167,25 +155,23 @@ export function SidebarHeaderIconButton({
   "children" | "className" | "tooltip" | "isActive" | "aria-label"
 >) {
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <SidebarMenuButton
-            size="icon"
-            type="button"
-            aria-label={label}
-            {...rest}
-            className={cn("relative size-7 shrink-0", className)}
-          />
-        }
-      >
-        {children}
-        <span
-          aria-hidden
-          className="pointer-events-none absolute left-1/2 top-1/2 size-[max(100%,3rem)] -translate-1/2 pointer-fine:hidden"
+    <SharedTooltipTrigger
+      render={
+        <SidebarMenuButton
+          size="icon"
+          type="button"
+          aria-label={label}
+          {...rest}
+          className={cn("relative size-7 shrink-0", className)}
         />
-      </TooltipTrigger>
-      <TooltipPopup side="top">{tooltip}</TooltipPopup>
-    </Tooltip>
+      }
+      label={tooltip}
+    >
+      {children}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute left-1/2 top-1/2 size-[max(100%,3rem)] -translate-1/2 pointer-fine:hidden"
+      />
+    </SharedTooltipTrigger>
   );
 }

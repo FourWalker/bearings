@@ -67,8 +67,8 @@ function spokes(cx: number, cy: number, r0: number, r1: number, count: number, o
   }).join("");
 }
 
-export const PLOTTER_GEAR_A = { cx: 70, cy: 124, teeth: 12 } as const;
-export const PLOTTER_GEAR_B = { cx: 114, cy: 87, teeth: 7 } as const;
+const PLOTTER_GEAR_A = { cx: 70, cy: 124, teeth: 12 } as const;
+const PLOTTER_GEAR_B = { cx: 114, cy: 87, teeth: 7 } as const;
 
 /** A scholar in a soft cap, reading the card in his hand. */
 const FACE: ReadonlyArray<PlotterStroke> = [

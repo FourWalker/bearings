@@ -49,7 +49,7 @@ const LOOP_OF: Record<TackMood, TackClip> = {
 };
 
 /** The clip to start when the mood changes: some changes get a one-shot reaction first. */
-export function clipOnMoodChange(previous: TackMood, next: TackMood): TackClip {
+function clipOnMoodChange(previous: TackMood, next: TackMood): TackClip {
   if (next === "idle" || next === "rest") {
     if (previous === "think" || previous === "alert") return "done";
     if (previous === "rest" && next === "idle") return "wake";
@@ -58,7 +58,7 @@ export function clipOnMoodChange(previous: TackMood, next: TackMood): TackClip {
 }
 
 /** The clip that follows a finished one. Tack dozes off once it has rested through its idle clip. */
-export function clipAfter(finished: TackClip, mood: TackMood): TackClip {
+function clipAfter(finished: TackClip, mood: TackMood): TackClip {
   if (mood === "rest" && (finished === "idle" || finished === "sleep")) return "sleep";
   if (mood === "oops" && finished === "oops") return "idle";
   return LOOP_OF[mood];

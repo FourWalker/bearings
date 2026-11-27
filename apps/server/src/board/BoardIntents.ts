@@ -41,7 +41,7 @@ export class BoardIntents extends Context.Service<
 const ANSWER_WITHIN = "5 seconds";
 
 /** The window the person is looking at: focused first, then the one they used last. */
-export function activeClient(leases: ReadonlyArray<ClientActivityLease>): string | null {
+function activeClient(leases: ReadonlyArray<ClientActivityLease>): string | null {
   const rank = (lease: ClientActivityLease) =>
     (lease.focused ? 2 : 0) + (lease.recentlyInteracted ? 1 : 0);
   const [best] = leases
@@ -57,7 +57,7 @@ export function activeClient(leases: ReadonlyArray<ClientActivityLease>): string
   return best?.clientId ?? null;
 }
 
-export const make = Effect.gen(function* () {
+const make = Effect.gen(function* () {
   const policy = yield* BackgroundPolicy;
   const intents = yield* PubSub.unbounded<BoardIntent>();
   const waiting = new Map<string, Deferred.Deferred<BoardIntentAck>>();

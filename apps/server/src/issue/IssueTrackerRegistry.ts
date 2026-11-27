@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { IssueTrackerKind } from "@t3tools/contracts";
 import * as BoardDriver from "@t3tools/issue-tracker-board/server/driver";
+import * as JiraDriver from "@t3tools/issue-tracker-jira/server/driver";
 import * as LinearDriver from "@t3tools/issue-tracker-linear/server/driver";
 import {
   isLocalIssueTracker,
@@ -42,7 +43,7 @@ export function fromTrackers(
 }
 
 /** Trackers that are not a git host's own. Each signs requests with a credential from Settings. */
-const STANDALONE_TRACKERS = [LinearDriver.make];
+const STANDALONE_TRACKERS = [LinearDriver.make, JiraDriver.make];
 
 /** Trackers on this machine, read by folder with no credential. */
 const LOCAL_TRACKERS = [BoardDriver.make];

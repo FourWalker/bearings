@@ -19,7 +19,7 @@ import { boardThreadModelSelection } from "./boardThread";
 import { tackMood } from "./tackAvatar.logic";
 import { readTackRuntimeMode } from "./tackSettings";
 
-export const TASK_TACK_SIZES = ["line", "panel"] as const;
+const TASK_TACK_SIZES = ["line", "panel"] as const;
 export type TaskTackSize = (typeof TASK_TACK_SIZES)[number];
 const SizeSchema = Schema.Literals(TASK_TACK_SIZES);
 

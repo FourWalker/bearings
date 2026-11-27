@@ -12,7 +12,7 @@ import { useLocalStorage } from "~/hooks/useLocalStorage";
  * Project Board fork: Tack's settings that more than one screen reads, kept on this device.
  * The Settings page's Tack section edits them all.
  */
-export const TACK_HOMES = ["board", "panel"] as const;
+const TACK_HOMES = ["board", "panel"] as const;
 /** Where the Roamer sleeps: the board's bottom right corner, or the foot of the side panel. */
 export type TackHome = (typeof TACK_HOMES)[number];
 const HomeSchema = Schema.Literals(TACK_HOMES);
@@ -29,7 +29,7 @@ export function useBoardPanelOpen() {
 /** board: Tack on the board. task: Tack inside an open task or module. */
 export type TackModelRole = "board" | "task";
 
-export const TACK_ACCESS = ["ask", "full"] as const;
+const TACK_ACCESS = ["ask", "full"] as const;
 /** How far Tack's thread may act without asking: every step approved, or full access. */
 export type TackAccess = (typeof TACK_ACCESS)[number];
 const AccessSchema = Schema.Struct({
@@ -45,7 +45,7 @@ export function useTackAccess() {
   return useLocalStorage(ACCESS_KEY, DEFAULT_ACCESS, AccessSchema);
 }
 
-export const tackRuntimeMode = (access: TackAccess): RuntimeMode =>
+const tackRuntimeMode = (access: TackAccess): RuntimeMode =>
   access === "full" ? "full-access" : "approval-required";
 
 /** Read at send time, so a changed setting also holds for a Tack thread that already exists. */
