@@ -1277,7 +1277,8 @@ export async function setSlot(
     if (rest.length) task.inSlots = rest;
     else delete task.inSlots;
     if (lands) task.landedIn = version;
-    await store.saveTask(boardId, task);
+    // Not saveTask: a new build is not work on the task, and must not reorder the board.
+    await store.writeJson(`${store.taskDir(boardId, task.id)}/task.json`, task);
   }
   if (!version) return { message: `Slot "${slot.name}" is empty.` };
   return {

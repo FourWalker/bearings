@@ -512,6 +512,7 @@ describe("setSlot", () => {
     await editTask(store, "nefx", "early", { op: "update", status: "done" }, actor, git("old"));
     await editTask(store, "nefx", "late", { op: "update", status: "done" }, actor, git("new"));
 
+    const before = (await task("early")).updatedAt;
     const frozen = await setSlot(
       store,
       "nefx",
@@ -520,7 +521,11 @@ describe("setSlot", () => {
       git("mid"),
     );
     expect(frozen.message).toContain("1.0 @ mid (nfx): 1 finished task(s)");
-    expect(await task("early")).toMatchObject({ landedIn: "1.0", inSlots: ["frozen"] });
+    expect(await task("early")).toMatchObject({
+      landedIn: "1.0",
+      inSlots: ["frozen"],
+      updatedAt: before,
+    });
     expect((await task("late")).inSlots).toBeUndefined();
 
     await editBoard(
