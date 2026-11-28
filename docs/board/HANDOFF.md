@@ -209,21 +209,24 @@ the detail; update the board task after it.
   `Task.foundIn` (`board_update foundIn`, or the task's Builds card). Model-facing text changed,
   no eval run. One repo per slot. Mobile has no board view, so nothing was built there. No slot
   is set on any real board yet.
-- Releases: `0.1.13-board.7` (tag `v0.1.13-board.7`, on upstream 0.1.13) is the build under trial,
-  in the Bearings `next` slot; `0.1.11-board.6` (tag `v0.1.11-board.6`, `fb90d1c918`) was the first
-  numbered release. The next is `.8`. Bump the four package.json versions, commit, tag, build into
-  `C:\Claude-Works\Release\Bearings\<version>`, then set the slot. The build needs pnpm on PATH
-  as well as `node_modules/.bin`: `%LOCALAPPDATA%\vite-plus\data\package_manager\pnpm\12.14.0\pnpm\bin`.
-- Release folders (owner's layout, 2026-11-28): `C:\Claude-Works\Release\Bearings` holds one folder
-  per version, never overwritten, plus `data-backups\before-<version>` (database and settings from
-  before that version first ran) and `trial-data` (a copy the trial launcher runs on, so the real
-  database is not migrated). `C:\Claude-Works\Release\Main Programs` is for the day-to-day build;
-  the owner says when a version moves there. Migrations are one-way: a 0.1.13 build takes the
-  database from 105 to 119, and the 0.1.11 builds may not open it after that.
-- Windows build: the owner's install `Outputs/T3-Project-Board-Frozen-Windows-x64` still holds
-  `f6fc50bb21` (0.1.11-board.2). The 2026-11-28 swap to `0.1.11-board.6` failed at its first step
-  (transcript `.local-run/logs/release-slots-on-the-board/swap-board6.log`), so nothing was swapped
-  and the `frozen` slot is right. Ask before the next swap. The app must be closed first: its exe
+- Releases: `0.1.13-board.7` (tag `v0.1.13-board.7` at `f4fdbe1a0f`, on upstream 0.1.13) is the
+  day-to-day build, in the Bearings `main-programs` slot. The next is `.8`. Bump the four
+  package.json versions, commit, tag, build into `C:\Claude-Works\Release\Bearings\<version>`, then
+  set the slot. The build needs pnpm on PATH as well as `node_modules/.bin`:
+  `%LOCALAPPDATA%\vite-plus\data\package_manager\pnpm\12.14.0\pnpm\bin`.
+- Branches: the Bearings board merges finished work directly into `beta` (Board settings). `main`
+  and `beta` both sit at `6184110b4d` (2026-11-28); `main` moves when the owner promotes a build.
+- Release folders (owner's layout): `C:\Claude-Works\Release\Bearings` holds one folder per version,
+  never overwritten, plus `data-backups\` (`before-<version>`, `trial-2026-11-28`). A trial build
+  runs on its own copy of the data, never on the day-to-day data.
+  `C:\Claude-Works\Release\Main Programs\Bearings` is the day-to-day install: `win-unpacked`, `Node`,
+  `data` (app data; boards stay in `~/.claude-board`) and `Start Bearings.cmd`. Its data came from
+  the 0.1.13-board.7 trial data via the one-time `Bring trial data here (run once).cmd`, which also
+  retires that version's trial launcher; the old `trial-data` folder stays as a backup. The owner
+  says when a version moves there. Migrations are one-way: 0.1.13 takes the database 105 → 119.
+- Old Windows install: `Outputs/T3-Project-Board-Frozen-Windows-x64` still holds `f6fc50bb21`
+  (0.1.11-board.2, `frozen` slot) with data from before 2026-11-28 3:26 AM. Kept for now at the
+  owner's word; do not open it (it predates the board files it would read). The app must be closed first: its exe
   locks the folder. Its board data folder is a junction to `~/.claude-board`. Older installs sit
   there as `win-unpacked.backup-20261126-104212` (161ba9d207),
   `-20261125-210142` (8b8baaec9b), `-181035` (ffd3944), `-121607` (e47a57c), `-103704` (19695a4),
@@ -351,9 +354,10 @@ Pin bar's swell and peek never looked at live.
   animations do not advance. Step them with `getAnimations()` and `currentTime` to check a frame.
 - Build (needs `node_modules/.bin` on PATH for `vp`): `T3CODE_DESKTOP_REUSE_RESOURCE_MONITOR=1 node
   scripts/build-desktop-artifact.ts --platform win --target dir --arch x64 --output-dir <folder>`
-  (about 5 minutes). Install: rename the install's `win-unpacked` to a dated backup, copy the new one in.
-  Then record it from the repo: `node apps/server/src/bin.ts board slot next --version <v>` after a
-  build, `... board slot frozen --version <v> --ref <built commit>` after an install. Without
+  (about 5 minutes). Install into Main Programs (app closed): rename its `win-unpacked` to a dated
+  backup, copy the new one in. Then record it from the repo: `node apps/server/src/bin.ts board slot
+  next --version <v>` after a build, `... board slot main-programs --version <v> --ref <built
+  commit>` after an install. Without
   `--ref` the slot takes HEAD of the current directory; for a build that is not a commit (FOTN's
   test map), run it from a folder outside any repo with `--board <id>`.
 
